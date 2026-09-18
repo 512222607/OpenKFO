@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Net.Security;
@@ -79,7 +79,7 @@ internal sealed class InstanceManager
     internal static int SDKPort(int number) => 18000 + (number - 1) * 100;
     internal static int GamePort(int number) => 18001 + (number - 1) * 100;
     internal string ClientDirectory(int number) => number == 1 ? SourceDirectory : SourceDirectory + "-" + number;
-    internal string InstanceDirectory(int number) => Path.Combine(root, "登录器组件", "窗口" + number);
+    internal string InstanceDirectory(int number) => Path.Combine(root, "launcher-components", "window-" + number);
     internal string LogPath(int number) => Path.Combine(InstanceDirectory(number), "online-client.log");
 
     internal Process? FindGame(int number)
@@ -120,7 +120,7 @@ internal sealed class InstanceManager
             if (existing != null) { StartLoginSkin(number, existing); Activate(number); return; }
         }
         // Serialize preparation across launcher windows; never stop an existing game.
-        string stateDirectory = Path.Combine(root, "登录器组件");
+        string stateDirectory = Path.Combine(root, "launcher-components");
         Directory.CreateDirectory(stateDirectory);
         using var preparationLock = new FileStream(Path.Combine(stateDirectory, $"window-{number}.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         string config = await Task.Run(() => Prepare(number, progress));
@@ -154,7 +154,7 @@ internal sealed class InstanceManager
         byte[] skin = ReadResource("LoginSkin.dll"), host = ReadResource("LoginSkinHost.exe");
         // Versioned files let existing native windows keep their loaded DLL
         // while a new launcher ships an updated design.
-        string directory = Path.Combine(root, "登录器组件", "登录界面", Hash(skin)[..12] + Hash(host)[..12]);
+        string directory = Path.Combine(root, "launcher-components", "login-skin", Hash(skin)[..12] + Hash(host)[..12]);
         Directory.CreateDirectory(directory);
         using var extractionLock = new FileStream(Path.Combine(directory, "extract.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         string skinPath = Path.Combine(directory, "LoginSkin.dll"), hostPath = Path.Combine(directory, "LoginSkinHost.exe");

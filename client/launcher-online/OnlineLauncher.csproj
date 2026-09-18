@@ -13,8 +13,8 @@
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
   <ItemGroup>
-    <EmbeddedResource Include="../../runtime-local/go-online/online-launcher-dual.exe" LogicalName="OnlineBridge.exe" />
-    <EmbeddedResource Include="../../build/login-skin/LoginSkin.dll" LogicalName="LoginSkin.dll" />
-    <EmbeddedResource Include="../../build/login-skin/LoginSkinHost.exe" LogicalName="LoginSkinHost.exe" />
+    <EmbeddedResource Include="../../dist/launcher-components/OnlineBridge.exe" LogicalName="OnlineBridge.exe" />
+    <EmbeddedResource Include="../../dist/launcher-components/LoginSkin.dll" LogicalName="LoginSkin.dll" />
+    <EmbeddedResource Include="../../dist/launcher-components/LoginSkinHost.exe" LogicalName="LoginSkinHost.exe" />
   </ItemGroup>
 </Project>

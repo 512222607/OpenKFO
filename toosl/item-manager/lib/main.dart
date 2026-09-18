@@ -11,6 +11,7 @@ import 'weapon_config.dart';
 typedef Api = Future<dynamic> Function(Map<String, dynamic>);
 
 class Backend {
+  Backend({this.root});
   String? root;
   Future<dynamic> call(Map<String, dynamic> input) async {
     if (root == null) {
@@ -31,8 +32,12 @@ class Backend {
       }
     }
     if (root == null) throw Exception('找不到服务器目录，请勿单独移动 EXE。');
+    final executable = File(Platform.resolvedExecutable).parent;
+    final bundledBackend = File('${executable.path}/kungfu-desktop-admin.exe');
     final p = await Process.start(
-      '$root/runtime-local/item-manager-online/kungfu-desktop-admin.exe',
+      bundledBackend.existsSync()
+          ? bundledBackend.path
+          : '$root/dist/item-manager/kungfu-desktop-admin.exe',
       ['-root', root!],
       workingDirectory: root,
     );
@@ -48,7 +53,13 @@ class Backend {
   }
 }
 
-void main() => runApp(ItemManager(api: Backend().call));
+void main(List<String> args) {
+  final index = args.indexOf('--root');
+  final root = index >= 0 && index + 1 < args.length
+      ? Directory(args[index + 1]).absolute.path
+      : null;
+  runApp(ItemManager(api: Backend(root: root).call));
+}
 const teal = Color(0xFF087E83), ink = Color(0xFF172B3A);
 
 class ItemManager extends StatelessWidget {

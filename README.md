@@ -87,18 +87,24 @@ Linux 部署时，在 Linux 下进入 `server/go-server`，执行 `go build -o k
 
 ## 2. 构建并启动在线登录器
 
-先构建 Go 桥接和 C++ 登录界面，再发布 C# 登录器：
+在源码根目录统一构建 Windows 发布包：
 
 ```powershell
-New-Item -ItemType Directory -Force runtime-local/go-online | Out-Null
-Push-Location server/go-server
-go build -o ../../runtime-local/go-online/online-launcher-dual.exe ./cmd/bridge
-Pop-Location
-.\client\client-adapter\build-login-skin.cmd
-dotnet publish client/launcher-online/OnlineLauncher.csproj -c Release -o runtime-local/launcher-dotnet
+.\toosl\Build-Dist.ps1
 ```
 
-每步成功后再执行下一步。C++ 构建脚本当前使用 VS 2022 Build Tools 的默认安装路径，安装位置不同时需调整脚本中的 `vcvars32.bat` 路径。
+Go 未加入 PATH 时可传入 `-Go "Go 安装目录/bin/go.exe"`。脚本构建 Go、C++、C# 和 Flutter，全部发布产物归档到源码根目录 `dist`；Flutter 使用英文临时目录编译以避开中文路径问题。
+
+```text
+dist/
+  launcher/                 # 中文名登录器 EXE
+  launcher-components/      # OnlineBridge.exe、LoginSkin.dll、LoginSkinHost.exe
+  item-manager/             # 道具管理器完整目录，含 Go 后端、DLL 和 data
+```
+
+登录组件源码均在仓库内：Go 桥接为 `server/go-server/cmd/bridge`，C++ 登录界面为 `client/client-adapter/src/kk_login_skin*.cpp`；构建时嵌入 C# 登录器。运行时目录统一使用 `launcher-components/window-N` 和 `launcher-components/login-skin`，界面名称保留中文。
+
+C++ 构建脚本当前使用 VS 2022 Build Tools 的默认安装路径，安装位置不同时需调整 `vcvars32.bat` 路径。
 
 在仓库根目录准备 `bridge.json`，字段如下，实际值按自己的测试环境填写：
 
@@ -115,27 +121,14 @@ dotnet publish client/launcher-online/OnlineLauncher.csproj -c Release -o runtim
 路径相对于 `bridge.json` 所在目录解析。客户端需满足现有桥接实现要求，不能保证任意版本均兼容。准备好配置和客户端后：
 
 ```powershell
-& '.\runtime-local\launcher-dotnet\功夫小子登录器.exe' --root $PWD.Path
+& '.\dist\launcher\功夫小子登录器.exe' --root $PWD.Path
 ```
 
 `--root` 指向包含 `bridge.json` 的目录。登录器会准备各窗口的桥接组件；游戏登录使用 Go 服务端数据库中的测试账号。
 
 ## 3. 构建并启动道具管理器
 
-```powershell
-New-Item -ItemType Directory -Force runtime-local/item-manager-online | Out-Null
-Push-Location server/go-server
-go build -o ../../runtime-local/item-manager-online/kungfu-desktop-admin.exe ./cmd/desktop-admin
-Pop-Location
-Push-Location toosl/item-manager
-flutter pub get
-flutter build windows --release
-Pop-Location
-Copy-Item -Path 'toosl/item-manager/build/windows/x64/runner/Release/*' `
-  -Destination runtime-local/item-manager-online -Recurse -Force
-```
-
-需复制完整 Release 目录内容，保留 DLL 和 `data` 等运行文件，不能只复制 EXE。
+运行 `toosl/Build-Dist.ps1` 后，道具管理器位于 **`dist/item-manager/kungfu_item_manager.exe`**。同目录包含 `kungfu-desktop-admin.exe`、Flutter DLL 和 `data`，发布时复制整个目录。
 
 在 `runtime-local/online-admin.json` 中填写自己的 SSH 配置，例如：
 
@@ -158,8 +151,33 @@ Copy-Item -Path 'toosl/item-manager/build/windows/x64/runner/Release/*' `
 管理器不会回退到旧 Python 服务或本地 SQLite。上述配置准备好后，在根目录运行：
 
 ```powershell
-.\toosl\Start-ItemManager.cmd
+.\toosl\Start-ItemManager.cmd --root "包含 runtime-local 的目录"
 ```
+
+## 4. 安装到游戏目录
+
+先完成构建和运行配置，再将发布产物安装到游戏根目录。例如当前本机：
+
+```powershell
+.\toosl\Install-Dist.ps1 -GameDirectory 'E:\功夫小子' `
+  -RuntimeRoot 'E:\功夫小子\kungfukid-local-server'
+```
+
+`RuntimeRoot` 只指定现有管理配置和客户端资源的位置，不会启动其中的历史 Python 服务。其他机器请改成自己的配置目录。
+
+安装后：
+
+```text
+功夫小子/
+  功夫小子登录器.exe
+  bridge.json
+  launcher-components/
+  item-manager/             # 完整道具管理器发布包
+  打开道具管理器.cmd
+  package-backups/          # 替换前的旧发布包
+```
+
+安装脚本备份原发布文件，不改数据库、游戏资源和连接配置。已运行的旧登录器需退出后重新打开，才会使用新版代码。
 
 ## 开发验证
 

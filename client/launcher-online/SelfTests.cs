@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json.Nodes;
 
 namespace KungFuLauncher;
@@ -24,6 +24,7 @@ internal static class SelfTests
             var manager = new InstanceManager(testRoot);
             var progress = new Progress<string>();
             string originalHash = InstanceManager.FileHash(Path.Combine(source, "gfld.dat"));
+            Require(manager.InstanceDirectory(2) == Path.Combine(testRoot, "launcher-components", "window-2"), "English component directory");
             string prepared = manager.Prepare(2, progress);
             var second = JsonNode.Parse(File.ReadAllText(prepared))!;
             Require(second["login_port"]!.GetValue<int>() == 18184, "second login port");
@@ -46,7 +47,7 @@ internal static class SelfTests
             bool rejected = false;
             try { manager.Prepare(2, progress); } catch (IOException) { rejected = true; }
             Require(rejected, "modified image rejected");
-            File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "self-test-result.json"), new JsonObject { ["status"] = "passed", ["checks"] = 13, ["real_game_login_tested"] = false, ["time"] = DateTimeOffset.Now.ToString("O") }.ToJsonString());
+            File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "self-test-result.json"), new JsonObject { ["status"] = "passed", ["checks"] = 14, ["real_game_login_tested"] = false, ["time"] = DateTimeOffset.Now.ToString("O") }.ToJsonString());
         }
         finally { Directory.Delete(testRoot, true); }
     }
