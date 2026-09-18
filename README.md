@@ -8,7 +8,9 @@
 
 ## 项目来源与致谢
 
-OpenKFO 基于 [liuyangyi0/kungfukid-local-server](https://github.com/liuyangyi0/kungfukid-local-server) 修改和扩展，感谢原项目作者提供的基础实现。
+OpenKFO 基于 [liuyangyi0/kungfukid-local-server](https://github.com/liuyangyi0/kungfukid-local-server) 修改和扩展，感谢原项目作者开源并提供基础实现。
+
+特别感谢 **QQ：512222607**。
 
 本仓库在原项目基础上进行了目录整理、Go 服务端扩展、登录器与道具管理器集成，以及构建打包流程调整。原项目已有实现的贡献归原作者，OpenKFO 的后续修改不代表原作者的观点或背书。
 
