@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>功夫小子登录器</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="../../runtime-local/go-online/online-launcher-dual.exe" LogicalName="OnlineBridge.exe" />
+    <EmbeddedResource Include="../../build/login-skin/LoginSkin.dll" LogicalName="LoginSkin.dll" />
+    <EmbeddedResource Include="../../build/login-skin/LoginSkinHost.exe" LogicalName="LoginSkinHost.exe" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,879 @@
+import 'shop_config.dart';
+import 'wallet_config.dart';
+
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+
+import 'weapon_config.dart';
+
+typedef Api = Future<dynamic> Function(Map<String, dynamic>);
+
+class Backend {
+  String? root;
+  Future<dynamic> call(Map<String, dynamic> input) async {
+    if (root == null) {
+      for (final start in [
+        File(Platform.resolvedExecutable).parent,
+        Directory.current,
+      ]) {
+        var d = start;
+        for (var n = 0; n < 12; n++) {
+          if (File('${d.path}/runtime-local/online-admin.json').existsSync()) {
+            root = d.path;
+            break;
+          }
+          if (d.parent.path == d.path) break;
+          d = d.parent;
+        }
+        if (root != null) break;
+      }
+    }
+    if (root == null) throw Exception('找不到服务器目录，请勿单独移动 EXE。');
+    final p = await Process.start(
+      '$root/runtime-local/item-manager-online/kungfu-desktop-admin.exe',
+      ['-root', root!],
+      workingDirectory: root,
+    );
+    final out = p.stdout.transform(utf8.decoder).join(),
+        err = p.stderr.transform(utf8.decoder).join();
+    p.stdin.add(utf8.encode(jsonEncode(input)));
+    await p.stdin.close();
+    final code = await p.exitCode, text = await out, error = await err;
+    if (code != 0) throw Exception(error);
+    final result = jsonDecode(text);
+    if (result['ok'] != true) throw Exception(result['error']);
+    return result['result'];
+  }
+}
+
+void main() => runApp(ItemManager(api: Backend().call));
+const teal = Color(0xFF087E83), ink = Color(0xFF172B3A);
+
+class ItemManager extends StatelessWidget {
+  const ItemManager({super.key, required this.api});
+  final Api api;
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    debugShowCheckedModeBanner: false,
+    title: '功夫小子 · 道具管理器',
+    theme: ThemeData(
+      useMaterial3: true,
+      fontFamily: 'Microsoft YaHei',
+      colorScheme: ColorScheme.fromSeed(seedColor: teal),
+      scaffoldBackgroundColor: const Color(0xFFF3F6F8),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide.none,
+        ),
+      ),
+    ),
+    home: Manager(api: api),
+  );
+}
+
+class Manager extends StatefulWidget {
+  const Manager({super.key, required this.api});
+  final Api api;
+  @override
+  State<Manager> createState() => _ManagerState();
+}
+
+class _ManagerState extends State<Manager> {
+  List<Map<String, dynamic>> items = [], accounts = [], inventory = [];
+  Map<String, dynamic>? detail;
+  final selected = <String>{},
+      search = TextEditingController(),
+      quantity = TextEditingController(text: '1'),
+      durationDays = TextEditingController(text: '365');
+  String group = '全部道具',
+      gender = '全部性别',
+      query = '',
+      root = '',
+      status = '正在读取完整物品表…';
+  int? kind, uid;
+  bool loading = true, busy = false, backpack = false, supportedOnly = false;
+  String? failure, pendingGrantSignature, pendingGrantId;
+  @override
+  void initState() {
+    super.initState();
+    load();
+  }
+
+  @override
+  void dispose() {
+    search.dispose();
+    quantity.dispose();
+    durationDays.dispose();
+    super.dispose();
+  }
+
+  List<Map<String, dynamic>> maps(dynamic x) =>
+      (x as List).map((e) => Map<String, dynamic>.from(e)).toList();
+  Future<void> load() async {
+    setState(() {
+      loading = true;
+      failure = null;
+    });
+    try {
+      final data = await widget.api({'operation': 'catalog'}),
+          people = maps(await widget.api({'operation': 'accounts'}));
+      if (!mounted) return;
+      setState(() {
+        items = maps(data['items']);
+        root = data['root'];
+        accounts = people;
+        if (!accounts.any((a) => a['uid'] == uid)) {
+          uid = accounts.isEmpty ? null : accounts.first['uid'];
+        }
+        status =
+            '线上 MySQL · ${items.length} 件 / ${items.map((i) => i['kind']).toSet().length} 个细分类';
+      });
+      await refreshInventory();
+    } catch (e) {
+      if (mounted) setState(() => failure = '$e');
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  Future<void> refreshInventory() async {
+    final target = uid;
+    final data = target == null
+        ? <dynamic>[]
+        : await widget.api({'operation': 'inventory', 'uid': target});
+    if (mounted && uid == target) setState(() => inventory = maps(data));
+  }
+
+  Set<String> get owned => inventory.map((i) => i['key'] as String).toSet();
+  List<Map<String, dynamic>> get filtered {
+    final have = owned;
+    return items
+        .where(
+          (i) =>
+              (group == '全部道具' || i['group'] == group) &&
+              (kind == null || i['kind'] == kind) &&
+              (gender == '全部性别' || i['gender'] == gender) &&
+              (!backpack || have.contains(i['key'])) &&
+              (!supportedOnly || i['supported'] == true) &&
+              ('$i'.toLowerCase().contains(query.toLowerCase())),
+        )
+        .toList();
+  }
+
+  void message(String s) {
+    if (!mounted) return;
+    setState(() => status = s);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(s), duration: const Duration(seconds: 6)),
+    );
+  }
+
+  Future<void> grant() async {
+    if (busy || selected.isEmpty || uid == null) return;
+    final days = int.tryParse(durationDays.text);
+    if (days == null || days < 1 || days > 3650) {
+      message('装备期限须为 1–3650 天');
+      return;
+    }
+    final count = int.tryParse(quantity.text);
+    if (count == null || count < 1 || count > 999) {
+      message('数量须为 1–999 的整数');
+      return;
+    }
+    final keys = selected.toList()..sort();
+    final target = uid!, account = accounts.firstWhere((a) => a['uid'] == uid);
+    final unready = items
+        .where((i) => selected.contains(i['key']) && i['supported'] != true)
+        .length;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('确认添加到线上背包'),
+        content: Text(
+          '角色：${account['nickname']} (${account['account']})\n道具：${keys.length} 种\n武器、服装等装备各 $days 天；消耗道具各增加 $count 个。\n\n${unready > 0 ? '其中 $unready 种仅支持建档，使用效果待适配。\n\n' : ''}写入前保留线上事务快照。添加后请退出游戏并重新登录。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('返回'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('确认添加'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final signature = jsonEncode([target, keys, count, days]);
+    if (signature != pendingGrantSignature) {
+      pendingGrantSignature = signature;
+      pendingGrantId = '${DateTime.now().microsecondsSinceEpoch}-$target';
+    }
+    setState(() => busy = true);
+    try {
+      final r = await widget.api({
+        'operation': 'grant',
+        'uid': target,
+        'keys': keys,
+        'quantity': count,
+        'days': days,
+        'id': pendingGrantId,
+      });
+      await refreshInventory();
+      if (!mounted) return;
+      setState(() {
+        selected.clear();
+        pendingGrantId = pendingGrantSignature = null;
+      });
+      message(
+        '添加 ${r['added']} 种，更新 ${r['updated']} 种，已有跳过 ${r['skipped']} 种。重新登录后生效。',
+      );
+      await showDialog<void>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: const Text('背包已更新'),
+          content: SelectableText(
+            '线上背包已更新，请退出游戏并重新登录查看。\n\n操作审计：\n${r['backup']}',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c),
+              child: const Text('知道了'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      message('添加失败：$e');
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> export() async {
+    try {
+      final folder = Directory('$root/artifacts/item-exports');
+      await folder.create(recursive: true);
+      final file = File(
+        '${folder.path}/道具目录-${DateTime.now().millisecondsSinceEpoch}.json',
+      );
+      await file.writeAsString(
+        const JsonEncoder.withIndent('  ').convert(filtered),
+      );
+      message('已导出 ${filtered.length} 件：${file.path}');
+    } catch (e) {
+      message('导出失败：$e');
+    }
+  }
+
+  Widget picture(Map<String, dynamic> i, double size) => Container(
+    width: size,
+    height: size,
+    padding: const EdgeInsets.all(8),
+    decoration: BoxDecoration(
+      color: const Color(0xFFEDF2F5),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: (i['icon'] as String).isEmpty
+        ? const Icon(Icons.inventory_2_outlined, color: teal)
+        : Image.file(
+            File(i['icon']),
+            fit: BoxFit.contain,
+            cacheWidth: 144,
+            errorBuilder: (_, e, s) =>
+                const Icon(Icons.image_not_supported_outlined, color: teal),
+          ),
+  );
+  @override
+  Widget build(BuildContext context) {
+    final list = filtered,
+        have = owned,
+        groups = items.map((i) => i['group'] as String).toSet().toList();
+    final kinds = <int, String>{
+      for (final i in items.where(
+        (i) => group == '全部道具' || i['group'] == group,
+      ))
+        i['kind']: i['category'],
+    };
+    return Scaffold(
+      body: SafeArea(
+        child: Row(
+          children: [
+            Container(
+              width: 196,
+              color: ink,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(22, 28, 16, 5),
+                    child: Text(
+                      '功夫小子',
+                      style: TextStyle(
+                        fontSize: 25,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(23, 0, 16, 27),
+                    child: Text(
+                      '线上道具管理器',
+                      style: TextStyle(color: Color(0xFF9AB1C1)),
+                    ),
+                  ),
+                  Expanded(
+                    child: ListView(
+                      children: ['全部道具', ...groups]
+                          .map(
+                            (g) => Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 3,
+                              ),
+                              child: Material(
+                                color: group == g ? teal : Colors.transparent,
+                                borderRadius: BorderRadius.circular(10),
+                                child: ListTile(
+                                  dense: true,
+                                  textColor: Colors.white,
+                                  title: Text(g),
+                                  trailing: Text(
+                                    '${g == '全部道具' ? items.length : items.where((i) => i['group'] == g).length}',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFFB9CDDB),
+                                    ),
+                                  ),
+                                  onTap: () => setState(() {
+                                    group = g;
+                                    kind = null;
+                                  }),
+                                ),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ),
+                  Material(
+                    color: Colors.transparent,
+                    child: ListTile(
+                      textColor: Colors.white,
+                      iconColor: Colors.white,
+                      leading: const Icon(Icons.storefront),
+                      title: const Text('商城配置'),
+                      onTap: busy
+                          ? null
+                          : () => Navigator.push(
+                              context,
+                              MaterialPageRoute<void>(
+                                builder: (_) => ShopConfigPage(api: widget.api),
+                              ),
+                            ),
+                    ),
+                  ),
+                  Material(
+                    color: Colors.transparent,
+                    child: ListTile(
+                      textColor: Colors.white,
+                      iconColor: Colors.white,
+                      leading: const Icon(Icons.card_giftcard),
+                      title: const Text('点券设置与赠送'),
+                      onTap: busy
+                          ? null
+                          : () => Navigator.push(
+                              context,
+                              MaterialPageRoute<void>(
+                                builder: (_) =>
+                                    WalletConfigPage(api: widget.api),
+                              ),
+                            ),
+                    ),
+                  ),
+                  Material(
+                    color: Colors.transparent,
+                    child: ListTile(
+                      textColor: Colors.white,
+                      iconColor: Colors.white,
+                      leading: const Icon(Icons.sports_martial_arts),
+                      title: const Text('武器配置（客户端）'),
+                      onTap: busy
+                          ? null
+                          : () => Navigator.push(
+                              context,
+                              MaterialPageRoute<void>(
+                                builder: (_) =>
+                                    WeaponConfigPage(api: widget.api),
+                              ),
+                            ),
+                    ),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Text(
+                      '线上角色 · MySQL\n写入保留事务快照',
+                      style: TextStyle(
+                        color: Color(0xFF9AB1C1),
+                        height: 1.8,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 22, 24, 16),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                backpack ? '角色背包' : '完整道具库',
+                                style: const TextStyle(
+                                  fontSize: 26,
+                                  fontWeight: FontWeight.w800,
+                                  color: ink,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '共 ${items.length} 件 · 已选 ${selected.length} 件',
+                                style: const TextStyle(color: Colors.blueGrey),
+                              ),
+                            ],
+                          ),
+                        ),
+                        SegmentedButton<bool>(
+                          segments: const [
+                            ButtonSegment(value: false, label: Text('道具库')),
+                            ButtonSegment(value: true, label: Text('背包')),
+                          ],
+                          selected: {backpack},
+                          onSelectionChanged: (v) =>
+                              setState(() => backpack = v.first),
+                        ),
+                        IconButton(
+                          tooltip: '刷新目录和背包',
+                          onPressed: busy ? null : load,
+                          icon: const Icon(Icons.refresh),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: TextField(
+                      controller: search,
+                      decoration: const InputDecoration(
+                        hintText: '搜索名称、编号、说明或原始字段…',
+                        prefixIcon: Icon(Icons.search),
+                      ),
+                      onChanged: (s) => setState(() => query = s),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 10, 24, 10),
+                    child: Wrap(
+                      spacing: 12,
+                      runSpacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        DropdownButton<int>(
+                          value: kind ?? -1,
+                          underline: const SizedBox(),
+                          items: [
+                            const DropdownMenuItem(
+                              value: -1,
+                              child: Text('全部细分类'),
+                            ),
+                            ...kinds.entries.map(
+                              (e) => DropdownMenuItem(
+                                value: e.key,
+                                child: Text('${e.value} (${e.key})'),
+                              ),
+                            ),
+                          ],
+                          onChanged: (v) =>
+                              setState(() => kind = v == -1 ? null : v),
+                        ),
+                        DropdownButton<String>(
+                          value: gender,
+                          underline: const SizedBox(),
+                          items: ['全部性别', '男', '女', '通用']
+                              .map(
+                                (g) =>
+                                    DropdownMenuItem(value: g, child: Text(g)),
+                              )
+                              .toList(),
+                          onChanged: (v) => setState(() => gender = v!),
+                        ),
+                        FilterChip(
+                          label: const Text('已有基础支持'),
+                          selected: supportedOnly,
+                          onSelected: (v) => setState(() => supportedOnly = v),
+                        ),
+                        TextButton(
+                          onPressed: busy
+                              ? null
+                              : () => setState(
+                                  () => selected.addAll(
+                                    list.map((i) => i['key'] as String),
+                                  ),
+                                ),
+                          child: Text('选择当前 ${list.length} 件'),
+                        ),
+                        TextButton(
+                          onPressed: () => setState(() => selected.clear()),
+                          child: const Text('清空'),
+                        ),
+                        IconButton(
+                          tooltip: '导出当前结果和完整字段',
+                          onPressed: export,
+                          icon: const Icon(Icons.download_outlined),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: loading
+                        ? const Center(child: CircularProgressIndicator())
+                        : failure != null
+                        ? Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(30),
+                              child: SelectableText(failure!),
+                            ),
+                          )
+                        : list.isEmpty
+                        ? const Center(child: Text('没有匹配的道具'))
+                        : GridView.builder(
+                            padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+                            itemCount: list.length,
+                            gridDelegate:
+                                const SliverGridDelegateWithMaxCrossAxisExtent(
+                                  maxCrossAxisExtent: 220,
+                                  mainAxisExtent: 210,
+                                  crossAxisSpacing: 12,
+                                  mainAxisSpacing: 12,
+                                ),
+                            itemBuilder: (context, index) {
+                              final i = list[index],
+                                  picked = selected.contains(i['key']);
+                              return Material(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(12),
+                                  onTap: () => setState(() => detail = i),
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: picked
+                                            ? teal
+                                            : const Color(0xFFE1E8ED),
+                                        width: picked ? 2 : 1,
+                                      ),
+                                    ),
+                                    padding: const EdgeInsets.all(12),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            picture(i, 58),
+                                            const Spacer(),
+                                            Checkbox(
+                                              value: picked,
+                                              onChanged: busy
+                                                  ? null
+                                                  : (v) => setState(() {
+                                                      if (v == true) {
+                                                        selected.add(i['key']);
+                                                      } else {
+                                                        selected.remove(
+                                                          i['key'],
+                                                        );
+                                                      }
+                                                      detail = i;
+                                                    }),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 10),
+                                        Text(
+                                          i['name'],
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                        const Spacer(),
+                                        Text(
+                                          '${i['id']} · ${i['category']}',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.blueGrey,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                i['supported']
+                                                    ? '基础道具'
+                                                    : '效果待适配',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: i['supported']
+                                                      ? teal
+                                                      : Colors.deepOrange,
+                                                ),
+                                              ),
+                                            ),
+                                            if (have.contains(i['key']))
+                                              const Icon(
+                                                Icons.backpack_outlined,
+                                                size: 16,
+                                                color: teal,
+                                              ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                  Container(
+                    width: double.infinity,
+                    color: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 10,
+                    ),
+                    child: Text(
+                      status,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.blueGrey,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              width: 286,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                border: Border(left: BorderSide(color: Color(0xFFE1E8ED))),
+              ),
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '发放到角色',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 14),
+                  DropdownButtonFormField<int>(
+                    initialValue: uid,
+                    key: ValueKey(uid),
+                    isExpanded: true,
+                    items: accounts
+                        .map(
+                          (a) => DropdownMenuItem<int>(
+                            value: a['uid'],
+                            child: Text(
+                              '${a['nickname']} · ${a['account']}',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: busy
+                        ? null
+                        : (v) async {
+                            setState(() => uid = v);
+                            try {
+                              await refreshInventory();
+                            } catch (e) {
+                              message('$e');
+                            }
+                          },
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'UID ${uid ?? "—"} · 背包 ${inventory.length} 条',
+                    style: const TextStyle(
+                      color: Colors.blueGrey,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const Divider(height: 28),
+                  Expanded(
+                    child: detail == null
+                        ? const Center(
+                            child: Text(
+                              '点击道具卡片查看详情',
+                              style: TextStyle(color: Colors.blueGrey),
+                            ),
+                          )
+                        : SingleChildScrollView(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                picture(detail!, 96),
+                                const SizedBox(height: 16),
+                                SelectableText(
+                                  detail!['name'],
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                SelectableText(
+                                  '编号 ${detail!['id']}\n${detail!['category']} · ${detail!['gender']}',
+                                  style: const TextStyle(
+                                    color: Colors.blueGrey,
+                                    height: 1.7,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                SelectableText(
+                                  detail!['description'],
+                                  style: const TextStyle(height: 1.7),
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  detail!['supported']
+                                      ? '已有基础背包支持，游戏实际效果以实测为准。'
+                                      : '可添加到线上背包；该类使用、开箱或活动效果尚未适配。',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.deepOrange,
+                                    height: 1.6,
+                                  ),
+                                ),
+                                ...inventory
+                                    .where((r) => r['key'] == detail!['key'])
+                                    .map(
+                                      (r) => Padding(
+                                        padding: const EdgeInsets.only(top: 8),
+                                        child: Text(
+                                          '已拥有 · ${detail!['timed'] == true ? "期限 ${((r['duration_hours'] as num? ?? 0) / (r['duration_state'] == 1 ? 1440 : 24)).ceil()} 天" : "数量 ${r['quantity']}"} · ${r['slot'] == 0 ? "未穿戴" : "已穿戴"}',
+                                          style: const TextStyle(color: teal),
+                                        ),
+                                      ),
+                                    ),
+                                Material(
+                                  child: ExpansionTile(
+                                    tilePadding: EdgeInsets.zero,
+                                    title: const Text(
+                                      '完整原始配置',
+                                      style: TextStyle(fontSize: 13),
+                                    ),
+                                    children: [
+                                      SelectableText(
+                                        (detail!['fields'] as List)
+                                            .asMap()
+                                            .entries
+                                            .map(
+                                              (e) => '${e.key + 1}  ${e.value}',
+                                            )
+                                            .join('\n'),
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          height: 1.6,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                  ),
+                  const Divider(height: 24),
+                  TextField(
+                    controller: durationDays,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: '装备期限（天）',
+                      helperText: '1–3650 天；365 天及以上显示 365+\n按未开始计时发放，扣时及到期待适配',
+                      helperMaxLines: 3,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: quantity,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: '消耗道具数量（个）',
+                      helperText: '1–999 个；药水、喇叭、武器切换卡',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: FilledButton.icon(
+                      onPressed: busy || selected.isEmpty || uid == null
+                          ? null
+                          : grant,
+                      icon: Icon(
+                        busy
+                            ? Icons.hourglass_top
+                            : Icons.add_to_photos_outlined,
+                      ),
+                      label: Text(busy ? '正在添加…' : '添加已选 ${selected.length} 件'),
+                    ),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.only(top: 10),
+                    child: Text(
+                      '添加后重新登录游戏生效。\n重复装备跳过，已有穿戴不变。',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.blueGrey,
+                        height: 1.6,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

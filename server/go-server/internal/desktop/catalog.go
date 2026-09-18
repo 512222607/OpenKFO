@@ -1,0 +1,115 @@
+package desktop
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+)
+
+type Item struct {
+	Key         string   `json:"key"`
+	ID          uint32   `json:"id"`
+	Kind        byte     `json:"kind"`
+	Name        string   `json:"name"`
+	Group       string   `json:"group"`
+	Category    string   `json:"category"`
+	Description string   `json:"description"`
+	Icon        string   `json:"icon"`
+	Gender      string   `json:"gender"`
+	Stackable   bool     `json:"stackable"`
+	Timed       bool     `json:"timed"`
+	Supported   bool     `json:"supported"`
+	Fields      []string `json:"fields"`
+}
+
+var kinds = map[byte][2]string{
+	12: {"服装外观", "上衣"}, 13: {"服装外观", "脸型"}, 14: {"服装外观", "鞋子"}, 15: {"服装外观", "头发 / 帽子"}, 16: {"服装外观", "裤子"}, 17: {"服装外观", "手套"}, 18: {"服装外观", "套装"}, 20: {"服装外观", "头部饰品"}, 21: {"服装外观", "背部饰品"}, 25: {"武器装备", "武器"}, 26: {"武器装备", "投掷 / 副武器"}, 30: {"武器装备", "护符"}, 31: {"个性装饰", "称号"}, 50: {"材料道具", "许愿瓶"}, 60: {"材料道具", "宝石 / 材料"}, 61: {"材料道具", "转生石"}, 64: {"消耗用品", "战斗药水 / 手雷"}, 68: {"消耗用品", "替身娃娃"}, 71: {"功能卡券", "喇叭卡"}, 72: {"功能卡券", "双倍经验卡"}, 73: {"功能卡券", "VIP / 名侠卡"}, 74: {"功能卡券", "武器切换卡"}, 75: {"功能卡券", "百宝券"}, 76: {"功能卡券", "节日百宝券"}, 77: {"个性装饰", "幻影卡"}, 78: {"功能卡券", "置顶卡"}, 79: {"个性装饰", "个性图标"}, 80: {"功能卡券", "经验 / 改名卡"}, 81: {"礼包活动", "福袋"}, 82: {"礼包活动", "红包"}, 83: {"个性装饰", "特效饰品"}, 84: {"社交婚礼", "婚礼道具"}, 85: {"礼包活动", "爆竹"}, 86: {"礼包活动", "粽子"}, 87: {"礼包活动", "镰刀宝箱"}, 88: {"礼包活动", "破天宝箱"}, 89: {"礼包活动", "龙牙宝箱"}, 90: {"礼包活动", "月饼"}, 91: {"礼包活动", "赤子宝箱"}, 92: {"礼包活动", "烤火鸡"}, 93: {"礼包活动", "圣诞袜"}, 94: {"礼包活动", "五色圣诞袜"}, 95: {"礼包活动", "礼包 / 活动道具"}, 96: {"礼包活动", "新手 / 劳动礼包"}, 99: {"功能卡券", "折扣卡"},
+}
+
+func stackable(kind byte) bool { return kind == 64 || kind == 71 || kind == 74 }
+func timed(kind byte) bool {
+	switch kind {
+	case 12, 13, 14, 15, 16, 17, 18, 20, 21, 25:
+		return true
+	}
+	return false
+}
+func Catalog(client string) ([]Item, error) {
+	a, err := loadArchive(filepath.Join(client, "Data", "config.spf2"))
+	if err != nil {
+		return nil, err
+	}
+	text, err := a.text("item.txt")
+	if err != nil {
+		return nil, err
+	}
+	items := []Item{}
+	seen := map[string]bool{}
+	iconRoot := filepath.Join(client, "Data", "UI")
+	for _, line := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		fields := strings.Split(line, "\t")
+		if len(fields) < 17 {
+			return nil, fmt.Errorf("物品配置字段不完整")
+		}
+		kind, err := strconv.ParseUint(fields[0], 10, 8)
+		if err != nil {
+			return nil, err
+		}
+		id, err := strconv.ParseUint(fields[1], 10, 32)
+		if err != nil || id == 0 {
+			return nil, fmt.Errorf("物品编号错误")
+		}
+		key := fmt.Sprintf("%d:%d", kind, id)
+		if seen[key] {
+			return nil, fmt.Errorf("重复物品 %s", key)
+		}
+		seen[key] = true
+		labels, ok := kinds[byte(kind)]
+		if !ok {
+			labels = [2]string{"其他道具", fmt.Sprintf("类型 %d", kind)}
+		}
+		relative := strings.ReplaceAll(fields[9], "\\", "/")
+		if strings.Contains(relative, ":") || strings.HasPrefix(relative, "/") {
+			return nil, fmt.Errorf("图标路径越界")
+		}
+		icon := filepath.Join(iconRoot, filepath.FromSlash(relative))
+		rel, err := filepath.Rel(iconRoot, icon)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return nil, fmt.Errorf("图标路径越界")
+		}
+		if info, err := os.Stat(icon); err != nil || info.IsDir() {
+			icon = ""
+		} else {
+			resolved, err := filepath.EvalSymlinks(icon)
+			if err != nil {
+				return nil, err
+			}
+			resolvedRoot, err := filepath.EvalSymlinks(iconRoot)
+			if err != nil {
+				return nil, err
+			}
+			rel, err = filepath.Rel(resolvedRoot, resolved)
+			if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				return nil, fmt.Errorf("图标链接越界")
+			}
+			icon = resolved
+		}
+		gender := "通用"
+		if strings.Contains(fields[3], "（男）") || strings.Contains(fields[3], "(男)") {
+			gender = "男"
+		} else if strings.Contains(fields[3], "（女）") || strings.Contains(fields[3], "(女)") {
+			gender = "女"
+		}
+		description := fields[16]
+		if description == "#" {
+			description = ""
+		}
+		items = append(items, Item{key, uint32(id), byte(kind), fields[3], labels[0], labels[1], description, icon, gender, stackable(byte(kind)), timed(byte(kind)), stackable(byte(kind)) || timed(byte(kind)), fields})
+	}
+	return items, nil
+}

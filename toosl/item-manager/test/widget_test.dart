@@ -1,0 +1,74 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:kungfu_item_manager/main.dart';
+
+void main() {
+  testWidgets('catalog searches and adds to selected character', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    Map<String, dynamic>? grant;
+    Future<dynamic> api(Map<String, dynamic> r) async {
+      switch (r['operation']) {
+        case 'catalog':
+          return {
+            'root': 'X:/fixture',
+            'items': [
+              {
+                'key': '12:121001',
+                'kind': 12,
+                'id': 121001,
+                'name': '测试上衣',
+                'group': '服装外观',
+                'category': '上衣',
+                'gender': '通用',
+                'icon': '',
+                'description': '测试物品',
+                'fields': ['12', '121001'],
+                'supported': true,
+                'stackable': false,
+              },
+            ],
+          };
+        case 'accounts':
+          return [
+            {'uid': 1002, 'account': 'localguest', 'nickname': '游客'},
+          ];
+        case 'inventory':
+          return [];
+        case 'grant':
+          grant = r;
+          return {
+            'added': 1,
+            'updated': 0,
+            'skipped': 0,
+            'backup': 'fixture-backup',
+          };
+      }
+    }
+
+    await tester.pumpWidget(ItemManager(api: api));
+    await tester.pumpAndSettle();
+    expect(find.text('测试上衣'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).first, 'missing');
+    await tester.pumpAndSettle();
+    expect(find.text('没有匹配的道具'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).first, '121001');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Checkbox).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('添加已选 1 件'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确认添加'));
+    await tester.pumpAndSettle();
+    expect(grant?['days'], 365);
+    expect(grant?['quantity'], 1);
+    expect(grant?['uid'], 1002);
+    expect(grant?['keys'], ['12:121001']);
+    expect(find.text('背包已更新'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+}
