@@ -6,15 +6,66 @@ Flutter Windows 管理界面，包含道具、武器、商城、钱包及战斗�
 
 “战斗奖励”分别设置胜利、失败、平局的经验和金币，0 表示不发放，范围 0–1000000。读取失败不能保存；配置版本冲突必须重新读取。保存至对应 MySQL 的 `battle_reward_rules` 表，新版 Go 服务器在下一次结算读取，不需要重启；历史对局不补发。首次启动新版服务器仅在数据库没有配置时导入 `config.json` 的 `settlement`，以后 GM 配置优先。升级默认关闭，填写曲线后可启用；掉落与称号未启用。
 
-本地模式读取 `dist/local-server/settings.private.json`，也可传 `--local-settings <文件>`。仅连接回环地址的 `openkfo_debug_` 独立测试库；须先启动本地后台提供数据库隧道。线上模式使用下述 SSH 配置；连接失败不会切换环境。
+本地模式连接回环地址的 `openkfo_debug_` 独立测试库；线上模式使用 SSH。两种模式的配置见下文，连接失败不会自动切换环境。
 
-在源码根目录执行 `toosl/Build-Dist.ps1`，完整产物位于 `dist/GM管理器`。
-Go 后端位于 `../../server/go-server/cmd/desktop-admin`，构建步骤见根目录 README。
-运行时通过向上查找 `runtime-local/online-admin.json` 定位配置，并调用
-同目录的 `kungfu-desktop-admin.exe`。也可使用 `--root <运行配置目录>` 明确指定管理配置和资源位置。
-配置、密钥和服务端账号数据需单独准备，不纳入仓库。
+## 直接构建（Windows x64）
 
-直接双击 `dist/GM管理器/GM管理器.exe`。必须保留同目录 DLL、data 和后端 EXE；不需要 CMD。可在同目录 `gm-settings.json` 中设置 `root` 与 `local_settings` 路径，未设置则自动向上查找运行目录。
+在本目录执行，不需要 PowerShell 打包脚本：
+
+```text
+flutter pub get
+flutter build windows --release
+```
+
+输出：`build/windows/x64/runner/Release/kungfu_item_manager.exe`。需要 Flutter SDK（Dart ^3.13.2）和 Visual Studio 的 C++ 桌面开发工具；建议使用英文源码路径。
+
+界面调用 Go 管理后端，从仓库根目录执行：
+
+```text
+cd server/go-server
+go build -ldflags "-H windowsgui" -o ../../toosl/item-manager/build/windows/x64/runner/Release/kungfu-desktop-admin.exe ./cmd/desktop-admin
+```
+
+把整个 `Release` 目录复制为仓库根目录 `dist/GM管理器`，可把 `kungfu_item_manager.exe` 改名为 `GM管理器.exe`。保留所有 DLL、`data/` 和 `kungfu-desktop-admin.exe`，直接双击打开。
+
+当前只有 Windows 工程，Go 后端路径也使用 `.exe`，**尚不支持直接执行 `flutter build linux` 或 `flutter build macos`**。Linux/macOS 可以运行 Go 服务器，GM 在 Windows 上连接该服务器。
+
+## 运行配置
+
+在 EXE 同目录创建 `gm-settings.json`，将示例路径替换为自己的路径：
+
+```json
+{
+  "root": "C:/kfo-runtime",
+  "local_settings": "C:/kfo-runtime/settings.private.json"
+}
+```
+
+`root` 中需有 `runtime-local/client`，供读取客户端的道具与武器配置。若不写 gm-settings.json，可用 `--root <目录>`、`--local-settings <文件>` 指定；自动查找模式依赖上级目录的 `runtime-local/online-admin.json`，仅用本地模式也建议显式配置 root。
+
+本地模式的 `settings.private.json` 至少包含：
+
+```json
+{
+  "dsn": "kfo:替换为自己的密码@tcp(127.0.0.1:3306)/openkfo_debug_local",
+  "database": "openkfo_debug_local"
+}
+```
+
+先启动 Go 服务器初始化表。可以使用本机 MySQL，或已经建立的本机 SSH 转发；GM 不负责建立数据库隧道。本地库名必须以 `openkfo_debug_` 开头，连接地址必须为回环地址。Windows 服务器双击模式额外需要 `ssh_config`，见 [Go 服务端说明](../../server/go-server/README.md)。
+
+线上模式在 `root/runtime-local/online-admin.json` 中填写：
+
+```json
+{
+  "host": "your-server.example",
+  "port": 22,
+  "user": "your-admin-user",
+  "key": "C:/Users/your-user/.ssh/kfo_admin"
+}
+```
+
+需要本机 OpenSSH 客户端、已验证的 SSH 主机密钥、服务端 `/opt/kungfu-go/kungfu-admin`；服务器 `/etc/kungfu-go/game.env` 提供 `KK_MYSQL_DSN`，SSH 账号须具备后端所需的 `sudo -n` 权限。配置和密钥不要提交仓库。
 
 ## 1–150 级成长与奖励（2026-09-18）
 
