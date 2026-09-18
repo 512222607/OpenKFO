@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'reward_table.dart';
 
@@ -12,7 +13,9 @@ class RewardConfigPage extends StatefulWidget {
     required this.api,
     required this.environment,
     this.environmentApi,
+    this.textCsv = false,
   });
+  final bool textCsv;
   final RewardApi api;
   final RewardApi? environmentApi;
   final String environment;
@@ -209,6 +212,55 @@ class _RewardConfigPageState extends State<RewardConfigPage> {
   }
 
   Future<void> csv(bool importing) => run(() async {
+    if (widget.textCsv) {
+      final text = TextEditingController(
+        text: importing ? '' : rewardsToCsv(rows),
+      );
+      final accepted = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: Text(importing ? '粘贴 CSV 内容' : '复制 CSV 内容'),
+          content: SizedBox(
+            width: 600,
+            height: 300,
+            child: TextField(
+              controller: text,
+              expands: true,
+              maxLines: null,
+              readOnly: !importing,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(c, true),
+              child: Text(importing ? '导入草稿' : '复制'),
+            ),
+          ],
+        ),
+      );
+      final value = text.text;
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      text.dispose();
+      if (accepted != true || !mounted) return;
+      if (importing) {
+        final next = rewardsFromCsv(value);
+        if (await confirm('覆盖当前奖励草稿？', '导入后仍需点击保存才会写入线上服务器。') && mounted) {
+          setState(() {
+            rows = next;
+            dirty = true;
+            status = '已导入，尚未保存';
+          });
+        }
+      } else {
+        await Clipboard.setData(ClipboardData(text: value));
+        if (mounted) setState(() => status = 'CSV 已复制');
+      }
+      return;
+    }
     final path = TextEditingController(
       text: '${File(Platform.resolvedExecutable).parent.path}\\战斗奖励.csv',
     );

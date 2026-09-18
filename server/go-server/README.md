@@ -128,3 +128,39 @@ go test ./...
 ```
 
 数据库集成测试需要 `KK_TEST_MYSQL_DSN` 指向独立测试库，否则相关测试跳过。普通构建及测试不会替你部署线上服务。
+
+## GM HTTPS 管理接口
+
+macOS/Android 线上版使用独立的 `gm-api` 服务，复用现有 GM 的校验、数据库事务与审计。它只允许线上账号、道具、商城、钱包、奖励操作，不开放武器文件编辑或本地环境访问。
+
+在本目录构建（Linux/macOS）：
+
+```sh
+go build -o gm-api ./cmd/gm-api
+```
+
+Windows 构建：`go build -o gm-api.exe ./cmd/gm-api`。
+
+先启动游戏服务器初始化数据库表。管理接口需有对应客户端目录 `运行目录/runtime-local/client`，用于读取道具配置；由管理员自行准备，不能将官方资源上传到 Git。服务器部署的是 Go API，手机不用安装客户端资源或 SSH。
+
+通过部署环境设置 `KK_MYSQL_DSN` 和 `KK_GM_TOKEN`。令牌应是随机生成的至少 32 字节秘密，仅交给有全部 GM 权限的管理员，不要写进安装包、Git、URL 或公开文档。替换令牌并重启 API 可撤销旧凭据。
+
+Linux/macOS 示例（地址、目录和令牌均为占位）：
+
+```sh
+export KK_MYSQL_DSN='kfo:替换为自己的密码@tcp(127.0.0.1:3306)/自己的数据库'
+export KK_GM_TOKEN='替换为自己随机生成的至少32字节管理令牌'
+./gm-api -root /srv/openkfo-runtime -listen 127.0.0.1:19092
+```
+
+Windows CMD 对应使用 `set "KK_MYSQL_DSN=自己的DSN"`、`set "KK_GM_TOKEN=自己的随机令牌"`，再运行：
+
+```bat
+gm-api.exe -root "C:\kfo-runtime" -listen 127.0.0.1:19092
+```
+
+将自己的 HTTPS 管理域名 `/gm/api` 代理到 `http://127.0.0.1:19092/gm/api`，保留 Authorization 请求头。也可直接用 `-tls-cert <证书文件> -tls-key <私钥文件>` 启用 HTTPS，证书须受终端系统信任并匹配管理域名。未配置 TLS 时仅允许监听明确的回环 IP，不能将明文管理接口直接暴露公网。API 不启用 CORS，不需要浏览器网页。
+
+应用中填 `https://管理域名/gm/api`；仅接受 HTTPS，不跳过证书校验，不跟随重定向。管理令牌作为 Bearer 请求头传递。写入请求沿用操作 ID，超时后保持原内容重试可避免重复发放；规则版本冲突仍需重新读取。
+
+部署 API 不等于已验证游戏功能。先用自己的测试服务验证访问、读取和写入，再决定是否连接正式数据库；此新增服务不会由构建命令自动部署到线上。

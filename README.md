@@ -35,7 +35,7 @@ OpenKFO 基于 [liuyangyi0/kungfukid-local-server](https://github.com/liuyangyi0
 **当前运行链路不依赖 Python**：Go + MySQL 服务端、C# 在线登录器（内嵌 Go 桥接与 C++ 登录界面）、Flutter GM管理器（调用 Go 管理后端）。
 
 - `server/go-server`：当前 Go 服务端、协议、数据库访问、客户端桥接和管理后端，共用一个 Go 模块。
-- `toosl/item-manager`：当前 Flutter Windows GM管理器。
+- `toosl/item-manager`：Flutter GM 管理器，含 Windows 完整版及 macOS/Android 线上入口。
 - `client/launcher-online`：当前 C# 在线登录器。
 - `client/client-adapter`：C++ 登录界面与客户端适配代码。
 - `dist/GM管理器/GM管理器.exe`：构建后直接双击的 GM管理器入口。
@@ -50,10 +50,11 @@ OpenKFO 基于 [liuyangyi0/kungfukid-local-server](https://github.com/liuyangyi0
 | 程序 | 当前支持平台 | 构建环境 |
 | --- | --- | --- |
 | Go 服务器、服务端管理程序 | Linux / macOS / Windows | Go 1.26.0（见 go.mod）、MySQL 8 |
-| GM 管理器 | Windows x64 | Flutter（Dart ^3.13.2）、Visual Studio 的 C++ 桌面开发工具、Go |
+| GM 完整桌面版 | Windows x64 | Flutter（Dart ^3.13.2）、Visual Studio C++、Go |
+| GM 线上版 | macOS / Android（也可构建 Windows） | Flutter、各平台工具链；服务器部署 GM HTTPS API |
 | 游戏登录器 | Windows | .NET 8 SDK、VS 2022 x86 C++ 工具链、Go |
 
-Go 服务器可在非 Windows 系统运行；GM 当前只包含 `windows/` 工程，管理后端路径也使用 `.exe`，尚未适配 Linux/macOS。Flutter 的跨平台能力不代表这个项目已经支持所有平台。
+Go 服务器可在非 Windows 系统运行。GM 的 Windows 完整版仍可切换本地/线上；macOS、Android 使用独立线上入口 `lib/main_online.dart`，通过 HTTPS 管理接口连接，不依赖本机 Go EXE 或 SSH。macOS 工程需在 Mac 上构建验证。
 
 ### GM 管理器：直接打包
 
@@ -77,6 +78,23 @@ go build -ldflags "-H windowsgui" -o ../../toosl/item-manager/build/windows/x64/
 将 **整个 Release 文件夹**复制到仓库根目录 `dist/GM管理器`，可将 `kungfu_item_manager.exe` 重命名为 `GM管理器.exe`。保留 DLL、`data/`、Go 后端和其他生成文件；单独复制 EXE 无法运行。配置好后直接双击，无需 CMD 启动脚本。
 
 运行配置、同一个 EXE 切换本地/线上、奖励表和商城操作见 [GM 管理器说明](toosl/item-manager/README.md)。
+
+### GM 线上版：macOS / Android
+
+以下均在 `toosl/item-manager` 目录执行，首次先运行 `flutter pub get`：
+
+| 目标平台 | 构建所用环境 | 命令 | 输出 |
+| --- | --- | --- | --- |
+| macOS | Mac、Flutter、Xcode 与命令行工具 | `flutter build macos --release --target lib/main_online.dart` | `build/macos/Build/Products/Release/OpenKFO-GM.app` |
+| Android APK | Windows/Linux/macOS、Flutter、Android SDK、JDK 17 或兼容版本 | `flutter build apk --release --target lib/main_online.dart` | `build/app/outputs/flutter-apk/app-release.apk` |
+| Android AAB | 同上，发布前配置自己的签名 | `flutter build appbundle --release --target lib/main_online.dart` | `build/app/outputs/bundle/release/app-release.aab` |
+| Windows 线上版 | Windows、Flutter、Visual Studio C++ | `flutter build windows --release --target lib/main_online.dart` | `build/windows/x64/runner/Release/` 完整目录 |
+
+Android 工程默认使用开发签名用于测试；正式分发前需配置自己的签名。macOS 签名、公证需在自己的 Mac/Apple 开发环境处理。不同入口的构建会复用同一输出目录，分别发布时请各自保存完整产物。
+
+线上版启动后填写自己的 `https://管理域名/gm/api` 和管理令牌。服务端需先部署 [GM HTTPS 管理接口](server/go-server/README.md#gm-https-管理接口)，不能把游戏 `/kk/tunnel` 地址当成管理接口。
+
+支持账号背包、发放道具、商城、钱包、奖励表；不提供本机武器资源编辑、本地数据库切换。手机采用可滚动的宽表格，建议横屏；奖励 CSV 支持粘贴导入与复制导出。令牌仅保留在本次会话，不内置个人域名、IP、数据库密码或 SSH 密钥。
 
 ### Go 服务器：直接构建与启动
 
@@ -122,7 +140,7 @@ C++ 脚本使用 VS 2022 Build Tools 默认安装路径；安装位置不同时�
 
 | 字段 | 含义 |
 | --- | --- |
-| `url` | 本地 `tls://127.0.0.1:19091`；线上示例 `wss://jrnygtxy.top/kk/tunnel` |
+| `url` | 本地 `tls://127.0.0.1:19091`；线上示例 `wss://域名/kk/tunnel` |
 | `client_directory` | 自行准备的兼容客户端目录 |
 | `client_sha256` | 客户端 `gfld.dat` 的 SHA-256 |
 | `config_hash` | 客户端 `Data/config.spf2` 的 SHA-256，须与服务器一致 |

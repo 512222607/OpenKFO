@@ -1,6 +1,6 @@
 # 功夫小子 GM管理器
 
-Flutter Windows 管理界面，包含道具、武器、商城、钱包及战斗奖励管理。
+Flutter GM 管理界面：Windows 完整版包含本地/线上管理及本机武器编辑；macOS、Android 使用 HTTPS 线上版入口。
 
 左侧选择“本地测试服”或“线上服务器”，账号、背包、商城、钱包、战斗奖励请求统一使用所选环境。默认本地；切换时清空所选账号和待提交操作。武器配置仍只修改本机客户端资源。
 
@@ -28,7 +28,28 @@ go build -ldflags "-H windowsgui" -o ../../toosl/item-manager/build/windows/x64/
 
 把整个 `Release` 目录复制为仓库根目录 `dist/GM管理器`，可把 `kungfu_item_manager.exe` 改名为 `GM管理器.exe`。保留所有 DLL、`data/` 和 `kungfu-desktop-admin.exe`，直接双击打开。
 
-当前只有 Windows 工程，Go 后端路径也使用 `.exe`，**尚不支持直接执行 `flutter build linux` 或 `flutter build macos`**。Linux/macOS 可以运行 Go 服务器，GM 在 Windows 上连接该服务器。
+## macOS / Android 线上版
+
+在本目录执行 `flutter pub get` 后，选择目标平台命令：
+
+```sh
+# 在 Mac 上构建，需要 Xcode
+flutter build macos --release --target lib/main_online.dart
+```
+
+产物：`build/macos/Build/Products/Release/OpenKFO-GM.app`。
+
+```text
+flutter build apk --release --target lib/main_online.dart
+```
+
+Android 可在 Windows/Linux/macOS 上构建，需要 Android SDK 和兼容 JDK（工程 Java 目标 17）。产物：`build/app/outputs/flutter-apk/app-release.apk`。AAB 命令为 `flutter build appbundle --release --target lib/main_online.dart`，产物在 `build/app/outputs/bundle/release/`。目前默认开发签名用于测试，正式分发前配置自己的签名；macOS 的签名与公证也需自行准备。
+
+此入口不调用本机 Go EXE，不读取下述 Windows SSH 配置。先部署 [GM HTTPS API](../../server/go-server/README.md#gm-https-管理接口)，打开应用填写 `https://管理域名/gm/api` 和管理令牌。令牌只保留在当前会话；返回连接页可换服务器。
+
+账号、背包、道具发放、商城、钱包、奖励表使用同一线上服务；不显示本地切换与武器编辑。商城图片由新版 GM API 按商品编号读取并返回，不暴露服务器文件路径；服务器需自行提供客户端图标资源，缺图显示占位图。道具文件导出停用，奖励 CSV 使用文本复制/粘贴。手机可横向、纵向滑动宽表格，建议横屏操作。macOS 工程需在 Mac 上完成实机构建验证。
+
+以下运行配置适用于 Windows 完整版。
 
 ## 运行配置
 
@@ -93,5 +114,7 @@ GM 保存从下一次结算生效。武器掉落和称号未启用。
 伤害、BUFF 等仍只修改本机客户端配置；保存方案不等于应用，游戏须关闭后才能应用。配置包有备份及无关文件校验。新增招式实战表现仍需测试。
 
 商城批量改价：勾选商品（可先搜索，再选择搜索结果），点击“批量改价”，选择金币或点券并填写统一售价。仅更新已有销售记录，保留期限、数量、上下架及其他标记；同一商品的多条规格统一改价，未配置商品跳过并显示数量。本地和线上使用相同操作，确认框显示目标环境。推荐／优惠标记待客户端协议核实后接入。
+
+商城采用分类、连续滚动商品网格和右侧配置面板，不包含人物试穿。鼠标滚轮或拖动滚动条即可浏览全部商品；卡片只构建可见区域和少量预加载区域，不一次创建全部商品控件。商品图片按 `item.txt` 中的图标路径读取 `runtime-local/client/Data/UI`，按当前可见区域分批加载（单次最多 24 张），滚动停止后短暂合并请求，图片缓存最多保留 256 张。支持标准 PNG，以及能够唯一还原图片头的旧客户端 PNG；文件缺失或格式不确定时显示占位图。Windows 版使用本机客户端资源，HTTPS 线上版使用 GM API 所在机器的资源。原客户端图片不随源码或安装包分发。切换分类不会清空已勾选商品，批量操作前请核对已选数量。
 
 武器动作名称：优先显示该武器的连招配置；没有匹配标签时读取原动画起始说明并标明“动画说明”。共享动作可能保留原开发名称与尾部数值，这不是完整按键或正式招式名；没有可靠说明时显示“按键映射待核实”。

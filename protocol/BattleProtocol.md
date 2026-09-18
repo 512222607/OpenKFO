@@ -27,6 +27,8 @@
 
 ## 2. 战斗8071中继
 
+2026-09-18新增客户端静态核验：BUFF增删、持续时间及到期门控见 [BuffProtocol](nixiang/buff-debuff/BuffProtocol.md)，信封和转发条件见 [BattleEventProtocol](nixiang/buff-debuff/BattleEventProtocol.md)。8150的+63为毫秒持续值，3000约3秒；常驻问题仍需验证运行时门控，不能直接按秒解释。
+
 外层opcode=8071，payload+0 u32为内层ID。仅battle阶段处理，校验发起UID、长度、相关房号/serial、有限浮点和玩家归属；按内层ID与序列去重后只转给同房其他人，不回给发送者。未知内层ID记限频日志后忽略。
 
 | 内层ID | 当前总包体长度 | context偏移（房号/serial） |

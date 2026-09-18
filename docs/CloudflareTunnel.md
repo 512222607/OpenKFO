@@ -1,12 +1,12 @@
 # Cloudflare Tunnel 部署
 
-目标游戏入口为 `wss://jrnygtxy.top/kk/tunnel`，健康检查为 `https://jrnygtxy.top/health`。登录器与 Go 桥接已支持 WSS；隧道内部继续校验现有 `kk-origin` 固定证书，不能关闭证书校验。Cloudflare Tunnel 支持 WebSocket，玩家不需要安装 cloudflared。
+目标游戏入口为 `wss://example.com/kk/tunnel`，健康检查为 `https://example.com/health`。登录器与 Go 桥接已支持 WSS；隧道内部继续校验现有 `kk-origin` 固定证书，不能关闭证书校验。Cloudflare Tunnel 支持 WebSocket，玩家不需要安装 cloudflared。
 
 ## 账户配置
 
 在 Cloudflare One → Networks → Connectors → Cloudflare Tunnels 创建 remotely managed Cloudflared 隧道 `openkfo`。安装令牌作为私密文件保存，禁止提交到 Git、写入文档或玩家安装包。
 
-发布应用路由：域名 `jrnygtxy.top`，子域名和路径留空，服务类型 HTTP，URL `127.0.0.1:19090`。同一主机名现有 A 记录与隧道 CNAME 冲突，需要在准备切换时替换为该隧道生成的 DNS 记录，不能继续指向源站 A 记录。游戏路由不能套浏览器交互登录或验证码；游戏仍由服务端验证账号密码。
+发布应用路由：域名 `example.com`，子域名和路径留空，服务类型 HTTP，URL `127.0.0.1:19090`。同一主机名现有 A 记录与隧道 CNAME 冲突，需要在准备切换时替换为该隧道生成的 DNS 记录，不能继续指向源站 A 记录。游戏路由不能套浏览器交互登录或验证码；游戏仍由服务端验证账号密码。
 
 ## 服务器
 

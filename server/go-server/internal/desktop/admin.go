@@ -171,6 +171,9 @@ func (admin *Admin) Call(request Request) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	if request.Operation == "shop_images" {
+		return shopImages(client, items, request.Keys)
+	}
 	if strings.HasPrefix(request.Operation, "weapon_") {
 		return weaponHandle(request, client, items, "")
 	}

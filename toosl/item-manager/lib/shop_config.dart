@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 
 class ShopConfigPage extends StatefulWidget {
   const ShopConfigPage({
@@ -25,6 +28,96 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
   final selected = <String>{};
   String? pendingSignature, pendingId;
   String batchCurrency = 'ticket', batchAmount = '100';
+  String category = '全部商品';
+  final scroll = ScrollController();
+  Timer? imageTimer;
+  int columns = 1;
+  double viewportHeight = 0;
+  bool loadingImages = false;
+  final images = <String, Uint8List>{};
+  final requestedImages = <String>{};
+  List<dynamic> get filteredItems => (data?['items'] as List? ?? []).where((i) {
+    if (!'${i['id']} ${i['name']}'.contains(query)) return false;
+    final kind = i['kind'];
+    final text = '${i['category']} ${i['group']}';
+    return switch (category) {
+      '推荐/优惠' => false,
+      '武器' => kind == 25 || kind == 26,
+      '宠物/法宝' =>
+        text.contains('宠物') || text.contains('法宝') || text.contains('护符'),
+      '造型换装' =>
+        (kind is int && kind >= 12 && kind <= 21) ||
+            [31, 77, 79, 83].contains(kind),
+      '材料/药水' => [50, 60, 61, 64, 68].contains(kind),
+      '功能道具' =>
+        text.contains('功能') || text.contains('礼包') || text.contains('婚礼'),
+      _ => true,
+    };
+  }).toList();
+  Future<void> loadImages() async {
+    if (!mounted || loadingImages || !scroll.hasClients) return;
+    final firstRow = (scroll.offset.clamp(0, double.infinity) / 166).floor();
+    final keys = filteredItems
+        .skip(firstRow * columns)
+        .take(((viewportHeight / 166).ceil() + 1) * columns)
+        .take(24)
+        .where(
+          (i) =>
+              (i['fields'] as List? ?? []).length > 9 &&
+              requestedImages.add(i['key'] as String),
+        )
+        .map((i) => i['key'] as String)
+        .toList();
+    if (keys.isEmpty) return;
+    loadingImages = true;
+    try {
+      final result = await widget.api({
+        'operation': 'shop_images',
+        'keys': keys,
+      });
+      if (!mounted) return;
+      setState(() {
+        for (final key in keys) {
+          if (result[key] is String) images[key] = base64Decode(result[key]);
+        }
+        while (images.length > 256) {
+          final oldest = images.keys.firstWhere((key) => key != item?['key']);
+          images.remove(oldest);
+          requestedImages.remove(oldest);
+        }
+      });
+    } catch (_) {
+      // Retry unavailable requests on explicit refresh, not on every scroll.
+    } finally {
+      loadingImages = false;
+      if (mounted) scheduleImages();
+    }
+  }
+
+  void scheduleImages() {
+    imageTimer?.cancel();
+    imageTimer = Timer(const Duration(milliseconds: 120), loadImages);
+  }
+
+  void changeFilter(void Function() change) {
+    setState(() {
+      change();
+    });
+    if (scroll.hasClients) scroll.jumpTo(0);
+    scheduleImages();
+  }
+
+  Widget productImage(String key, double size) => SizedBox(
+    width: size,
+    height: size,
+    child: images[key] == null
+        ? const Icon(Icons.inventory_2_outlined, size: 36)
+        : Image.memory(
+            images[key]!,
+            fit: BoxFit.contain,
+            errorBuilder: (_, e, s) => const Icon(Icons.broken_image_outlined),
+          ),
+  );
 
   String operationId(Map<String, dynamic> request) {
     final signature = jsonEncode(request);
@@ -38,11 +131,14 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
   @override
   void initState() {
     super.initState();
+    scroll.addListener(scheduleImages);
     load();
   }
 
   @override
   void dispose() {
+    imageTimer?.cancel();
+    scroll.dispose();
     price.dispose();
     days.dispose();
     quantity.dispose();
@@ -68,9 +164,11 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
       if (!mounted) return;
       setState(() {
         data = result;
+        requestedImages.removeWhere((key) => !images.containsKey(key));
         busy = false;
         if (item != null) select(item!);
       });
+      scheduleImages();
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -324,9 +422,7 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
 
   @override
   Widget build(BuildContext context) {
-    final items = (data?['items'] as List? ?? [])
-        .where((i) => '${i['id']} ${i['name']}'.contains(query))
-        .toList();
+    final items = filteredItems;
     return PopScope(
       canPop: !dirty && !busy,
       onPopInvokedWithResult: (didPop, result) async {
@@ -343,6 +439,41 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
         body: Column(
           children: [
             if (busy) const LinearProgressIndicator(),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    for (final name in [
+                      '全部商品',
+                      '推荐/优惠',
+                      '武器',
+                      '宠物/法宝',
+                      '造型换装',
+                      '材料/药水',
+                      '功能道具',
+                    ])
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Text(name),
+                          selected: category == name,
+                          onSelected: busy
+                              ? null
+                              : (_) => changeFilter(() => category = name),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            if (category == '推荐/优惠')
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: Text('推荐、新品、热销、礼包、新手、特价：协议字段待核实，尚未开放保存。普通商品请切换分类配置。'),
+              ),
+
             Padding(
               padding: const EdgeInsets.all(12),
               child: Wrap(
@@ -390,8 +521,8 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
             Expanded(
               child: Row(
                 children: [
-                  SizedBox(
-                    width: 340,
+                  Expanded(
+                    flex: 3,
                     child: Column(
                       children: [
                         Padding(
@@ -400,7 +531,7 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
                             decoration: const InputDecoration(
                               labelText: '搜索商品',
                             ),
-                            onChanged: (v) => setState(() => query = v),
+                            onChanged: (v) => changeFilter(() => query = v),
                           ),
                         ),
                         Wrap(
@@ -427,49 +558,115 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
                           ],
                         ),
                         Expanded(
-                          child: ListView.builder(
-                            itemCount: items.length,
-                            itemBuilder: (context, index) {
-                              final row = items[index];
-                              final offer = data!['offers'][row['key']];
-                              return ListTile(
-                                leading: Checkbox(
-                                  value: selected.contains(row['key']),
-                                  onChanged: busy
-                                      ? null
-                                      : (checked) => setState(() {
-                                          if (checked == true) {
-                                            selected.add(row['key']);
-                                          } else {
-                                            selected.remove(row['key']);
-                                          }
-                                        }),
-                                ),
-                                selected: item?['key'] == row['key'],
-                                title: Text(row['name']),
-                                subtitle: Text(
-                                  '${row['id']} · ${offer?['enabled'] == true ? '已上架' : '未上架'}',
-                                ),
-                                onTap: busy
-                                    ? null
-                                    : () async {
-                                        if (await discard() && mounted) {
-                                          setState(
-                                            () => select(
-                                              Map<String, dynamic>.from(row),
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final nextColumns =
+                                  ((constraints.maxWidth - 24) / 370)
+                                      .ceil()
+                                      .clamp(1, 100);
+                              if (columns != nextColumns ||
+                                  viewportHeight != constraints.maxHeight) {
+                                columns = nextColumns;
+                                viewportHeight = constraints.maxHeight;
+                                scheduleImages();
+                              }
+                              return Scrollbar(
+                                controller: scroll,
+                                thumbVisibility: true,
+                                child: GridView.builder(
+                                  controller: scroll,
+                                  scrollCacheExtent:
+                                      const ScrollCacheExtent.pixels(166),
+                                  addAutomaticKeepAlives: false,
+                                  padding: const EdgeInsets.all(12),
+                                  gridDelegate:
+                                      const SliverGridDelegateWithMaxCrossAxisExtent(
+                                        maxCrossAxisExtent: 360,
+                                        mainAxisExtent: 156,
+                                        crossAxisSpacing: 10,
+                                        mainAxisSpacing: 10,
+                                      ),
+                                  itemCount: items.length,
+                                  itemBuilder: (context, index) {
+                                    final row = items[index];
+                                    final offer = data!['offers'][row['key']];
+                                    return Card(
+                                      key: ValueKey(row['key']),
+                                      clipBehavior: Clip.antiAlias,
+                                      color: item?['key'] == row['key']
+                                          ? Theme.of(context)
+                                                .colorScheme
+                                                .secondaryContainer
+                                          : null,
+                                      child: ListTile(
+                                        leading: Checkbox(
+                                          value: selected.contains(row['key']),
+                                          onChanged: busy
+                                              ? null
+                                              : (checked) => setState(() {
+                                                  if (checked == true) {
+                                                    selected.add(row['key']);
+                                                  } else {
+                                                    selected.remove(row['key']);
+                                                  }
+                                                }),
+                                        ),
+                                        selected: item?['key'] == row['key'],
+                                        title: Text(row['name']),
+                                        subtitle: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              '${row['id']} · ${offer?['enabled'] == true ? '已上架' : '未上架'}',
                                             ),
-                                          );
-                                        }
-                                      },
+                                            Row(
+                                              children: [
+                                                productImage(row['key'], 64),
+                                                const SizedBox(width: 8),
+                                                Flexible(
+                                                  child: Text(
+                                                    offer == null
+                                                        ? '未配置售价'
+                                                        : '${offer['price']} ${offer['currency'] == 'gold' ? '金币' : '点券'}',
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                        onTap: busy
+                                            ? null
+                                            : () async {
+                                                if (await discard() &&
+                                                    mounted) {
+                                                  setState(
+                                                    () => select(
+                                                      Map<String, dynamic>.from(
+                                                        row,
+                                                      ),
+                                                    ),
+                                                  );
+                                                }
+                                              },
+                                      ),
+                                    );
+                                  },
+                                ),
                               );
                             },
                           ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Text('共 ${items.length} 件 · 向下滚动浏览'),
                         ),
                       ],
                     ),
                   ),
                   const VerticalDivider(width: 1),
                   Expanded(
+                    flex: 2,
                     child: item == null
                         ? const Center(child: Text('选择商品，配置价格和发货内容'))
                         : SingleChildScrollView(
@@ -479,6 +676,9 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
+                                  Center(
+                                    child: productImage(item!['key'], 100),
+                                  ),
                                   Text(
                                     item!['name'],
                                     style: Theme.of(context)

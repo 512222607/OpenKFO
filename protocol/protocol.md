@@ -10,6 +10,8 @@
 | [TransportProtocol.md](TransportProtocol.md) | 本地登录认证、TLS/WSS JSON隧道、TCP二进制封包、SDK登录与UDP |
 | [LoginProtocol.md](LoginProtocol.md) | 1010/2010、选角、角色档案、大厅交接及P2P绑定 |
 | [BattleProtocol.md](BattleProtocol.md) | 准备/取消、4080开战、4160/8040屏障、8071事件中继 |
+| [BUFF / DEBUFF](nixiang/buff-debuff/BuffProtocol.md) | 8126/8150字段、毫秒持续时间、效果到期门控及冰冻复现证据 |
+| [逆向资料索引](nixiang/README.md) | 历史资料分组、当前核验结果、冲突和待补项 |
 | [ItemProtocol.md](ItemProtocol.md) | 商城、购买、装备、消耗品、4210数量回执 |
 | [ChatProtocol.md](ChatProtocol.md) | 私聊、大厅/房间聊天、系统提示、GBK与频率限制 |
 | [LobbyProtocol.md](LobbyProtocol.md) | 排行、改名、余额、训练和菜单占位应答 |

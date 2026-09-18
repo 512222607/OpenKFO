@@ -1,0 +1,10 @@
+{
+  "sha256": "98c43be72ac7600b368d4e185d75205376f79e938ea42e4b16ce8f8c4bae827b",
+  "image_base": "0x400000",
+  "imports": {
+    "0xB330F4": "QueryPerformanceCounter",
+    "0xB330F8": "QueryPerformanceFrequency"
+  },
+  "clock_frequency_divisor": 1000.0,
+  "method": "Static x86 disassembly at verified function entries; no live memory inspection."
+}

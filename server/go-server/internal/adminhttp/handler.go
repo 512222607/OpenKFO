@@ -1,0 +1,82 @@
+package adminhttp
+
+import (
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/json"
+	"io"
+	"kungfu.local/server/internal/desktop"
+	"net/http"
+	"strings"
+	"sync"
+)
+
+// New exposes only online management operations; local client editing is never remote.
+func New(token string, call func(desktop.Request) (any, error)) http.Handler {
+	expected := sha256.Sum256([]byte(token))
+	var mu sync.Mutex
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		fail := func(code int, msg string) {
+			w.WriteHeader(code)
+			json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": msg})
+		}
+		if r.URL.Path != "/gm/api" {
+			fail(404, "接口不存在")
+			return
+		}
+		if r.Method != "POST" {
+			fail(405, "仅支持 POST")
+			return
+		}
+		auth := r.Header.Get("Authorization")
+		actual := sha256.Sum256([]byte(strings.TrimPrefix(auth, "Bearer ")))
+		if len(token) < 32 || !strings.HasPrefix(auth, "Bearer ") || subtle.ConstantTimeCompare(actual[:], expected[:]) != 1 {
+			fail(401, "管理凭据无效")
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, 4<<20)
+		var req desktop.Request
+		dec := json.NewDecoder(r.Body)
+		if dec.Decode(&req) != nil {
+			fail(400, "请求格式错误或过大")
+			return
+		}
+		var extra any
+		if dec.Decode(&extra) != io.EOF {
+			fail(400, "请求格式错误")
+			return
+		}
+		if req.Environment != "online" {
+			fail(403, "此接口仅允许线上管理")
+			return
+		}
+		switch req.Operation {
+		case "catalog", "accounts", "inventory", "grant", "shop_catalog", "shop_images", "shop_save", "shop_batch", "shop_prices", "wallet_accounts", "wallet_update", "rewards_get", "rewards_save":
+		default:
+			fail(403, "不允许此管理操作")
+			return
+		}
+		mu.Lock()
+		result, err := call(req)
+		mu.Unlock()
+		if err != nil {
+			fail(400, "操作失败："+err.Error())
+			return
+		}
+		// Never expose server filesystem paths as client resources.
+		if req.Operation == "catalog" {
+			if data, ok := result.(map[string]any); ok {
+				data["root"] = ""
+				if items, ok := data["items"].([]desktop.Item); ok {
+					for i := range items {
+						items[i].Icon = ""
+					}
+					data["items"] = items
+				}
+			}
+		}
+		json.NewEncoder(w).Encode(map[string]any{"ok": true, "result": result})
+	})
+}

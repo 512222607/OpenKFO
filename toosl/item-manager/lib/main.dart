@@ -130,7 +130,8 @@ class ItemManager extends StatelessWidget {
 }
 
 class Manager extends StatefulWidget {
-  const Manager({super.key, required this.api});
+  const Manager({super.key, required this.api, this.onlineOnly = false});
+  final bool onlineOnly;
   final Api api;
   @override
   State<Manager> createState() => _ManagerState();
@@ -176,6 +177,7 @@ class _ManagerState extends State<Manager> {
   @override
   void initState() {
     super.initState();
+    if (widget.onlineOnly) environment = 'online';
     load();
   }
 
@@ -409,8 +411,12 @@ class _ManagerState extends State<Manager> {
                     child: DropdownButtonFormField<String>(
                       initialValue: environment,
                       decoration: const InputDecoration(labelText: '管理环境'),
-                      items: const [
-                        DropdownMenuItem(value: 'local', child: Text('本地测试服')),
+                      items: [
+                        if (!widget.onlineOnly)
+                          const DropdownMenuItem(
+                            value: 'local',
+                            child: Text('本地测试服'),
+                          ),
                         DropdownMenuItem(value: 'online', child: Text('线上服务器')),
                       ],
                       onChanged: busy || loading
@@ -434,7 +440,10 @@ class _ManagerState extends State<Manager> {
                               MaterialPageRoute<void>(
                                 builder: (_) => RewardConfigPage(
                                   api: api,
-                                  environmentApi: widget.api,
+                                  environmentApi: widget.onlineOnly
+                                      ? null
+                                      : widget.api,
+                                  textCsv: widget.onlineOnly,
                                   environment: environmentLabel,
                                 ),
                               ),
@@ -515,27 +524,30 @@ class _ManagerState extends State<Manager> {
                             ),
                     ),
                   ),
-                  Material(
-                    color: Colors.transparent,
-                    child: ListTile(
-                      textColor: Colors.white,
-                      iconColor: Colors.white,
-                      leading: const Icon(Icons.sports_martial_arts),
-                      title: const Text('武器配置（客户端）'),
-                      onTap: busy
-                          ? null
-                          : () => Navigator.push(
-                              context,
-                              MaterialPageRoute<void>(
-                                builder: (_) => WeaponConfigPage(api: api),
+                  if (!widget.onlineOnly)
+                    Material(
+                      color: Colors.transparent,
+                      child: ListTile(
+                        textColor: Colors.white,
+                        iconColor: Colors.white,
+                        leading: const Icon(Icons.sports_martial_arts),
+                        title: const Text('武器配置（客户端）'),
+                        onTap: busy
+                            ? null
+                            : () => Navigator.push(
+                                context,
+                                MaterialPageRoute<void>(
+                                  builder: (_) => WeaponConfigPage(api: api),
+                                ),
                               ),
-                            ),
+                      ),
                     ),
-                  ),
                   Padding(
                     padding: const EdgeInsets.all(20),
                     child: Text(
-                      '$environmentLabel · MySQL\n武器配置仅修改本机客户端',
+                      widget.onlineOnly
+                          ? '线上管理 · HTTPS'
+                          : '$environmentLabel · MySQL\n武器配置仅修改本机客户端',
                       style: TextStyle(
                         color: Color(0xFF9AB1C1),
                         height: 1.8,
@@ -659,7 +671,7 @@ class _ManagerState extends State<Manager> {
                         ),
                         IconButton(
                           tooltip: '导出当前结果和完整字段',
-                          onPressed: export,
+                          onPressed: widget.onlineOnly ? null : export,
                           icon: const Icon(Icons.download_outlined),
                         ),
                       ],
