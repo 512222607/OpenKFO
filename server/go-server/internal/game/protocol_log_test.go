@@ -1,0 +1,79 @@
+package game
+
+import (
+	"bytes"
+	"encoding/json"
+	"kungfu.local/server/internal/protocol"
+	"kungfu.local/server/internal/tunnel"
+	"log"
+	"strings"
+	"testing"
+)
+
+func TestProtocolTraceReassemblesAndLogsEveryRecipient(t *testing.T) {
+	hub, a, b, _ := waitingRoomFixture()
+	var output bytes.Buffer
+	logger := log.New(&output, "", 0)
+	a.Trace = logger
+	b.Trace = logger
+	a.Account = "localtest1"
+	b.Account = "localtest2"
+	packet, _ := protocol.Encode(protocol.Message{ID: 99999, Payload: []byte{1, 2, 3}})
+	if err := hub.Handle(a, tunnel.Frame{Op: "data", Channel: 1, Data: packet[:9]}); err != nil {
+		t.Fatal(err)
+	}
+	if output.Len() != 0 {
+		t.Fatal("partial packet logged as complete")
+	}
+	rest := append(bytes.Clone(packet[9:]), packet...)
+	if err := hub.Handle(a, tunnel.Frame{Op: "data", Channel: 1, Data: rest}); err != nil {
+		t.Fatal(err)
+	}
+	hub.broadcast(a.Room, protocol.Message{ID: 3250, Payload: []byte{4, 5, 6}}, 0)
+	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	if len(lines) != 4 {
+		t.Fatalf("expected 2 input packets and 2 recipient packets, got %d", len(lines))
+	}
+	seen := map[string]bool{}
+	for i, line := range lines {
+		var entry map[string]any
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			t.Fatal(err)
+		}
+		for _, key := range []string{"time", "direction", "account", "player", "uid", "protocol", "hex", "length"} {
+			if _, ok := entry[key]; !ok {
+				t.Fatal("missing", key)
+			}
+		}
+		if i < 2 && (entry["hex"] != "010203" || entry["protocol"] != float64(99999)) {
+			t.Fatal("payload changed")
+		}
+		if i >= 2 {
+			seen[entry["account"].(string)] = true
+		}
+	}
+	if !seen["localtest1"] || !seen["localtest2"] {
+		t.Fatal("missing recipient identity")
+	}
+}
+
+func TestProtocolTraceRedactsSDKAndKeepsFullUDP(t *testing.T) {
+	var output bytes.Buffer
+	s := &Session{Trace: log.New(&output, "", 0), Channels: map[uint32]*Channel{1: {Kind: "sdk"}}}
+	s.tracePacket("C->S", 1, "sdk", 1001, []byte("secret-password"), true)
+	s.traceFrame("S->C queued", tunnel.Frame{Op: "data", Channel: 1, Data: protocol.LoginEncode(protocol.Message{ID: 1002, Payload: []byte("secret-token")})})
+	if strings.Contains(output.String(), "736563726574") || strings.Contains(output.String(), "secret-password") || strings.Contains(output.String(), "secret-token") {
+		t.Fatal("credentials exposed")
+	}
+	output.Reset()
+	payload := bytes.Repeat([]byte{0xAB}, 8192)
+	protocol.WriteUint16(payload, 2, 1008)
+	s.traceFrame("C->S", tunnel.Frame{Op: "udp", Data: payload})
+	var entry map[string]any
+	if err := json.Unmarshal(output.Bytes(), &entry); err != nil {
+		t.Fatal(err)
+	}
+	if len(entry["hex"].(string)) != 2*len(payload) || entry["protocol"] != float64(1008) {
+		t.Fatal("UDP truncated")
+	}
+}

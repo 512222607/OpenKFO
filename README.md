@@ -89,7 +89,7 @@ Pop-Location
 
 Linux 部署时，在 Linux 下进入 `server/go-server`，执行 `go build -o kungfu-server ./cmd/server` 和 `go build -o kungfu-admin ./cmd/admin`；使用相同参数及环境变量启动。Windows `.exe` 不能直接用于 Linux。
 
-账号通过 Go 服务端的 `-operation create-account` 创建，标准输入接收包含 `UID`、`Account`、`Password` 的 JSON。操作仍需同一数据库环境变量；请使用自己的测试账号，不把实际密码放入公开文档或命令历史。服务端还提供 `import`、`wallet`、`snapshot` 操作，见 `cmd/server/main.go`。
+账号通过 Go 服务端的 `-operation create-account` 创建，标准输入接收包含 `UID`、`Account`、`Password` 的 JSON。密码长度支持6～128字节。重置密码使用 `-operation reset-password`，标准输入提供同样的UID、Account、Password，仅更换密码，不修改角色和道具。操作仍需同一数据库环境变量；请使用自己的测试账号，不把实际密码放入公开文档或命令历史。服务端还提供 `import`、`wallet`、`snapshot` 操作，见 `cmd/server/main.go`。
 
 ## 2. 构建并启动在线登录器
 
@@ -199,3 +199,14 @@ Pop-Location
 需要真实数据库的 Go 测试通过 `KK_TEST_MYSQL_DSN` 指向独立测试库；未配置时相关用例会跳过。测试通过不等同于客户端实机或线上部署验证。
 
 运行配置、客户端资源、数据库、证书私钥、日志和编译产物均不提交 Git。历史 Python 代码的存在不代表它是当前版本的运行依赖。
+
+
+## 本地协议调试控制台
+
+在Windows的 `server/go-server` 目录执行 `go build -o ../../dist/local-server/kungfu-server.exe ./cmd/server`。直接双击构建的EXE即可打开服务端控制台；无需PowerShell、启动脚本或外部ssh.exe。无参数时启用本地调试模式，显式传参时仍保留原服务端/管理命令行为；Linux启动行为不变。
+
+EXE按自身所在目录读取 `settings.private.json`（dsn、ssh_config、database）、兼容客户端的 `config.json` 和证书目录。SSH密钥来自ssh_config指向的配置文件，主机身份使用当前用户`.ssh/known_hosts`验证。Go内部建立到独立调试库的SSH隧道，DSN只能使用127.0.0.1的TCP地址，游戏服务监听本机19090/19091。数据库需要提前单独创建；此模式需要网络，不是离线数据库。Ctrl+C或关闭窗口会释放服务及隧道端口。
+
+日志自动写入 `logs/protocol-年月日-时分秒.log`，并打印到控制台。内容包括时间、账号、角色名、UID、方向、通道、房间、状态、协议号、长度、完整hex和可解码GBK文本。TCP按完整协议包重组，UDP按完整数据报记录，广播标注各接收者。`S->C queued`只表示进入发送队列；认证凭据脱敏，认证前身份尚未确认。
+
+命令行方式可显式使用 `-trace-protocol -protocol-log <文件>`。配置、数据库凭据、密钥和原始客户端资源均不编译进EXE或提交仓库，交付时保留对应配置文件。

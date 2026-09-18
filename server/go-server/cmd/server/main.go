@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -19,12 +20,32 @@ import (
 )
 
 func main() {
+	cleanup, err := prepareLocalConsole()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Local server startup failed:", err)
+		fmt.Fprintln(os.Stderr, "Press Enter to close.")
+		fmt.Scanln()
+		return
+	}
+	defer cleanup()
 	address := flag.String("listen", "127.0.0.1:19090", "HTTP origin address")
 	tlsAddress := flag.String("tls-listen", "", "optional direct TLS game address")
 	configPath := flag.String("config", "config.json", "admitted client configuration")
 	certificateDirectory := flag.String("cert-dir", "certificates", "private server certificate directory")
-	operation := flag.String("operation", "serve", "serve, import, create-account, wallet, snapshot")
+	operation := flag.String("operation", "serve", "serve, import, create-account, reset-password, wallet, snapshot")
+	traceProtocol := flag.Bool("trace-protocol", false, "print every decoded protocol packet (sensitive login fields redacted)")
+	protocolLog := flag.String("protocol-log", "", "append console and protocol logs to this file")
 	flag.Parse()
+	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
+	log.SetOutput(os.Stdout)
+	if *protocolLog != "" {
+		file, err := os.OpenFile(*protocolLog, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer file.Close()
+		log.SetOutput(io.MultiWriter(os.Stdout, file))
+	}
 	store, err := persistence.Open(os.Getenv("KK_MYSQL_DSN"))
 	if err != nil {
 		log.Fatal("cannot open game database: ", err)
@@ -37,12 +58,16 @@ func main() {
 		if err = input.Decode(&exported); err == nil {
 			err = store.Import(exported)
 		}
-	case "create-account":
+	case "create-account", "reset-password":
 		var request struct {
 			UID               uint64
 			Account, Password string
 		}
 		if err = input.Decode(&request); err == nil {
+			if *operation == "reset-password" {
+				err = store.ResetPassword(request.UID, request.Account, request.Password)
+				break
+			}
 			var account persistence.Account
 			account, err = persistence.NewAccount(request.UID, request.Account, request.Password)
 			if err == nil {
@@ -86,6 +111,9 @@ func main() {
 			log.Fatal(certErr)
 		}
 		hub := game.NewHub(store, config)
+		if *traceProtocol {
+			hub.Trace = log.New(log.Writer(), "", 0)
+		}
 		gameServer := game.NewServer(hub, certificate)
 		server := &http.Server{Addr: *address, Handler: gameServer.Handler(), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 90 * time.Second, MaxHeaderBytes: 8192}
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

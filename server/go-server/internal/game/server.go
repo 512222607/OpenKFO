@@ -128,6 +128,8 @@ func (server *Server) serveConnection(connection *tls.Conn) {
 	if json.Unmarshal(authBytes, &auth) != nil {
 		return
 	}
+	probe := &Session{Trace: server.Hub.Trace, Account: auth.Account}
+	probe.tracePacket("C->S", 0, "tunnel:"+auth.Op, 0, nil, true)
 	if auth.Op == "health" {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
@@ -136,6 +138,7 @@ func (server *Server) serveConnection(connection *tls.Conn) {
 			response.Value = 0
 			response.Error = "unavailable"
 		}
+		probe.traceFrame("S->C", response)
 		json.NewEncoder(connection).Encode(response)
 		return
 	}
@@ -143,7 +146,11 @@ func (server *Server) serveConnection(connection *tls.Conn) {
 		return
 	}
 	encoder := json.NewEncoder(connection)
-	deny := func(reason string) { encoder.Encode(tunnel.Frame{Op: "auth", Error: reason}) }
+	deny := func(reason string) {
+		response := tunnel.Frame{Op: "auth", Error: reason}
+		probe.traceFrame("S->C", response)
+		encoder.Encode(response)
+	}
 	if auth.ConfigHash != server.Hub.Config.ConfigHash {
 		deny("client_config_mismatch")
 		return
@@ -174,7 +181,8 @@ func (server *Server) serveConnection(connection *tls.Conn) {
 	if err = encoder.Encode(tunnel.Frame{Op: "auth", UID: session.UID}); err != nil {
 		return
 	}
-	log.Printf("authenticated uid=%d", session.UID)
+	session.tracePacket("S->C", 0, "tunnel:auth-ok", 0, nil, false)
+	log.Printf("authenticated uid=%d account=%q player=%q", session.UID, session.Account, session.Nickname)
 	connection.SetDeadline(time.Time{})
 	go func() {
 		defer session.Close()

@@ -191,7 +191,7 @@ func (store *Store) Authenticate(account, legacy string) (Account, error) {
 	return store.Snapshot(uid)
 }
 func NewAccount(uid uint64, name, password string) (Account, error) {
-	if uid == 0 || !accountPattern.MatchString(name) || len(password) < 8 || len(password) > 128 {
+	if uid == 0 || !accountPattern.MatchString(name) || len(password) < 6 || len(password) > 128 {
 		return Account{}, ErrDenied
 	}
 	account := Account{UID: uid, Account: strings.ToLower(name), Nickname: name, Profile: make([]byte, 360), Salt: make([]byte, 16), LegacySalt: make([]byte, 16)}
@@ -254,6 +254,26 @@ func (store *Store) Create(account Account) error {
 		return err
 	}
 	return transaction.Commit()
+}
+
+// ResetPassword changes only credentials, preserving character and inventory.
+func (store *Store) ResetPassword(uid uint64, name, password string) error {
+	credentials, err := NewAccount(uid, name, password)
+	if err != nil {
+		return err
+	}
+	result, err := store.DB.Exec(`UPDATE accounts SET salt=?,digest=?,legacy_salt=?,legacy_digest=? WHERE uid=? AND account=?`, credentials.Salt, credentials.Digest, credentials.LegacySalt, credentials.LegacyDigest, uid, credentials.Account)
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count != 1 {
+		return ErrDenied
+	}
+	return nil
 }
 func (store *Store) Import(export Export) error {
 	transaction, err := store.DB.Begin()

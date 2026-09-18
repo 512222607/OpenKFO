@@ -19,6 +19,7 @@ import (
 // Hub serializes room transitions. Network writes run outside this lock so a
 // slow player cannot block the other players. Split by room if scale requires it.
 type Hub struct {
+	Trace      *log.Logger
 	Mutex      sync.Mutex
 	Store      *persistence.Store
 	Config     Config
@@ -37,6 +38,7 @@ type Channel struct {
 }
 
 type Session struct {
+	Trace            *log.Logger
 	UID              uint64
 	Account          string
 	Nickname         string
@@ -78,7 +80,7 @@ func (hub *Hub) Attach(account persistence.Account, port uint16) (*Session, erro
 	if _, err := rand.Read(nonce); err != nil {
 		return nil, err
 	}
-	session := &Session{UID: account.UID, Account: account.Account, Nickname: account.Nickname,
+	session := &Session{Trace: hub.Trace, UID: account.UID, Account: account.Account, Nickname: account.Nickname,
 		Namespace: hex.EncodeToString(nonce), Channels: map[uint32]*Channel{}, Output: make(chan tunnel.Frame, 128),
 		Done: make(chan struct{}), Port: port, GrantUntil: time.Now().Add(2 * time.Minute)}
 	hub.Sessions[session.UID] = session
@@ -98,6 +100,7 @@ func (session *Session) emit(frame tunnel.Frame) {
 	}
 	select {
 	case session.Output <- frame:
+		session.traceFrame("S->C queued", frame)
 	default:
 		session.Close()
 	}
@@ -148,6 +151,9 @@ func (hub *Hub) Handle(session *Session, frame tunnel.Frame) error {
 	if hub.Sessions[session.UID] != session {
 		return persistence.ErrDenied
 	}
+	if frame.Op != "data" {
+		session.traceFrame("C->S", frame)
+	}
 	switch frame.Op {
 	case "ping":
 		session.emit(tunnel.Frame{Op: "pong"})
@@ -182,9 +188,11 @@ func (hub *Hub) Handle(session *Session, frame tunnel.Frame) error {
 		}
 		messages, err := channel.Decoder.Feed(frame.Data)
 		if err != nil {
+			session.tracePacket("C->S", channel.ID, "invalid-game-frame", 0, frame.Data, false)
 			return err
 		}
 		for _, message := range messages {
+			session.tracePacket("C->S", channel.ID, "game", message.ID, message.Payload, false)
 			channel.Sequence++
 			if err = hub.route(session, channel, message); err != nil {
 				log.Printf("packet_rejected uid=%d channel=%d phase=%s message=%d reason=%v", session.UID, channel.ID, channel.Phase, message.ID, err)
@@ -215,6 +223,7 @@ func (hub *Hub) sdk(session *Session, channel *Channel, data []byte) error {
 		if err != nil {
 			return err
 		}
+		session.tracePacket("C->S", channel.ID, "sdk", uint32(protocol.ReadUint16(body, 0)), body[2:], flags == 1)
 		channel.LoginBuffer = buffer[length:]
 		var reply protocol.Message
 		if flags == 1 && channel.Phase == "connected" {

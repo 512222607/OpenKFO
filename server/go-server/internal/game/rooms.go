@@ -3,7 +3,6 @@ package game
 import (
 	"bytes"
 	"fmt"
-	"kungfu.local/server/internal/persistence"
 	"kungfu.local/server/internal/protocol"
 	"log"
 	"sort"
@@ -18,7 +17,7 @@ type Config struct {
 }
 type Member struct {
 	Session              *Session
-	Slot, Team           byte
+	Slot, Spawn, Team    byte
 	Ready, Loaded, Input bool
 	BattleEvents         map[uint32]battleSequence
 }
@@ -75,68 +74,6 @@ func (hub *Hub) resolve(request []byte) ([]byte, error) {
 	protocol.WriteUint32(resolvedRequest, 42, target)
 	return resolvedRequest, nil
 }
-func roomEntry(room *Room, uid uint64) []byte {
-	request := room.Request
-	entry := make([]byte, 245)
-	protocol.WriteUint16(entry, 0, room.ID)
-	protocol.WriteUint64(entry, 2, uid)
-	copy(entry[12:20], request[38:46])
-	copy(entry[24:45], request[:21])
-	copy(entry[45:56], request[21:32])
-	copy(entry[56:61], request[32:37])
-	if request[21] != 0 {
-		entry[61] = 1
-	}
-	entry[62] = request[37]
-	entry[65] = request[46]
-	copy(entry[67:69], request[47:49])
-	copy(entry[69:73], request[50:54])
-	entry[73] = request[49]
-	copy(entry[78:82], request[59:63])
-	protocol.WriteUint64(entry, 96, uid)
-	return entry
-}
-func fighter(account persistence.Account, member *Member, update bool) []byte {
-	record := make([]byte, 149)
-	protocol.WriteUint64(record, 0, account.UID)
-	record[8] = member.Slot
-	record[9] = member.Team
-	record[10] = member.Slot
-	copy(record[11:32], persistence.GBK(account.Nickname))
-	if member.Ready {
-		record[53] = 1
-	}
-	copy(record[54:57], account.Profile[122:125])
-	protocol.WriteUint32(record, 67, member.Session.P2P)
-	if update {
-		record[76] = 1
-	}
-	for _, item := range account.Inventory {
-		if protocol.ReadUint16(item, 17) != 0 {
-			record[64]++
-			record = append(record, item...)
-		}
-	}
-	return record
-}
-func roomList(room *Room) []byte {
-	entry := roomEntry(room, room.Owner)
-	record := make([]byte, 259)
-	protocol.WriteUint16(record, 0, room.ID)
-	copy(record[2:23], entry[24:45])
-	copy(record[23:31], entry[12:20])
-	record[31] = entry[61]
-	record[33] = entry[57]
-	record[39] = entry[62]
-	record[40] = byte(len(room.Members))
-	if room.Stage == "room" {
-		record[41] = 1
-	}
-	record[42] = entry[59]
-	record[43] = entry[60]
-	record[44] = entry[65]
-	return record
-}
 func (hub *Hub) broadcast(room *Room, message protocol.Message, exclude uint64) {
 	for uid, member := range room.Members {
 		if uid != exclude {
@@ -163,46 +100,65 @@ func (hub *Hub) install(room *Room, session *Session) error {
 	if err != nil {
 		return err
 	}
-	member := &Member{Session: session, Slot: slot, Team: slot % 2}
+	member := &Member{Session: session, Slot: slot, Spawn: slot, Team: slot % 2}
 	own := fighter(account, member, false)
-	type peer struct {
-		member *Member
-		raw    []byte
-	}
-	var peers []peer
+	var peers []roomPeer
 	for _, member := range room.Members {
 		account, err := hub.Store.Snapshot(member.Session.UID)
 		if err != nil {
 			return err
 		}
-		peers = append(peers, peer{member, fighter(account, member, false)})
+		peers = append(peers, roomPeer{member, fighter(account, member, false)})
 	}
+	hub.completeRoomJoin(room, member, own, peers)
+	return nil
+}
+
+// Snapshot every account before committing membership. Persistence failures in
+// install must never leave a partially joined room or send partial rosters.
+type roomPeer struct {
+	member *Member
+	raw    []byte
+}
+
+func (hub *Hub) completeRoomJoin(room *Room, member *Member, own []byte, peers []roomPeer) {
+	session := member.Session
 	room.Members[session.UID] = member
 	session.Room = room
 	session.game().Phase = "room"
-	entry := roomEntry(room, room.Owner)
-	entry[10] = slot
-	entry[11] = member.Team
-	// Practice uses the established single-player entry. Competitive rooms
-	// install the actual fighter record; this preserves original native layout.
-	if room.Request[46] != 5 || len(room.Members) > 1 {
-		copy(entry[96:], own[:149])
-	}
-	session.sendGame(protocol.Message{ID: 3100, Payload: entry})
+	session.sendGame(protocol.Message{ID: 3100, Payload: roomEntryForMember(room, member, own)})
 	session.sendGame(protocol.Message{ID: 3160, Payload: protocol.Uint64Bytes(room.Owner)})
+	// 3105 consumes consecutive variable-length records, without a count prefix.
+	// Never send an empty roster: the native consumer reads the first record.
+	sort.Slice(peers, func(i, j int) bool { return peers[i].member.Slot < peers[j].member.Slot })
+	var roster []byte
 	for _, peer := range peers {
-		session.sendGame(protocol.Message{ID: 3090, Payload: peer.raw})
+		roster = append(roster, peer.raw...)
+	}
+	if len(roster) != 0 {
+		session.sendGame(protocol.Message{ID: 3105, Payload: roster})
+	}
+	for _, peer := range peers {
 		peer.member.Session.sendGame(protocol.Message{ID: 3090, Payload: own})
-		if peer.member.Ready {
-			peer.member.Ready = false
-			hub.broadcast(room, protocol.Message{ID: 4070, Payload: protocol.Uint64Bytes(peer.member.Session.UID)}, 0)
+	}
+	hub.clearRoomReady(room)
+}
+
+func (hub *Hub) clearRoomReady(room *Room) {
+	for uid, member := range room.Members {
+		if member.Ready {
+			member.Ready = false
+			hub.broadcast(room, protocol.Message{ID: 4070, Payload: protocol.Uint64Bytes(uid)}, 0)
 		}
 	}
-	return nil
 }
+
 func (hub *Hub) leave(session *Session, acknowledge bool) {
 	room := session.Room
 	if room == nil {
+		if acknowledge {
+			session.sendGame(protocol.Message{ID: 3115})
+		}
 		return
 	}
 	delete(room.Members, session.UID)
@@ -244,12 +200,7 @@ func (hub *Hub) leave(session *Session, acknowledge bool) {
 		room.Owner = first.Session.UID
 		hub.broadcast(room, protocol.Message{ID: 3160, Payload: protocol.Uint64Bytes(room.Owner)}, 0)
 	}
-	for uid, member := range room.Members {
-		if member.Ready {
-			member.Ready = false
-			hub.broadcast(room, protocol.Message{ID: 4070, Payload: protocol.Uint64Bytes(uid)}, 0)
-		}
-	}
+	hub.clearRoomReady(room)
 }
 func (hub *Hub) equipmentChanged(session *Session) {
 	if session.Room == nil {
@@ -295,8 +246,11 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		session.send(channel.ID, protocol.Message{ID: 2280, Payload: response})
 		log.Printf("room_directory uid=%d page=%d option=%d mode=%d rooms=%d returned=%d", uid, page, payload[1], payload[2], len(hub.Rooms), count)
 	case 3010:
-		if room != nil && channel.Phase == "room" && bytes.Equal(payload, room.Request) {
-			return true, nil
+		if room != nil && channel.Phase == "room" && room.Owner == uid {
+			resolved, err := hub.resolve(payload)
+			if err == nil && bytes.Equal(resolved, room.Request) {
+				return true, nil
+			}
 		}
 		if channel.Phase != "lobby" || room != nil || !session.Bound {
 			return true, protocol.ErrFrame
@@ -374,17 +328,13 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 			return true, protocol.ErrFrame
 		}
 		member := room.Members[uid]
-		member.Team = payload[0]
-		member.Ready = false
-		response := append(protocol.Uint64Bytes(uid), member.Team, member.Slot)
-		hub.broadcast(room, protocol.Message{ID: 3250, Payload: response}, 0)
-		hub.broadcast(room, protocol.Message{ID: 4070, Payload: protocol.Uint64Bytes(uid)}, 0)
-		for peerUID, peer := range room.Members {
-			if peer.Ready {
-				peer.Ready = false
-				hub.broadcast(room, protocol.Message{ID: 4070, Payload: protocol.Uint64Bytes(peerUID)}, 0)
-			}
+		if member.Team == payload[0] {
+			session.sendGame(protocol.Message{ID: 3250, Payload: roomTeam(member)})
+			return true, nil
 		}
+		member.Team = payload[0]
+		hub.broadcast(room, protocol.Message{ID: 3250, Payload: roomTeam(member)}, 0)
+		hub.clearRoomReady(room)
 	case 3140:
 		if len(payload) != 9 {
 			return true, protocol.ErrFrame
@@ -406,41 +356,22 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		if room == nil || room.Stage != "room" || room.Owner != uid {
 			return true, nil
 		}
-		if payload[8] != 0 || payload[11] != 0 || payload[9] > 1 || payload[10] > 1 || payload[12] > 1 || payload[13] > 1 || payload[14] == 0 {
+		candidate, err := applyRoomSettings(room.Request, payload)
+		if err != nil {
 			return true, nil
 		}
-		duration := protocol.ReadUint16(payload, 46)
-		if duration != 120 && duration != 180 && duration != 240 && duration != 300 {
-			return true, nil
-		}
-		for _, field := range [][]byte{payload[14:35], payload[35:46]} {
-			terminator := bytes.IndexByte(field, 0)
-			if terminator < 0 || !bytes.Equal(field[terminator:], make([]byte, len(field)-terminator)) {
-				return true, nil
-			}
-		}
-		candidate := bytes.Clone(room.Request)
-		copy(candidate[:21], payload[14:35])
-		copy(candidate[21:32], payload[35:46])
-		copy(candidate[32:35], payload[8:11])
-		copy(candidate[35:37], payload[12:14])
-		copy(candidate[38:46], payload[:8])
-		copy(candidate[47:49], payload[46:48])
 		resolved, err := hub.resolve(candidate)
 		if err != nil {
 			session.sendGame(notice("房间设置或地图不可用。"))
 			return true, nil
 		}
-		room.Request = resolved
-		reply := bytes.Clone(payload)
-		copy(reply[:8], resolved[38:46])
-		hub.broadcast(room, protocol.Message{ID: 3220, Payload: reply}, 0)
-		for peerUID, peer := range room.Members {
-			if peer.Ready {
-				peer.Ready = false
-				hub.broadcast(room, protocol.Message{ID: 4070, Payload: protocol.Uint64Bytes(peerUID)}, 0)
-			}
+		if bytes.Equal(room.Request, resolved) {
+			session.sendGame(protocol.Message{ID: 3220, Payload: roomSettings(resolved)})
+			return true, nil
 		}
+		room.Request = resolved
+		hub.broadcast(room, protocol.Message{ID: 3220, Payload: roomSettings(resolved)}, 0)
+		hub.clearRoomReady(room)
 	case 4030, 4060:
 		if len(payload) != 0 || room == nil {
 			return true, protocol.ErrFrame
