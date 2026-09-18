@@ -13,6 +13,9 @@ import (
 func installedRoot(t *testing.T) string {
 	t.Helper()
 	root, err := filepath.Abs("../../..")
+	if configured := os.Getenv("OPENKFO_TEST_RUNTIME"); configured != "" {
+		root = configured
+	}
 	if err != nil {
 		t.Fatal(err)
 	}

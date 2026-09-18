@@ -16,26 +16,30 @@ import (
 )
 
 type Request struct {
-	Operation string   `json:"operation"`
-	ID        string   `json:"id"`
-	UID       uint64   `json:"uid"`
-	Mode      string   `json:"mode"`
-	Amount    uint32   `json:"amount"`
-	Keys      []string `json:"keys"`
-	Key       string   `json:"key"`
-	Quantity  int      `json:"quantity"`
-	Days      int      `json:"days"`
-	Currency  string   `json:"currency"`
-	Price     int64    `json:"price"`
-	Enabled   *bool    `json:"enabled"`
-	All       bool     `json:"all"`
-	Weapon    int      `json:"weapon"`
-	Revision  string   `json:"revision"`
-	Rules     []Rule   `json:"rules"`
+	Environment    string                   `json:"environment"`
+	Rewards        *persistence.RewardRules `json:"rewards,omitempty"`
+	RewardRevision uint64                   `json:"reward_revision"`
+	Operation      string                   `json:"operation"`
+	ID             string                   `json:"id"`
+	UID            uint64                   `json:"uid"`
+	Mode           string                   `json:"mode"`
+	Amount         uint32                   `json:"amount"`
+	Keys           []string                 `json:"keys"`
+	Key            string                   `json:"key"`
+	Quantity       int                      `json:"quantity"`
+	Days           int                      `json:"days"`
+	Currency       string                   `json:"currency"`
+	Price          int64                    `json:"price"`
+	Enabled        *bool                    `json:"enabled"`
+	All            bool                     `json:"all"`
+	Weapon         int                      `json:"weapon"`
+	Revision       string                   `json:"revision"`
+	Rules          []Rule                   `json:"rules"`
 }
 type Admin struct {
-	Root   string
-	Remote func(persistence.AdminRequest) (json.RawMessage, error)
+	Root          string
+	LocalSettings string
+	Remote        func(persistence.AdminRequest) (json.RawMessage, error)
 }
 
 func New(root string) *Admin { admin := &Admin{Root: root}; admin.Remote = admin.remote; return admin }
@@ -148,13 +152,22 @@ func offer(item Item, request Request) (persistence.AdminOffer, error) {
 	return persistence.AdminOffer{Offer: persistence.Offer{Key: key, Category: 10, Variant: item.Kind, Record: record, Grant: template(item, request.Quantity, request.Days)}, Enabled: *request.Enabled}, nil
 }
 func (admin *Admin) Call(request Request) (any, error) {
-	remote := persistence.AdminRequest{Operation: request.Operation, ID: request.ID, UID: request.UID, Mode: request.Mode, Amount: request.Amount}
+	if request.Environment != "" && request.Environment != "local" && request.Environment != "online" {
+		return nil, fmt.Errorf("无效的管理环境")
+	}
+	call := admin.Remote
+	environment := "线上服务器"
+	if request.Environment == "local" {
+		call = admin.local
+		environment = "本地测试服"
+	}
+	remote := persistence.AdminRequest{Operation: request.Operation, ID: request.ID, UID: request.UID, Mode: request.Mode, Amount: request.Amount, Rewards: request.Rewards, RewardRevision: request.RewardRevision}
 	switch request.Operation {
-	case "accounts", "inventory", "wallet_accounts", "wallet_update":
-		return admin.Remote(remote)
+	case "accounts", "inventory", "wallet_accounts", "wallet_update", "rewards_get", "rewards_save":
+		return call(remote)
 	}
 	client := filepath.Join(admin.Root, "runtime-local", "client")
-	items, err := Catalog(client)
+	items, err := catalog(client, request.Operation == "catalog")
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +179,7 @@ func (admin *Admin) Call(request Request) (any, error) {
 		for _, item := range items {
 			categories[item.Kind] = true
 		}
-		return map[string]any{"items": items, "root": admin.Root, "database": "线上 MySQL", "environment": "线上服务器", "categories": len(categories)}, nil
+		return map[string]any{"items": items, "root": admin.Root, "database": environment, "environment": environment, "categories": len(categories)}, nil
 	}
 	byKey := map[string]Item{}
 	available := []Item{}
@@ -177,7 +190,7 @@ func (admin *Admin) Call(request Request) (any, error) {
 		}
 	}
 	if request.Operation == "shop_catalog" {
-		encoded, err := admin.Remote(remote)
+		encoded, err := call(remote)
 		if err != nil {
 			return nil, err
 		}
@@ -207,9 +220,9 @@ func (admin *Admin) Call(request Request) (any, error) {
 			}
 			offers[key] = map[string]any{"currency": currency, "price": price, "days": days, "quantity": quantity, "enabled": row.Enabled}
 		}
-		return map[string]any{"items": available, "offers": offers, "environment": "线上 MySQL"}, nil
+		return map[string]any{"items": available, "offers": offers, "environment": environment}, nil
 	}
-	if request.Operation != "grant" && request.Operation != "shop_save" && request.Operation != "shop_batch" {
+	if request.Operation != "grant" && request.Operation != "shop_save" && request.Operation != "shop_batch" && request.Operation != "shop_prices" {
 		return nil, fmt.Errorf("不支持的管理操作")
 	}
 	if len(request.ID) < 1 || len(request.ID) > 100 {
@@ -235,6 +248,13 @@ func (admin *Admin) Call(request Request) (any, error) {
 			return nil, fmt.Errorf("道具无效或重复")
 		}
 		seen[key] = true
+	}
+	if request.Operation == "shop_prices" {
+		if request.Price < 1 || request.Price > 2147483647 || (request.Currency != "gold" && request.Currency != "ticket") {
+			return nil, fmt.Errorf("售价须为 1–2147483647，币种须为金币或点券")
+		}
+		remote.Keys, remote.Currency, remote.Price = keys, request.Currency, request.Price
+		return call(remote)
 	}
 	if request.Operation == "grant" {
 		if request.Quantity < 1 || request.Quantity > 999 || request.Days < 1 || request.Days > 3650 {
@@ -264,5 +284,5 @@ func (admin *Admin) Call(request Request) (any, error) {
 			remote.Offers = append(remote.Offers, row)
 		}
 	}
-	return admin.Remote(remote)
+	return call(remote)
 }

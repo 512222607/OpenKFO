@@ -29,6 +29,7 @@ func main() {
 	}
 	defer logFile.Close()
 	log.SetOutput(logFile)
+	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
 	config, err := bridge.LoadConfig(*configPath)
 	if err == nil {
 		if *launch {

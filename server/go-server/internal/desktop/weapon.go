@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 type field struct {
@@ -216,6 +217,23 @@ type Combo struct {
 	Nodes []ComboNode `json:"nodes"`
 }
 
+// Animation comments describe the action, not necessarily its input or public name.
+func actionDescription(node *xmlNode) string {
+	for _, child := range node.children {
+		if !child.comment {
+			break
+		}
+		text := strings.Join(strings.Fields(child.text), " ")
+		if len([]rune(text)) > 100 || strings.ContainsAny(text, "<>�") {
+			continue
+		}
+		if strings.ContainsFunc(text, func(r rune) bool { return unicode.Is(unicode.Han, r) }) {
+			return text
+		}
+	}
+	return ""
+}
+
 func combos(a *archive, id string) ([]Combo, error) {
 	name := "weapon/" + id + "/combotip.xml"
 	result := []Combo{}
@@ -284,9 +302,21 @@ type inspection struct {
 	blocks     map[string][]block
 	properties map[string][]*xmlNode
 	ordered    []*xmlNode
+	owners     map[string]map[string]bool
 }
 
 var animationPattern = regexp.MustCompile(`(?s)<AnmDesc\b[^>]*>.*?</AnmDesc\s*>`)
+
+func actionKey(action string) string {
+	if len(action) <= 4 {
+		return ""
+	}
+	id, err := strconv.Atoi(action[4:])
+	if err != nil {
+		return ""
+	}
+	return action[:4] + "/" + strconv.Itoa(id)
+}
 
 func inspect(a *archive, items []Item) (*inspection, error) {
 	buffRows, err := buffs(a)
@@ -329,18 +359,36 @@ func inspect(a *archive, items []Item) (*inspection, error) {
 			}
 		}
 	}
-	animation, err := a.text("animation/2001.xml")
-	if err != nil {
-		return nil, err
+	result := &inspection{weapons: []Weapon{}, blocks: map[string][]block{}, properties: map[string][]*xmlNode{}, owners: owners}
+	files := map[string]bool{}
+	for action := range owners {
+		if len(action) > 4 {
+			files["animation/"+action[:4]+".xml"] = true
+		}
 	}
-	result := &inspection{weapons: []Weapon{}, blocks: map[string][]block{}, properties: map[string][]*xmlNode{}}
-	for _, original := range animationPattern.FindAllString(animation, -1) {
-		node, err := parseXML(original)
+	for file := range files {
+		if _, ok := a.entries[file]; !ok {
+			continue
+		}
+		animation, err := a.text(file)
 		if err != nil {
 			return nil, err
 		}
-		result.blocks[node.get("id")] = append(result.blocks[node.get("id")], block{original, node})
+		prefix := strings.TrimSuffix(strings.TrimPrefix(file, "animation/"), ".xml")
+		for _, original := range animationPattern.FindAllString(animation, -1) {
+			node, err := parseXML(original)
+			if err != nil {
+				return nil, err
+			}
+			id, err := strconv.Atoi(strings.TrimSpace(node.get("id")))
+			if err != nil {
+				return nil, err
+			}
+			key := prefix + "/" + strconv.Itoa(id)
+			result.blocks[key] = append(result.blocks[key], block{original, node})
+		}
 	}
+
 	root, err := a.xml("skillproperty.xml")
 	if err != nil {
 		return nil, err
@@ -387,19 +435,14 @@ func inspect(a *archive, items []Item) (*inspection, error) {
 		if err != nil {
 			return nil, err
 		}
-		states := []string{"2011", "2012", "2013", "2014", "2015", "2016"}
-		seen := map[string]bool{}
-		for _, state := range states {
-			seen[state] = true
-		}
-		for _, sequence := range sequences {
-			for _, node := range sequence.Nodes {
-				if _, exists := columns[node.State]; exists && !seen[node.State] {
-					states = append(states, node.State)
-					seen[node.State] = true
-				}
-			}
-		}
+		// The action table is authoritative; combo tips are labels, not an allowlist.
+		states := append([]string(nil), header[2:len(row)]...)
+		sort.SliceStable(states, func(i, j int) bool {
+			a, _ := strconv.Atoi(states[i])
+			b, _ := strconv.Atoi(states[j])
+			return a >= 2000 && a < 3000 && !(b >= 2000 && b < 3000)
+		})
+
 		id, err := strconv.Atoi(row[0])
 		if err != nil {
 			return nil, err
@@ -411,7 +454,7 @@ func inspect(a *archive, items []Item) (*inspection, error) {
 				return nil, fmt.Errorf("招式列缺失")
 			}
 			action := row[column]
-			if action == "0" {
+			if action == "0" || action == "" {
 				continue
 			}
 			number, err := strconv.Atoi(state)
@@ -421,10 +464,7 @@ func inspect(a *archive, items []Item) (*inspection, error) {
 			if number >= 2011 && number <= 2016 {
 				number -= 2010
 			}
-			candidates := []block{}
-			if strings.HasPrefix(action, "2001") {
-				candidates = result.blocks[action[4:]]
-			}
+			candidates := result.blocks[actionKey(action)]
 			refs := map[string]bool{}
 			for _, candidate := range candidates {
 				candidate.node.walk(func(node *xmlNode) {
@@ -446,8 +486,9 @@ func inspect(a *archive, items []Item) (*inspection, error) {
 			reason := ""
 			if len(candidates) != 1 || len(refs) == 0 || !unique {
 				reason = "动作或命中属性未能唯一对应，暂不可应用"
-			} else if len(owners[action]) != 1 || !owners[action][row[0]+":"+state] {
-				reason = "该动作被其他武器或招式共用，暂不可单独修改"
+				if len(candidates) == 1 && len(refs) == 0 {
+					reason = "该动作没有直接命中属性（移动、受击或间接效果），不提供伤害编辑"
+				}
 			} else {
 				for _, ref := range refIDs {
 					node := result.properties[ref][0]
@@ -490,7 +531,12 @@ func inspect(a *archive, items []Item) (*inspection, error) {
 			}
 			label := strings.Join(labels, " / ")
 			if label == "" {
-				label = state
+				label = "状态 " + state + "（按键映射待核实）"
+				if len(candidates) == 1 {
+					if description := actionDescription(candidates[0].node); description != "" {
+						label = description + "（动画说明）"
+					}
+				}
 			}
 			if number <= 6 {
 				label = fmt.Sprintf("第 %d 下 C", number)
@@ -591,10 +637,22 @@ func render(a *archive, items []Item, plans map[string][]Rule) ([]byte, error) {
 	for _, weapon := range info.weapons {
 		weapons[strconv.Itoa(weapon.ID)] = weapon
 	}
-	animation, err := a.text("animation/2001.xml")
+	animations := map[string]string{}
+	actionTable, err := a.text("itemact.txt")
 	if err != nil {
 		return nil, err
 	}
+	actionLines := strings.Split(actionTable, "\n")
+	header := strings.Split(strings.TrimSuffix(actionLines[0], "\r"), "\t")
+	tableChanged := false
+	reserved := map[string]bool{}
+	for key := range info.blocks {
+		reserved[key] = true
+	}
+	for action := range info.owners {
+		reserved[actionKey(action)] = true
+	}
+
 	properties, err := a.text("skillproperty.xml")
 	if err != nil {
 		return nil, err
@@ -623,8 +681,55 @@ func render(a *archive, items []Item, plans map[string][]Rule) ([]byte, error) {
 					break
 				}
 			}
-			source := info.blocks[stage.Action[4:]][0]
+			source := info.blocks[actionKey(stage.Action)][0]
+			file := "animation/" + stage.Action[:4] + ".xml"
+			animation, ok := animations[file]
+			if !ok {
+				animation, err = a.text(file)
+				if err != nil {
+					return nil, err
+				}
+			}
 			changed := source.node.clone()
+			shared := len(info.owners[stage.Action]) > 1
+			if shared {
+				cloneID := 0
+				for id := 999; id >= 1; id-- {
+					key := stage.Action[:4] + "/" + strconv.Itoa(id)
+					if !reserved[key] {
+						cloneID = id
+						reserved[key] = true
+						break
+					}
+				}
+				if cloneID == 0 {
+					return nil, fmt.Errorf("%s 独立动作编号空间不足，未修改配置", file)
+				}
+				changed.set("id", strconv.Itoa(cloneID))
+				newAction := stage.Action[:4] + fmt.Sprintf("%03d", cloneID)
+				replaced := false
+				for i, line := range actionLines[1:] {
+					ending := ""
+					if strings.HasSuffix(line, "\r") {
+						ending = "\r"
+					}
+					cols := strings.Split(strings.TrimSuffix(line, "\r"), "\t")
+					if len(cols) < 2 || cols[0] != key {
+						continue
+					}
+					for j, state := range header {
+						if j >= 2 && j < len(cols) && state == stage.State {
+							cols[j] = newAction
+							replaced = true
+						}
+					}
+					actionLines[i+1] = strings.Join(cols, "\t") + ending
+				}
+				if !replaced {
+					return nil, fmt.Errorf("找不到待隔离招式")
+				}
+				tableChanged = true
+			}
 			remap := map[string]string{}
 			for _, oldID := range stage.PropertyIDs {
 				for len(info.properties[strconv.Itoa(nextID)]) > 0 {
@@ -669,7 +774,16 @@ func render(a *archive, items []Item, plans map[string][]Rule) ([]byte, error) {
 			if err != nil {
 				return nil, err
 			}
-			animation = strings.Replace(animation, source.original, encoded, 1)
+			if shared {
+				ending := regexp.MustCompile(`</AnmInfo\s*>`)
+				if len(ending.FindAllStringIndex(animation, -1)) != 1 {
+					return nil, fmt.Errorf("动作表结构错误")
+				}
+				animation = ending.ReplaceAllStringFunc(animation, func(string) string { return "\n" + encoded + "\n</AnmInfo>" })
+			} else {
+				animation = strings.Replace(animation, source.original, encoded, 1)
+			}
+			animations[file] = animation
 		}
 	}
 	if len(clones) == 0 {
@@ -683,15 +797,30 @@ func render(a *archive, items []Item, plans map[string][]Rule) ([]byte, error) {
 	if _, err = parseXML(properties); err != nil {
 		return nil, err
 	}
-	encodedAnimation, err := encodeText(animation)
+	replacements := map[string][]byte{}
+	for file, animation := range animations {
+		if _, err := parseXML(animation); err != nil {
+			return nil, err
+		}
+		encoded, err := encodeText(animation)
+		if err != nil {
+			return nil, err
+		}
+		replacements[file] = encoded
+	}
+	encoded, err := encodeText(properties)
 	if err != nil {
 		return nil, err
 	}
-	encodedProperties, err := encodeText(properties)
-	if err != nil {
-		return nil, err
+	replacements["skillproperty.xml"] = encoded
+	if tableChanged {
+		encoded, err := encodeText(strings.Join(actionLines, "\n"))
+		if err != nil {
+			return nil, err
+		}
+		replacements["itemact.txt"] = encoded
 	}
-	return a.replace(map[string][]byte{"animation/2001.xml": encodedAnimation, "skillproperty.xml": encodedProperties})
+	return a.replace(replacements)
 }
 func digest(data []byte) string { sum := sha256.Sum256(data); return hex.EncodeToString(sum[:]) }
 func atomicWrite(path string, data []byte) error {
@@ -849,22 +978,38 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 		if _, err = verified.xml("animation/2001.xml"); err != nil {
 			return nil, err
 		}
+		allowedFiles := map[string]bool{"itemact.txt": true, "skillproperty.xml": true}
+		for _, w := range info.weapons {
+			for _, rule := range state.Applied[strconv.Itoa(w.ID)] {
+				for _, stage := range w.Stages {
+					if stage.Stage == rule.Stage {
+						allowedFiles["animation/"+stage.Action[:4]+".xml"] = true
+					}
+				}
+			}
+		}
 		for name := range source.entries {
 			after, err := verified.raw(name)
 			if err != nil {
 				return nil, err
 			}
-			if name == "animation/2001.xml" || name == "skillproperty.xml" {
-				continue
-			}
 			before, err := source.raw(name)
 			if err != nil {
 				return nil, err
 			}
-			if !bytes.Equal(before, after) {
-				return nil, fmt.Errorf("无关配置校验失败，未写入")
+			if bytes.Equal(before, after) {
+				continue
+			}
+			if !allowedFiles[name] {
+				return nil, fmt.Errorf("无关配置校验失败，未写入：%s", name)
+			}
+			if strings.HasSuffix(name, ".xml") {
+				if _, err = verified.xml(name); err != nil {
+					return nil, err
+				}
 			}
 		}
+
 		if sourcePath == packagePath {
 			if err = atomicWrite(baseline, source.data); err != nil {
 				return nil, err

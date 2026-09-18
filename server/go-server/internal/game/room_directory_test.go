@@ -1,10 +1,43 @@
 package game
 
 import (
+	"errors"
 	"kungfu.local/server/internal/protocol"
 	"kungfu.local/server/internal/tunnel"
 	"testing"
 )
+
+func TestRoomDirectoryRefreshPendingDuringJoin(t *testing.T) {
+	hub, host, peer, newcomer := waitingRoomFixture()
+	room := host.Room
+	member := &Member{Session: newcomer, Slot: 2, Spawn: 2, Team: 1}
+	// The native client sends 2260 before receiving 3100, but the server
+	// finishes the join before it processes that queued refresh.
+	hub.completeRoomJoin(room, member, make([]byte, 149), nil)
+	roomOutputs(t, newcomer, 3100, 3160)
+	room.Members[peer.UID].Ready = true
+	roomRequest(t, hub, newcomer, 2260, []byte{1, 1, 0x88})
+	reply := roomOutputs(t, newcomer, 2280)[0]
+	if len(reply.Payload) != 8+259 || protocol.ReadUint16(reply.Payload, 8) != room.ID {
+		t.Fatal("pending refresh did not return the room directory")
+	}
+	if newcomer.Room != room || newcomer.game().Phase != "room" || room.Members[newcomer.UID] != member || len(room.Members) != 3 || !room.Members[peer.UID].Ready {
+		t.Fatal("directory refresh changed room membership or readiness")
+	}
+	for _, phase := range []string{"lobby", "room", "connected"} {
+		for _, payload := range [][]byte{nil, {1, 1}, {1, 1, 0x88}, {1, 1, 0x88, 0}} {
+			if phase != "connected" && len(payload) == 3 {
+				continue
+			}
+			newcomer.game().Phase = phase
+			handled, err := hub.roomMessage(newcomer, newcomer.game(), protocol.Message{ID: 2260, Payload: payload})
+			if !handled || !errors.Is(err, protocol.ErrFrame) {
+				t.Fatalf("phase=%s length=%d: invalid request accepted: %v", phase, len(payload), err)
+			}
+			roomOutputs(t, newcomer)
+		}
+	}
+}
 
 func TestNativeRoomDirectoryPageAndMode(t *testing.T) {
 	hub := NewHub(nil, Config{})

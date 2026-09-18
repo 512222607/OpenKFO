@@ -22,7 +22,7 @@ internal static class Program
                 {
                     using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
                     instances.CheckHealthAsync(http).GetAwaiter().GetResult();
-                    File.WriteAllText(args[healthOption + 1], JsonSerializer.Serialize(new { ok = true, milliseconds = elapsed.ElapsedMilliseconds }));
+                    File.WriteAllText(args[healthOption + 1], JsonSerializer.Serialize(new { ok = true, environment = instances.EnvironmentName, endpoint = instances.Endpoint.ToString(), milliseconds = elapsed.ElapsedMilliseconds }));
                 }
                 catch (Exception error)
                 {

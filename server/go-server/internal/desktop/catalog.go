@@ -36,7 +36,9 @@ func timed(kind byte) bool {
 	}
 	return false
 }
-func Catalog(client string) ([]Item, error) {
+func Catalog(client string) ([]Item, error) { return catalog(client, true) }
+
+func catalog(client string, icons bool) ([]Item, error) {
 	a, err := loadArchive(filepath.Join(client, "Data", "config.spf2"))
 	if err != nil {
 		return nil, err
@@ -73,31 +75,34 @@ func Catalog(client string) ([]Item, error) {
 		if !ok {
 			labels = [2]string{"其他道具", fmt.Sprintf("类型 %d", kind)}
 		}
-		relative := strings.ReplaceAll(fields[9], "\\", "/")
-		if strings.Contains(relative, ":") || strings.HasPrefix(relative, "/") {
-			return nil, fmt.Errorf("图标路径越界")
-		}
-		icon := filepath.Join(iconRoot, filepath.FromSlash(relative))
-		rel, err := filepath.Rel(iconRoot, icon)
-		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return nil, fmt.Errorf("图标路径越界")
-		}
-		if info, err := os.Stat(icon); err != nil || info.IsDir() {
-			icon = ""
-		} else {
-			resolved, err := filepath.EvalSymlinks(icon)
-			if err != nil {
-				return nil, err
+		icon := ""
+		if icons {
+			relative := strings.ReplaceAll(fields[9], "\\", "/")
+			if strings.Contains(relative, ":") || strings.HasPrefix(relative, "/") {
+				return nil, fmt.Errorf("图标路径越界")
 			}
-			resolvedRoot, err := filepath.EvalSymlinks(iconRoot)
-			if err != nil {
-				return nil, err
-			}
-			rel, err = filepath.Rel(resolvedRoot, resolved)
+			icon = filepath.Join(iconRoot, filepath.FromSlash(relative))
+			rel, err := filepath.Rel(iconRoot, icon)
 			if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-				return nil, fmt.Errorf("图标链接越界")
+				return nil, fmt.Errorf("图标路径越界")
 			}
-			icon = resolved
+			if info, err := os.Stat(icon); err != nil || info.IsDir() {
+				icon = ""
+			} else {
+				resolved, err := filepath.EvalSymlinks(icon)
+				if err != nil {
+					return nil, err
+				}
+				resolvedRoot, err := filepath.EvalSymlinks(iconRoot)
+				if err != nil {
+					return nil, err
+				}
+				rel, err = filepath.Rel(resolvedRoot, resolved)
+				if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+					return nil, fmt.Errorf("图标链接越界")
+				}
+				icon = resolved
+			}
 		}
 		gender := "通用"
 		if strings.Contains(fields[3], "（男）") || strings.Contains(fields[3], "(男)") {

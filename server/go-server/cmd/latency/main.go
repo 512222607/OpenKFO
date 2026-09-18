@@ -9,7 +9,6 @@ import (
 	"flag"
 	"fmt"
 	"net"
-	"net/http"
 	"net/url"
 	"os"
 	"sort"
@@ -41,12 +40,8 @@ func measure(endpoint, certPath string) (sample Sample) {
 		raw, err = net.DialTimeout("tcp", parsed.Host, 10*time.Second)
 	} else {
 		dialer := websocket.Dialer{HandshakeTimeout: 10 * time.Second, Proxy: nil}
-		headers := http.Header{}
-		if strings.HasPrefix(endpoint, "ws://18.") {
-			headers.Set("Host", "ebmqxj.sbs")
-		}
 		var socket *websocket.Conn
-		socket, _, err = dialer.Dial(endpoint, headers)
+		socket, _, err = dialer.Dial(endpoint, nil)
 		if err == nil {
 			raw = &tunnel.Conn{WS: socket}
 		}
@@ -99,13 +94,13 @@ func measure(endpoint, certPath string) (sample Sample) {
 func main() {
 	cert := flag.String("cert", "runtime-local/go-online/origin.crt", "pinned certificate")
 	count := flag.Int("count", 15, "samples per endpoint")
-	direct := flag.Bool("direct", true, "also measure origin with pinned inner TLS")
+	direct := flag.Bool("direct", false, "also measure direct TLS with the configured domain")
 	customEndpoint := flag.String("endpoint", "", "measure only this TLS or WSS endpoint")
 	output := flag.String("output", "latency-report.json", "report path")
 	flag.Parse()
-	endpoints := []string{"wss://ebmqxj.sbs/kk/tunnel"}
+	endpoints := []string{"wss://jrnygtxy.top/kk/tunnel"}
 	if *direct {
-		endpoints = append(endpoints, "ws://18.231.44.177/kk/tunnel")
+		endpoints = append(endpoints, "tls://jrnygtxy.top:19091")
 	}
 	if *customEndpoint != "" {
 		endpoints = []string{*customEndpoint}

@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 
 class WalletConfigPage extends StatefulWidget {
-  const WalletConfigPage({super.key, required this.api});
+  const WalletConfigPage({
+    super.key,
+    required this.api,
+    this.environment = '当前环境',
+  });
+  final String environment;
   final Future<dynamic> Function(Map<String, dynamic>) api;
   @override
   State<WalletConfigPage> createState() => _WalletConfigPageState();
@@ -105,7 +110,7 @@ class _WalletConfigPageState extends State<WalletConfigPage> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('点券设置与赠送')),
+    appBar: AppBar(title: Text('${widget.environment} · 点券设置与赠送')),
     body: SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: SizedBox(
@@ -162,7 +167,7 @@ class _WalletConfigPageState extends State<WalletConfigPage> {
                 child: const Text('确认操作…'),
               ),
               const SizedBox(height: 16),
-              const Text('赠送会增加现有余额；设置会替换总余额。线上操作保留余额审计记录，重新登录游戏后刷新。'),
+              const Text('赠送会增加现有余额；设置会替换总余额。当前环境操作保留余额审计记录，重新登录游戏后刷新。'),
               const SizedBox(height: 16),
               SelectableText(message),
             ],

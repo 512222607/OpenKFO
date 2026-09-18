@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"kungfu.local/server/internal/protocol"
 )
@@ -15,16 +16,21 @@ type AdminOffer struct {
 	Enabled bool `json:"enabled"`
 }
 type AdminRequest struct {
-	Operation string       `json:"operation"`
-	ID        string       `json:"id"`
-	UID       uint64       `json:"uid"`
-	Mode      string       `json:"mode"`
-	Amount    uint32       `json:"amount"`
-	Records   [][]byte     `json:"records"`
-	Offers    []AdminOffer `json:"offers"`
-	Enabled   bool         `json:"enabled"`
-	All       bool         `json:"all"`
-	Preserve  bool         `json:"preserve"`
+	Keys           []string     `json:"keys,omitempty"`
+	Currency       string       `json:"currency,omitempty"`
+	Price          int64        `json:"price,omitempty"`
+	Rewards        *RewardRules `json:"rewards,omitempty"`
+	RewardRevision uint64       `json:"reward_revision"`
+	Operation      string       `json:"operation"`
+	ID             string       `json:"id"`
+	UID            uint64       `json:"uid"`
+	Mode           string       `json:"mode"`
+	Amount         uint32       `json:"amount"`
+	Records        [][]byte     `json:"records"`
+	Offers         []AdminOffer `json:"offers"`
+	Enabled        bool         `json:"enabled"`
+	All            bool         `json:"all"`
+	Preserve       bool         `json:"preserve"`
 }
 
 func itemKey(record []byte) string {
@@ -48,6 +54,13 @@ func (store *Store) adminOffers() ([]AdminOffer, error) {
 }
 func (store *Store) Admin(request AdminRequest) (any, error) {
 	switch request.Operation {
+	case "rewards_get":
+		return store.BattleRewards(RewardRules{})
+	case "rewards_save":
+		if request.Rewards == nil || len(request.Rewards.Levels) != 150 {
+			return nil, fmt.Errorf("需要完整的 150 级奖励表，请使用新版 GM管理器")
+		}
+		return store.SaveBattleRewards(request.RewardRevision, *request.Rewards)
 	case "accounts", "wallet_accounts":
 		rows, err := store.DB.Query(`SELECT a.uid,a.account,a.nickname,a.gold,a.tickets,(SELECT COUNT(*) FROM inventory i WHERE i.uid=a.uid) FROM accounts a ORDER BY a.uid`)
 		if err != nil {
@@ -80,7 +93,7 @@ func (store *Store) Admin(request AdminRequest) (any, error) {
 	case "wallet_update":
 		before, after, err := store.Wallet(request.UID, request.Mode, request.Amount, request.ID)
 		return map[string]any{"before": before, "after": after, "backup": "线上 wallet_operations 审计记录：" + request.ID, "message": fmt.Sprintf("线上点券：%d → %d；重新登录游戏刷新", before, after)}, err
-	case "grant", "shop_save", "shop_batch":
+	case "grant", "shop_save", "shop_batch", "shop_prices":
 	default:
 		return nil, ErrDenied
 	}
@@ -236,7 +249,51 @@ func (store *Store) Admin(request AdminRequest) (any, error) {
 		}
 		before = existing
 		changed := 0
-		if request.All && !request.Enabled {
+		if request.Operation == "shop_prices" {
+			if len(request.Keys) < 1 || len(request.Keys) > 4000 || request.Price < 1 || request.Price > 2147483647 || (request.Currency != "gold" && request.Currency != "ticket") {
+				return nil, ErrDenied
+			}
+			selected := map[string]bool{}
+			ids := []any{}
+			skipped := 0
+			for _, key := range request.Keys {
+				if selected[key] {
+					return nil, ErrDenied
+				}
+				selected[key] = true
+				matches := byItem[key]
+				if len(matches) == 0 {
+					skipped++
+				}
+				for _, old := range matches {
+					ids = append(ids, old.Key)
+				}
+			}
+			if len(ids) > 0 {
+				gold, tickets := uint32(0), uint32(0)
+				if request.Currency == "gold" {
+					gold = uint32(request.Price)
+				} else {
+					tickets = uint32(request.Price)
+				}
+				args := []any{protocol.Uint32Bytes(gold), protocol.Uint32Bytes(gold), protocol.Uint32Bytes(tickets), protocol.Uint32Bytes(tickets)}
+				args = append(args, ids...)
+				placeholders := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
+				// Patch only the four existing price DWORDs, in one network round trip.
+				update, err := tx.Exec("UPDATE offers SET record=INSERT(INSERT(INSERT(INSERT(record,31,4,?),35,4,?),39,4,?),43,4,?) WHERE catalog_key IN ("+placeholders+")", args...)
+				if err != nil {
+					return nil, err
+				}
+				count, err := update.RowsAffected()
+				if err != nil {
+					return nil, err
+				}
+				changed = int(count)
+			}
+			result["skipped"] = skipped
+			result["matched"] = len(ids)
+			result["message"] = fmt.Sprintf("批量改价完成：匹配 %d 条销售记录，更新 %d 条，跳过 %d 件未配置商品；期限、数量及上下架状态保留。请重新登录游戏刷新商城", len(ids), changed, skipped)
+		} else if request.All && !request.Enabled {
 			update, updateErr := tx.Exec(`UPDATE offers SET enabled=FALSE WHERE enabled=TRUE`)
 			if updateErr != nil {
 				return nil, updateErr
@@ -291,7 +348,9 @@ func (store *Store) Admin(request AdminRequest) (any, error) {
 			}
 		}
 		result["changed"] = changed
-		result["message"] = fmt.Sprintf("线上商城已更新 %d 条；请重新登录游戏刷新商品缓存", changed)
+		if request.Operation != "shop_prices" {
+			result["message"] = fmt.Sprintf("商城已更新 %d 条；请重新登录游戏刷新商品缓存", changed)
+		}
 	}
 	beforeJSON, err := json.Marshal(before)
 	if err != nil {

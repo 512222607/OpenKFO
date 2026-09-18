@@ -22,6 +22,8 @@ internal sealed class InstanceManager
     internal string SourceDirectory { get; }
     internal Uri HealthUri { get; }
     internal Uri Endpoint { get; }
+    internal string EnvironmentName => Endpoint.IsLoopback ? "本地测试服" : "线上服务器";
+    internal string EnvironmentDescription => $"{EnvironmentName} · {Endpoint.Authority} · 多窗口登录";
 
     internal InstanceManager(string rootDirectory)
     {
@@ -117,7 +119,7 @@ internal sealed class InstanceManager
         if (number < 1 || number > MaximumInstances) throw new ArgumentOutOfRangeException(nameof(number));
         using (var existing = FindGame(number))
         {
-            if (existing != null) { StartLoginSkin(number, existing); Activate(number); return; }
+            if (existing != null) { await PrepareLoginAsync(number, existing, progress); Activate(number); return; }
         }
         // Serialize preparation across launcher windows; never stop an existing game.
         string stateDirectory = Path.Combine(root, "launcher-components");
@@ -126,7 +128,7 @@ internal sealed class InstanceManager
         string config = await Task.Run(() => Prepare(number, progress));
         using (var existing = FindGame(number))
         {
-            if (existing != null) { StartLoginSkin(number, existing); Activate(number); return; }
+            if (existing != null) { await PrepareLoginAsync(number, existing, progress); Activate(number); return; }
         }
         CheckAvailablePorts(number);
         string bridge = Path.Combine(InstanceDirectory(number), "OnlineBridge.exe");
@@ -138,10 +140,24 @@ internal sealed class InstanceManager
         {
             await Task.Delay(500);
             using var game = FindGame(number);
-            if (game != null) { StartLoginSkin(number, game); progress.Report($"窗口 {number} 已启动，请在游戏里登录独立账号。"); return; }
+            if (game != null) { await PrepareLoginAsync(number, game, progress); return; }
             if (helper.HasExited) throw new IOException($"网络组件已退出，请查看窗口 {number} 的日志。");
         }
         throw new IOException($"窗口 {number} 启动超时，请查看日志；不要重复点击启动。");
+    }
+
+    private async Task PrepareLoginAsync(int number, Process game, IProgress<string> progress)
+    {
+        StartLoginSkin(number, game);
+        var saved = WindowCredentials.Load(InstanceDirectory(number));
+        if (saved.Account.Length == 0 && saved.Password.Length == 0)
+        {
+            progress.Report($"窗口 {number} 已启动，请在游戏里输入账号密码。");
+            return;
+        }
+        progress.Report($"窗口 {number} 正在等待登录界面并填写账号密码…");
+        bool filled = await saved.FillAsync(game);
+        progress.Report(filled ? $"窗口 {number} 已填写保存的账号密码，请在游戏里点击登录。" : $"窗口 {number} 未找到可填写的登录界面；若已登录，无需重复操作。");
     }
 
     private void StartLoginSkin(int number, Process game)

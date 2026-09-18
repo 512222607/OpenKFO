@@ -3,7 +3,12 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 class ShopConfigPage extends StatefulWidget {
-  const ShopConfigPage({super.key, required this.api});
+  const ShopConfigPage({
+    super.key,
+    required this.api,
+    this.environment = '当前环境',
+  });
+  final String environment;
   final Future<dynamic> Function(Map<String, dynamic>) api;
   @override
   State<ShopConfigPage> createState() => _ShopConfigPageState();
@@ -19,6 +24,7 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
   final form = GlobalKey<FormState>();
   final selected = <String>{};
   String? pendingSignature, pendingId;
+  String batchCurrency = 'ticket', batchAmount = '100';
 
   String operationId(Map<String, dynamic> request) {
     final signature = jsonEncode(request);
@@ -98,8 +104,11 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
   }
 
   Future<void> save() async {
-    if (!form.currentState!.validate()) return;
-    setState(() => busy = true);
+    if (busy || !form.currentState!.validate()) return;
+    setState(() {
+      busy = true;
+      message = "正在保存到${widget.environment}，请稍候…";
+    });
     try {
       final request = <String, dynamic>{
         'operation': 'shop_save',
@@ -113,11 +122,22 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
       final result = await widget.api({...request, 'id': operationId(request)});
       if (!mounted) return;
       setState(() {
-        message = result['message'];
+        final offers = data!['offers'] as Map;
+        offers[request['key']] = {
+          for (final key in [
+            'currency',
+            'price',
+            'days',
+            'quantity',
+            'enabled',
+          ])
+            key: request[key],
+        };
+        message = '${widget.environment} · ${result['message']}';
         dirty = false;
+        busy = false;
         pendingId = pendingSignature = null;
       });
-      await load();
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -136,12 +156,12 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
     final accepted = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('${all ? '全部' : '批量'}${publish ? '上架' : '下架'}线上商品'),
+        title: Text('${all ? '全部' : '批量'}${publish ? '上架' : '下架'}当前环境商品'),
         content: Text(
           publish
               ? '将上架 $count 件可售商品。已有价格、币种、期限和数量保持不变。\n\n未配置商品默认：100 点券；装备 365 天；消耗品每次 1 个。'
               : all
-              ? '将下架线上商城全部销售记录，包括当前搜索结果之外的商品。价格和发货设置保留。'
+              ? '将下架当前环境商城全部销售记录，包括当前搜索结果之外的商品。价格和发货设置保留。'
               : '将下架选中的 $count 件商品，保留价格和发货设置。',
         ),
         actions: [
@@ -183,6 +203,112 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
     }
   }
 
+  Future<void> batchPrices() async {
+    if (busy || data == null || selected.isEmpty) return;
+    if (!await discard() || !mounted) return;
+    final keys = selected.toList()..sort();
+    final amount = TextEditingController(text: batchAmount);
+    var chosen = batchCurrency;
+    String? error;
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, update) => AlertDialog(
+          title: Text('批量改价 · ${widget.environment} · ${keys.length} 件'),
+          content: SizedBox(
+            width: 520,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  '仅修改所选商品已有销售记录的币种和售价。多条销售规格统一改价；期限、数量、上下架及其他标记保留。未配置商品跳过，不自动上架。',
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  initialValue: chosen,
+                  decoration: const InputDecoration(labelText: '批量币种'),
+                  items: const [
+                    DropdownMenuItem(value: 'ticket', child: Text('点券')),
+                    DropdownMenuItem(value: 'gold', child: Text('金币')),
+                  ],
+                  onChanged: (v) => update(() => chosen = v!),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  key: const ValueKey('batch-price'),
+                  controller: amount,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: '统一售价',
+                    errorText: error,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final value = int.tryParse(amount.text.trim());
+                if (value == null || value < 1 || value > 2147483647) {
+                  update(() => error = '请输入 1–2147483647 的整数');
+                  return;
+                }
+                Navigator.pop(c, true);
+              },
+              child: const Text('确认改价'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (accepted == true && mounted) {
+      batchCurrency = chosen;
+      batchAmount = amount.text.trim();
+      final request = <String, dynamic>{
+        'operation': 'shop_prices',
+        'keys': keys,
+        'currency': chosen,
+        'price': int.parse(batchAmount),
+      };
+      setState(() {
+        busy = true;
+        message = '正在批量改价，请稍候…';
+      });
+      try {
+        final result = await widget.api({
+          ...request,
+          'id': operationId(request),
+        });
+        if (mounted) {
+          setState(() {
+            final offers = data!['offers'] as Map;
+            for (final key in keys) {
+              if (offers[key] != null) {
+                offers[key]['currency'] = request['currency'];
+                offers[key]['price'] = request['price'];
+              }
+            }
+            if (item != null) select(item!);
+            dirty = false;
+            pendingId = pendingSignature = null;
+            message = result['message'];
+          });
+        }
+      } catch (e) {
+        if (mounted) setState(() => message = '$e');
+      } finally {
+        if (mounted) setState(() => busy = false);
+      }
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    amount.dispose();
+  }
+
   Widget number(TextEditingController controller, String label, int max) =>
       TextFormField(
         controller: controller,
@@ -213,7 +339,7 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
         }
       },
       child: Scaffold(
-        appBar: AppBar(title: const Text('商城配置 · 线上 MySQL')),
+        appBar: AppBar(title: Text('${widget.environment} · 商城配置')),
         body: Column(
           children: [
             if (busy) const LinearProgressIndicator(),
@@ -248,10 +374,14 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
                         : () => batch(false),
                     child: const Text('选中下架'),
                   ),
+                  FilledButton(
+                    onPressed: busy || selected.isEmpty ? null : batchPrices,
+                    child: const Text('批量改价'),
+                  ),
                   Text('已选 ${selected.length} 件'),
                   IconButton(
                     onPressed: busy ? null : load,
-                    tooltip: '刷新线上商品',
+                    tooltip: '刷新当前环境商品',
                     icon: const Icon(Icons.refresh),
                   ),
                 ],
@@ -398,7 +528,7 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
                                   ),
                                   const SizedBox(height: 16),
                                   const Text(
-                                    '直接保存到线上 MySQL；下架保留价格与发货设置。游戏会缓存商品，修改后请重新登录。',
+                                    '直接保存到当前环境的数据库；下架保留价格与发货设置。游戏会缓存商品，修改后请重新登录。',
                                   ),
                                 ],
                               ),

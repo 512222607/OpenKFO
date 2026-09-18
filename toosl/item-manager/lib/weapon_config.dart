@@ -12,7 +12,7 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
   final form = GlobalKey<FormState>();
   List<Map<String, dynamic>> rules = [];
   String query = '', message = '';
-  bool busy = true, dirty = false, failed = false;
+  bool busy = true, dirty = false, failed = false, showOtherActions = false;
   int editorVersion = 0;
 
   @override
@@ -263,6 +263,15 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
     final weapons = (data?['weapons'] as List? ?? [])
         .where((w) => '${w['name']} ${w['id']}'.contains(query))
         .toList();
+    final visibleStages = List.generate(rules.length, (i) => i).where((i) {
+      final stage = weapon!['stages'][i];
+      final state =
+          int.tryParse('${stage['state'] ?? ''}') ?? (stage['stage'] as int);
+      return showOtherActions ||
+          (state >= 2000 && state < 3000) ||
+          state <= 6 ||
+          stage['supported'] == true;
+    }).toList();
     final applied = data?['applied']['${weapon?['id']}'] as List? ?? [];
     return PopScope(
       canPop: !dirty && !busy,
@@ -376,31 +385,50 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                                 const Text(
                                   '命中目标时施加所选状态，替换该段原有异常状态；可分别设置各命中的基础伤害和攻击效果，保持原连招顺序。\n持续周期使用客户端原生数值（默认 3000），尚未验证与秒数的换算；多次命中的招式可能重复施加。',
                                 ),
-                                ExpansionTile(
-                                  title: const Text('该武器默认连招'),
-                                  initiallyExpanded: true,
-                                  children: [
-                                    SizedBox(
-                                      height: 150,
-                                      child: ListView(
-                                        children: [
-                                          for (final combo
-                                              in (weapon!['combos'] as List? ??
-                                                  []))
-                                            ListTile(
-                                              dense: true,
-                                              title: Text(combo['name']),
-                                              subtitle: Text(
-                                                (combo['nodes'] as List)
-                                                    .map((n) => n['keys'])
-                                                    .join(' → '),
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
+                                if ((weapon!['combos'] as List? ?? []).isEmpty)
+                                  const Text(
+                                    '当前配置包未找到该武器独立连招提示，已读取完整动作表。标有“动画说明”的文字来自原资源注释，不代表完整按键或正式招式名；共享动作可能保留其他武器的名称。',
+                                  ),
+                                CheckboxListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: Text(
+                                    '显示移动、受击等其他动作（共 ${rules.length} 项）',
+                                  ),
+                                  value: showOtherActions,
+                                  onChanged: busy
+                                      ? null
+                                      : (v) => setState(
+                                          () => showOtherActions = v ?? false,
+                                        ),
                                 ),
+                                if ((weapon!['combos'] as List? ?? [])
+                                    .isNotEmpty)
+                                  ExpansionTile(
+                                    title: const Text('该武器默认连招'),
+                                    initiallyExpanded: true,
+                                    children: [
+                                      SizedBox(
+                                        height: 150,
+                                        child: ListView(
+                                          children: [
+                                            for (final combo
+                                                in (weapon!['combos']
+                                                        as List? ??
+                                                    []))
+                                              ListTile(
+                                                dense: true,
+                                                title: Text(combo['name']),
+                                                subtitle: Text(
+                                                  (combo['nodes'] as List)
+                                                      .map((n) => n['keys'])
+                                                      .join(' → '),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 if (weapon!['id'] == 253013)
                                   Align(
                                     alignment: Alignment.centerLeft,
@@ -429,8 +457,10 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                                   child: Form(
                                     key: form,
                                     child: ListView.builder(
-                                      itemCount: rules.length,
-                                      itemBuilder: (context, index) {
+                                      itemCount: visibleStages.length,
+                                      itemBuilder: (context, visibleIndex) {
+                                        final index =
+                                            visibleStages[visibleIndex];
                                         final rule = rules[index],
                                             stage = weapon!['stages'][index];
                                         final enabled =
@@ -451,7 +481,7 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                                                   ),
                                                 ),
                                                 Text(
-                                                  '动作 ${stage['action']} · ${stage['property_ids'].length} 个命中属性',
+                                                  '状态 ${stage['state'] ?? rule['stage']} · 动作 ${stage['action']} · ${stage['property_ids'].length} 个命中属性',
                                                   style: Theme.of(context)
                                                       .textTheme
                                                       .bodySmall,

@@ -12,8 +12,10 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     Map<String, dynamic>? saved;
+    var catalogReads = 0;
     Future<dynamic> api(Map<String, dynamic> request) async {
       if (request['operation'] == 'shop_catalog') {
+        catalogReads++;
         return {
           'items': [
             {
@@ -47,6 +49,13 @@ void main() {
     expect(saved?['price'], 88);
     expect(saved?['days'], 365);
     expect(saved?['enabled'], true);
+    expect(
+      catalogReads,
+      1,
+      reason: 'single save must not reload the entire catalog',
+    );
+    expect(find.text('253905 · 已上架'), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

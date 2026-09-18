@@ -12,6 +12,7 @@ import (
 
 func run() (any, error) {
 	root := flag.String("root", ".", "repository directory")
+	localSettings := flag.String("local-settings", "", "local debug server private settings path")
 	flag.Parse()
 	absolute, err := filepath.Abs(*root)
 	if err != nil {
@@ -28,7 +29,9 @@ func run() (any, error) {
 	if err = json.Unmarshal(input, &request); err != nil {
 		return nil, err
 	}
-	return desktop.New(absolute).Call(request)
+	admin := desktop.New(absolute)
+	admin.LocalSettings = *localSettings
+	return admin.Call(request)
 }
 func main() {
 	result, err := run()

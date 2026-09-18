@@ -1,3 +1,4 @@
+import 'reward_config.dart';
 import 'shop_config.dart';
 import 'wallet_config.dart';
 
@@ -11,26 +12,54 @@ import 'weapon_config.dart';
 typedef Api = Future<dynamic> Function(Map<String, dynamic>);
 
 class Backend {
-  Backend({this.root});
+  Backend({this.root, this.localSettings});
+  String? localSettings;
   String? root;
-  Future<dynamic> call(Map<String, dynamic> input) async {
+  void resolvePaths({
+    Directory? executableDirectory,
+    Directory? currentDirectory,
+  }) {
+    final executable =
+        executableDirectory ?? File(Platform.resolvedExecutable).parent;
+    final settings = File('${executable.path}/gm-settings.json');
+    if (root == null && settings.existsSync()) {
+      final config =
+          jsonDecode(settings.readAsStringSync()) as Map<String, dynamic>;
+      String? resolve(dynamic value) {
+        if (value is! String || value.isEmpty) return null;
+        return Directory(value).isAbsolute
+            ? value
+            : '${executable.path}/$value';
+      }
+
+      root = resolve(config['root']);
+      localSettings ??= resolve(config['local_settings']);
+    }
     if (root == null) {
-      for (final start in [
-        File(Platform.resolvedExecutable).parent,
-        Directory.current,
-      ]) {
+      for (final start in [executable, currentDirectory ?? Directory.current]) {
         var d = start;
         for (var n = 0; n < 12; n++) {
-          if (File('${d.path}/runtime-local/online-admin.json').existsSync()) {
-            root = d.path;
-            break;
+          for (final candidate in [
+            d.path,
+            '${d.path}/kungfukid-local-server',
+          ]) {
+            if (File('$candidate/runtime-local/online-admin.json')
+                .existsSync()) {
+              root = candidate;
+              break;
+            }
           }
+          if (root != null) break;
           if (d.parent.path == d.path) break;
           d = d.parent;
         }
         if (root != null) break;
       }
     }
+  }
+
+  Future<dynamic> call(Map<String, dynamic> input) async {
+    resolvePaths();
     if (root == null) throw Exception('找不到服务器目录，请勿单独移动 EXE。');
     final executable = File(Platform.resolvedExecutable).parent;
     final bundledBackend = File('${executable.path}/kungfu-desktop-admin.exe');
@@ -38,7 +67,11 @@ class Backend {
       bundledBackend.existsSync()
           ? bundledBackend.path
           : '$root/dist/item-manager/kungfu-desktop-admin.exe',
-      ['-root', root!],
+      [
+        '-root',
+        root!,
+        if (localSettings != null) ...['-local-settings', localSettings!],
+      ],
       workingDirectory: root,
     );
     final out = p.stdout.transform(utf8.decoder).join(),
@@ -58,8 +91,17 @@ void main(List<String> args) {
   final root = index >= 0 && index + 1 < args.length
       ? Directory(args[index + 1]).absolute.path
       : null;
-  runApp(ItemManager(api: Backend(root: root).call));
+  final localIndex = args.indexOf('--local-settings');
+  final localSettings = localIndex >= 0 && localIndex + 1 < args.length
+      ? args[localIndex + 1]
+      : null;
+  runApp(
+    ItemManager(
+      api: Backend(root: root, localSettings: localSettings).call,
+    ),
+  );
 }
+
 const teal = Color(0xFF087E83), ink = Color(0xFF172B3A);
 
 class ItemManager extends StatelessWidget {
@@ -68,7 +110,7 @@ class ItemManager extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
     debugShowCheckedModeBanner: false,
-    title: '功夫小子 · 道具管理器',
+    title: '功夫小子 · GM管理器',
     theme: ThemeData(
       useMaterial3: true,
       fontFamily: 'Microsoft YaHei',
@@ -95,6 +137,28 @@ class Manager extends StatefulWidget {
 }
 
 class _ManagerState extends State<Manager> {
+  String environment = 'local';
+  String get environmentLabel => environment == 'local' ? '本地测试服' : '线上服务器';
+  Api get api {
+    final target = environment;
+    return (request) => widget.api({...request, 'environment': target});
+  }
+
+  void switchEnvironment(String value) {
+    if (busy || loading || value == environment) return;
+    setState(() {
+      environment = value;
+      uid = null;
+      accounts = [];
+      inventory = [];
+      selected.clear();
+      pendingGrantId = null;
+      pendingGrantSignature = null;
+      detail = null;
+    });
+    load();
+  }
+
   List<Map<String, dynamic>> items = [], accounts = [], inventory = [];
   Map<String, dynamic>? detail;
   final selected = <String>{},
@@ -131,8 +195,8 @@ class _ManagerState extends State<Manager> {
       failure = null;
     });
     try {
-      final data = await widget.api({'operation': 'catalog'}),
-          people = maps(await widget.api({'operation': 'accounts'}));
+      final data = await api({'operation': 'catalog'}),
+          people = maps(await api({'operation': 'accounts'}));
       if (!mounted) return;
       setState(() {
         items = maps(data['items']);
@@ -142,7 +206,7 @@ class _ManagerState extends State<Manager> {
           uid = accounts.isEmpty ? null : accounts.first['uid'];
         }
         status =
-            '线上 MySQL · ${items.length} 件 / ${items.map((i) => i['kind']).toSet().length} 个细分类';
+            '$environmentLabel · ${items.length} 件 / ${items.map((i) => i['kind']).toSet().length} 个细分类';
       });
       await refreshInventory();
     } catch (e) {
@@ -156,7 +220,7 @@ class _ManagerState extends State<Manager> {
     final target = uid;
     final data = target == null
         ? <dynamic>[]
-        : await widget.api({'operation': 'inventory', 'uid': target});
+        : await api({'operation': 'inventory', 'uid': target});
     if (mounted && uid == target) setState(() => inventory = maps(data));
   }
 
@@ -204,9 +268,9 @@ class _ManagerState extends State<Manager> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('确认添加到线上背包'),
+        title: Text('确认添加到$environmentLabel背包'),
         content: Text(
-          '角色：${account['nickname']} (${account['account']})\n道具：${keys.length} 种\n武器、服装等装备各 $days 天；消耗道具各增加 $count 个。\n\n${unready > 0 ? '其中 $unready 种仅支持建档，使用效果待适配。\n\n' : ''}写入前保留线上事务快照。添加后请退出游戏并重新登录。',
+          '角色：${account['nickname']} (${account['account']})\n道具：${keys.length} 种\n武器、服装等装备各 $days 天；消耗道具各增加 $count 个。\n\n${unready > 0 ? '其中 $unready 种仅支持建档，使用效果待适配。\n\n' : ''}写入前保留事务快照。添加后请退出游戏并重新登录。',
         ),
         actions: [
           TextButton(
@@ -228,7 +292,7 @@ class _ManagerState extends State<Manager> {
     }
     setState(() => busy = true);
     try {
-      final r = await widget.api({
+      final r = await api({
         'operation': 'grant',
         'uid': target,
         'keys': keys,
@@ -250,7 +314,7 @@ class _ManagerState extends State<Manager> {
         builder: (c) => AlertDialog(
           title: const Text('背包已更新'),
           content: SelectableText(
-            '线上背包已更新，请退出游戏并重新登录查看。\n\n操作审计：\n${r['backup']}',
+            '$environmentLabel背包已更新，请退出游戏并重新登录查看。\n\n操作审计：\n${r['backup']}',
           ),
           actions: [
             TextButton(
@@ -336,8 +400,45 @@ class _ManagerState extends State<Manager> {
                   const Padding(
                     padding: EdgeInsets.fromLTRB(23, 0, 16, 27),
                     child: Text(
-                      '线上道具管理器',
+                      'GM管理器',
                       style: TextStyle(color: Color(0xFF9AB1C1)),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: DropdownButtonFormField<String>(
+                      initialValue: environment,
+                      decoration: const InputDecoration(labelText: '管理环境'),
+                      items: const [
+                        DropdownMenuItem(value: 'local', child: Text('本地测试服')),
+                        DropdownMenuItem(value: 'online', child: Text('线上服务器')),
+                      ],
+                      onChanged: busy || loading
+                          ? null
+                          : (v) {
+                              if (v != null) switchEnvironment(v);
+                            },
+                    ),
+                  ),
+                  Material(
+                    color: Colors.transparent,
+                    child: ListTile(
+                      textColor: Colors.white,
+                      iconColor: Colors.white,
+                      leading: const Icon(Icons.emoji_events),
+                      title: const Text('战斗奖励'),
+                      onTap: busy
+                          ? null
+                          : () => Navigator.push(
+                              context,
+                              MaterialPageRoute<void>(
+                                builder: (_) => RewardConfigPage(
+                                  api: api,
+                                  environmentApi: widget.api,
+                                  environment: environmentLabel,
+                                ),
+                              ),
+                            ),
                     ),
                   ),
                   Expanded(
@@ -386,7 +487,10 @@ class _ManagerState extends State<Manager> {
                           : () => Navigator.push(
                               context,
                               MaterialPageRoute<void>(
-                                builder: (_) => ShopConfigPage(api: widget.api),
+                                builder: (_) => ShopConfigPage(
+                                  api: api,
+                                  environment: environmentLabel,
+                                ),
                               ),
                             ),
                     ),
@@ -403,8 +507,10 @@ class _ManagerState extends State<Manager> {
                           : () => Navigator.push(
                               context,
                               MaterialPageRoute<void>(
-                                builder: (_) =>
-                                    WalletConfigPage(api: widget.api),
+                                builder: (_) => WalletConfigPage(
+                                  api: api,
+                                  environment: environmentLabel,
+                                ),
                               ),
                             ),
                     ),
@@ -421,16 +527,15 @@ class _ManagerState extends State<Manager> {
                           : () => Navigator.push(
                               context,
                               MaterialPageRoute<void>(
-                                builder: (_) =>
-                                    WeaponConfigPage(api: widget.api),
+                                builder: (_) => WeaponConfigPage(api: api),
                               ),
                             ),
                     ),
                   ),
-                  const Padding(
-                    padding: EdgeInsets.all(20),
+                  Padding(
+                    padding: const EdgeInsets.all(20),
                     child: Text(
-                      '线上角色 · MySQL\n写入保留事务快照',
+                      '$environmentLabel · MySQL\n武器配置仅修改本机客户端',
                       style: TextStyle(
                         color: Color(0xFF9AB1C1),
                         height: 1.8,
@@ -787,7 +892,7 @@ class _ManagerState extends State<Manager> {
                                 Text(
                                   detail!['supported']
                                       ? '已有基础背包支持，游戏实际效果以实测为准。'
-                                      : '可添加到线上背包；该类使用、开箱或活动效果尚未适配。',
+                                      : '可添加到所选环境的背包；该类使用、开箱或活动效果尚未适配。',
                                   style: const TextStyle(
                                     fontSize: 12,
                                     color: Colors.deepOrange,

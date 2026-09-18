@@ -44,7 +44,9 @@ func main() {
 			log.Fatal(err)
 		}
 		defer file.Close()
-		log.SetOutput(io.MultiWriter(os.Stdout, file))
+		// Persist first: a detached/closed Windows console can reject stdout
+		// writes. That must not prevent the diagnostic file from being written.
+		log.SetOutput(io.MultiWriter(file, os.Stdout))
 	}
 	store, err := persistence.Open(os.Getenv("KK_MYSQL_DSN"))
 	if err != nil {
@@ -105,6 +107,9 @@ func main() {
 		}
 		if err = json.Unmarshal(encoded, &config); err != nil || len(config.ConfigHash) != 64 || len(config.Pools) == 0 {
 			log.Fatal("invalid game configuration")
+		}
+		if err = store.SeedBattleRewards(config.Settlement); err != nil {
+			log.Fatal(err)
 		}
 		certificate, certErr := tunnel.Certificate(*certificateDirectory)
 		if certErr != nil {

@@ -3,6 +3,7 @@ package game
 import (
 	"bytes"
 	"fmt"
+	"kungfu.local/server/internal/persistence"
 	"kungfu.local/server/internal/protocol"
 	"log"
 	"sort"
@@ -11,17 +12,20 @@ import (
 )
 
 type Config struct {
+	Settlement SettlementRewards   `json:"settlement"`
 	ConfigHash string              `json:"config_hash"`
 	Pools      map[string][]uint32 `json:"pools"`
 	Groups     map[string][]uint32 `json:"groups"`
 }
 type Member struct {
+	BattleLevel          uint16
 	Session              *Session
 	Slot, Spawn, Team    byte
 	Ready, Loaded, Input bool
 	BattleEvents         map[uint32]battleSequence
 }
 type Room struct {
+	Reports map[uint64][]byte
 	ID      uint16
 	Owner   uint64
 	Request []byte
@@ -218,7 +222,9 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 	uid := session.UID
 	switch message.ID {
 	case 2260:
-		if channel.Phase != "lobby" || len(payload) != 3 {
+		// A lobby refresh can be sent while 3070 is still awaiting 3100.
+		// Joining must not invalidate that read-only request once it is dequeued.
+		if (channel.Phase != "lobby" && channel.Phase != "room") || len(payload) != 3 {
 			return true, protocol.ErrFrame
 		}
 		// Native 92DD40 sends page, refresh option, mode (0x88 = all).
@@ -322,7 +328,32 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		if len(payload) != 0 {
 			return true, protocol.ErrFrame
 		}
+		if room != nil && (room.Stage == "settlement" || channel.Phase == "settlement") {
+			return true, hub.returnFromSettlement(session)
+		}
 		hub.leave(session, true)
+	case 4110:
+		return true, hub.settleReport(session, payload)
+	case 4115:
+		if len(payload) != 4 {
+			return true, protocol.ErrFrame
+		}
+	case 3550:
+		if len(payload) != 12 || protocol.ReadUint64(payload, 0) != uid {
+			return true, protocol.ErrFrame
+		}
+		if room != nil && room.Members[uid] != nil {
+			state := protocol.ReadUint32(payload, 8)
+			if state == 0 && (room.Stage == "settlement" || room.Stage == "room") {
+				// Native result confirmation returns in place via 3550(0),
+				// without 3110. Clear the icon for every peer and unlock ready.
+				channel.Phase = "room"
+				room.Stage = "room"
+				hub.broadcast(room, message, 0)
+			} else if state == 3 && channel.Phase == "settlement" {
+				hub.broadcast(room, message, 0)
+			}
+		}
 	case 3230:
 		if len(payload) != 1 || payload[0] > 1 || room == nil || room.Stage != "room" {
 			return true, protocol.ErrFrame
@@ -379,6 +410,11 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		if room.Stage != "room" {
 			return true, nil
 		}
+		for _, peer := range room.Members {
+			if peer.Session.game().Phase != "room" {
+				return true, nil
+			}
+		}
 		member := room.Members[uid]
 		if time.Now().After(session.P2PUntil) {
 			return true, protocol.ErrFrame
@@ -417,11 +453,19 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 					return true, nil
 				}
 			}
+			for uid, member := range room.Members {
+				account, err := hub.Store.Snapshot(uid)
+				if err != nil {
+					return true, err
+				}
+				member.BattleLevel = persistence.ProfileLevel(account.Profile)
+			}
 			serial, err := hub.Store.NextBattle()
 			if err != nil {
 				return true, err
 			}
 			room.Serial = serial
+			room.Reports = nil
 			room.Stage = "loading"
 			for _, member := range room.Members {
 				member.Session.ConsumeIntents = nil

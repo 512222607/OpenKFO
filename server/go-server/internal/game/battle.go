@@ -38,6 +38,8 @@ func (hub *Hub) battleMessage(session *Session, channel *Channel, message protoc
 		length, contextOffset, floats = 94, 86, []int{67, 72, 76, 80}
 	case 8122:
 		length = 51
+	case 8286:
+		length = 55
 	case 8126:
 		// 82B8D0 resolves source at 47 and target at 55 before applying
 		// the skill's effect list. There is no room trailer in this packet.

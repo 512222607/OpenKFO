@@ -29,6 +29,7 @@ import (
 )
 
 type Config struct {
+	TraceProtocol     bool   `json:"trace_protocol"`
 	LoginPort         int    `json:"login_port"`
 	SDKPort           int    `json:"sdk_port"`
 	GamePort          int    `json:"game_port"`
@@ -48,6 +49,9 @@ type Bridge struct {
 	udp    *net.UDPConn
 }
 type remoteSession struct {
+	account     string
+	uid         uint64
+	traces      map[uint32]*packetTrace
 	identity    Identity
 	connection  net.Conn
 	reader      *bufio.Reader
@@ -236,7 +240,7 @@ func (bridge *Bridge) connect(account, password string, identity Identity) (*rem
 		raw.Close()
 		return nil, err
 	}
-	session := &remoteSession{identity: identity, connection: connection, reader: bufio.NewReaderSize(connection, 65536), encoder: json.NewEncoder(connection), channels: map[uint32]net.Conn{}, udpPorts: map[int]bool{}, done: make(chan struct{})}
+	session := &remoteSession{account: account, traces: map[uint32]*packetTrace{}, identity: identity, connection: connection, reader: bufio.NewReaderSize(connection, 65536), encoder: json.NewEncoder(connection), channels: map[uint32]net.Conn{}, udpPorts: map[int]bool{}, done: make(chan struct{})}
 	if err = session.send(tunnel.Frame{Op: "auth", Account: account, Password: password, ConfigHash: bridge.Config.ConfigHash, Port: uint16(bridge.Config.GamePort)}); err != nil {
 		session.close()
 		return nil, err
@@ -251,6 +255,7 @@ func (bridge *Bridge) connect(account, password string, identity Identity) (*rem
 		session.close()
 		return nil, fmt.Errorf("login rejected: %s", response.Error)
 	}
+	session.uid = response.UID
 	connection.SetDeadline(time.Time{})
 	return session, nil
 }
@@ -373,11 +378,17 @@ func (bridge *Bridge) forward(connection net.Conn, kind string) {
 	session.nextChannel++
 	channelID := session.nextChannel
 	session.channels[channelID] = connection
+	var upstream *packetTrace
+	if bridge.Config.TraceProtocol && kind == "game" {
+		upstream = &packetTrace{account: session.account, uid: session.uid, channel: channelID}
+		session.traces[channelID] = &packetTrace{account: session.account, uid: session.uid, channel: channelID}
+	}
 	session.mutex.Unlock()
 	log.Printf("native channel opened kind=%s channel=%d", kind, channelID)
 	defer func() {
 		session.mutex.Lock()
 		delete(session.channels, channelID)
+		delete(session.traces, channelID)
 		session.mutex.Unlock()
 		session.send(tunnel.Frame{Op: "close", Channel: channelID})
 	}()
@@ -387,13 +398,24 @@ func (bridge *Bridge) forward(connection net.Conn, kind string) {
 	buffer := make([]byte, 32768)
 	for {
 		count, err := connection.Read(buffer)
+		readAt := time.Now()
 		if count > 0 {
-			if session.send(tunnel.Frame{Op: "data", Channel: channelID, Data: buffer[:count]}) != nil {
+			packets := upstream.decode(buffer[:count])
+			upstream.record("native_read", readAt, packets, nil)
+			sendErr := session.send(tunnel.Frame{Op: "data", Channel: channelID, Data: buffer[:count]})
+			event := "server_write_complete"
+			if sendErr != nil {
+				event = "server_write_failed"
+			}
+			upstream.record(event, time.Now(), packets, sendErr)
+			if sendErr != nil {
+				log.Printf("bridge_server_write_failed account=%q uid=%d channel=%d error=%v", session.account, session.uid, channelID, sendErr)
 				session.close()
 				return
 			}
 		}
 		if err != nil {
+			log.Printf("native_read_closed account=%q uid=%d channel=%d error=%v", session.account, session.uid, channelID, err)
 			return
 		}
 	}
@@ -403,7 +425,9 @@ func (bridge *Bridge) receive(session *remoteSession) {
 	for {
 		session.connection.SetReadDeadline(time.Now().Add(75 * time.Second))
 		encoded, err := tunnel.ReadFrame(session.reader, 2*1024*1024)
+		readAt := time.Now()
 		if err != nil {
+			log.Printf("bridge_server_read_closed account=%q uid=%d error=%v", session.account, session.uid, err)
 			return
 		}
 		var frame tunnel.Frame
@@ -414,10 +438,24 @@ func (bridge *Bridge) receive(session *remoteSession) {
 		case "data":
 			session.mutex.Lock()
 			connection := session.channels[frame.Channel]
+			trace := session.traces[frame.Channel]
 			session.mutex.Unlock()
+			packets := trace.decode(frame.Data)
+			trace.record("server_read", readAt, packets, nil)
 			if connection != nil {
 				connection.SetWriteDeadline(time.Now().Add(5 * time.Second))
-				if _, err = connection.Write(frame.Data); err != nil {
+				var written int
+				written, err = connection.Write(frame.Data)
+				if err == nil && written != len(frame.Data) {
+					err = io.ErrShortWrite
+				}
+				event := "native_write_complete"
+				if err != nil {
+					event = "native_write_failed"
+				}
+				trace.record(event, time.Now(), packets, err)
+				if err != nil {
+					log.Printf("native_write_failed account=%q uid=%d channel=%d bytes=%d error=%v", session.account, session.uid, frame.Channel, written, err)
 					return
 				}
 			}

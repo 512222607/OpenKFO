@@ -7,7 +7,7 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $dist = Join-Path $repoRoot 'dist'
 $components = Join-Path $dist 'launcher-components'
-$manager = Join-Path $dist 'item-manager'
+$manager = Join-Path $dist 'GM管理器'
 New-Item -ItemType Directory -Force $components, $manager | Out-Null
 Push-Location $repoRoot
 try {
@@ -15,7 +15,10 @@ try {
     try {
         & $Go build -o "$components/OnlineBridge.exe" ./cmd/bridge
         if ($LASTEXITCODE) { throw 'Go bridge build failed' }
-        & $Go build -o "$manager/kungfu-desktop-admin.exe" ./cmd/desktop-admin
+        New-Item -ItemType Directory -Force "$dist/server" | Out-Null
+        & $Go build -o "$dist/server/latency-probe.exe" ./cmd/latency
+        if ($LASTEXITCODE) { throw 'Transport probe build failed' }
+        & $Go build -ldflags "-H windowsgui" -o "$manager/kungfu-desktop-admin.exe" ./cmd/desktop-admin
         if ($LASTEXITCODE) { throw 'Go administration build failed' }
     } finally { Pop-Location }
     & '.\client\client-adapter\build-login-skin.cmd'
@@ -36,6 +39,7 @@ try {
         if ($LASTEXITCODE) { throw 'Flutter build failed' }
     } finally { Pop-Location }
     Copy-Item -Path "$stage/build/windows/x64/runner/Release/*" -Destination $manager -Recurse -Force
+    Move-Item -LiteralPath "$manager/kungfu_item_manager.exe" -Destination "$manager/GM管理器.exe" -Force
     Set-Content -LiteralPath "$dist/flutter-build-path.txt" -Value $stage -Encoding utf8
     Write-Host "Built: $dist"
 } finally { Pop-Location }

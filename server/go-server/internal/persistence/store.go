@@ -49,6 +49,8 @@ type Export struct {
 }
 
 var schema = []string{
+	`CREATE TABLE IF NOT EXISTS battle_reward_rules(id TINYINT UNSIGNED PRIMARY KEY,revision BIGINT UNSIGNED NOT NULL,rules MEDIUMBLOB NOT NULL) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS battle_settlements(serial INT UNSIGNED PRIMARY KEY,reports MEDIUMBLOB NOT NULL,result MEDIUMBLOB NOT NULL,created TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB`,
 	`CREATE TABLE IF NOT EXISTS accounts(
         uid BIGINT UNSIGNED PRIMARY KEY ,
         account VARCHAR(20) CHARACTER SET ascii COLLATE ascii_bin NOT NULL UNIQUE ,
@@ -120,7 +122,13 @@ var schema = []string{
 	) ENGINE=InnoDB`,
 }
 
-func Open(dsn string) (*Store, error) {
+func Open(dsn string) (*Store, error) { return open(dsn, true) }
+
+// A running local server already migrated its database. GM requests must not
+// repeat every DDL statement across the SSH database tunnel.
+func OpenExisting(dsn string) (*Store, error) { return open(dsn, false) }
+
+func open(dsn string, initialize bool) (*Store, error) {
 	database, err := sql.Open("mysql", dsn)
 	if err != nil {
 		return nil, err
@@ -131,7 +139,7 @@ func Open(dsn string) (*Store, error) {
 	store := &Store{database}
 	contextWithTimeout, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	if err = database.PingContext(contextWithTimeout); err == nil {
+	if err = database.PingContext(contextWithTimeout); err == nil && initialize {
 		for _, statement := range schema {
 			if _, err = database.ExecContext(contextWithTimeout, statement); err != nil {
 				break

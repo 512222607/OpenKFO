@@ -1,6 +1,6 @@
 # OpenKFO / KFO Server Emulator
 
-面向学习与技术研究的《功夫小子》兼容服务器模拟器项目，研究网络协议、服务端架构、数据持久化及客户端互操作，包含服务端、客户端配套工具和道具管理器源码。
+面向学习与技术研究的《功夫小子》兼容服务器模拟器项目，研究网络协议、服务端架构、数据持久化及客户端互操作，包含服务端、客户端配套工具和GM管理器源码。
 
 > **非商业 · 学习研究 · 非官方项目**
 >
@@ -12,7 +12,7 @@ OpenKFO 基于 [liuyangyi0/kungfukid-local-server](https://github.com/liuyangyi0
 
 特别感谢 **QQ：512222607**。
 
-本仓库在原项目基础上进行了目录整理、Go 服务端扩展、登录器与道具管理器集成，以及构建打包流程调整。原项目已有实现的贡献归原作者，OpenKFO 的后续修改不代表原作者的观点或背书。
+本仓库在原项目基础上进行了目录整理、Go 服务端扩展、登录器与GM管理器集成，以及构建打包流程调整。原项目已有实现的贡献归原作者，OpenKFO 的后续修改不代表原作者的观点或背书。
 
 ## 项目定位与使用边界
 
@@ -32,13 +32,13 @@ OpenKFO 基于 [liuyangyi0/kungfukid-local-server](https://github.com/liuyangyi0
 
 ## 当前版本与目录
 
-**当前运行链路不依赖 Python**：Go + MySQL 服务端、C# 在线登录器（内嵌 Go 桥接与 C++ 登录界面）、Flutter 道具管理器（调用 Go 管理后端）。
+**当前运行链路不依赖 Python**：Go + MySQL 服务端、C# 在线登录器（内嵌 Go 桥接与 C++ 登录界面）、Flutter GM管理器（调用 Go 管理后端）。
 
 - `server/go-server`：当前 Go 服务端、协议、数据库访问、客户端桥接和管理后端，共用一个 Go 模块。
-- `toosl/item-manager`：当前 Flutter Windows 道具管理器。
+- `toosl/item-manager`：当前 Flutter Windows GM管理器。
 - `client/launcher-online`：当前 C# 在线登录器。
 - `client/client-adapter`：C++ 登录界面与客户端适配代码。
-- `toosl/Start-ItemManager.cmd`：道具管理器启动入口。
+- `dist/GM管理器/GM管理器.exe`：构建后直接双击的 GM管理器入口。
 - `docs`：协议与开发参考，其中部分文档描述旧本地实现。
 
 `toosl` 为本仓库约定目录名。`server/kk_local`、`server/tests`、`requirements.txt`、`client/launcher`、旧本地启动/账号脚本以及 Go 模块中的 Python 迁移工具仅保留作历史参考；**使用当前版本无需安装 Python、创建 `.venv` 或启动旧 Python 服务**。旧迁移工具不属于下述运行流程。
@@ -52,8 +52,8 @@ OpenKFO 基于 [liuyangyi0/kungfukid-local-server](https://github.com/liuyangyi0
 | 构建 Go 程序 | Go 1.26.0 或满足 `server/go-server/go.mod` 的工具链 |
 | 运行服务端 | MySQL 8、Go 编译产物、服务配置和 TLS 证书目录 |
 | 构建 Windows 登录器 | Windows、.NET 8 SDK、Visual Studio 2022 Build Tools 的 x86 C++ 工具链 |
-| 构建道具管理器 | Windows、支持 Dart `^3.13.2` 的 Flutter SDK、Windows 桌面构建工具链 |
-| 使用远程道具管理器 | Windows OpenSSH 客户端、SSH 管理权限及已部署的 Go 管理后端 |
+| 构建GM管理器 | Windows、支持 Dart `^3.13.2` 的 Flutter SDK、Windows 桌面构建工具链 |
+| 使用远程GM管理器 | Windows OpenSSH 客户端、SSH 管理权限及已部署的 Go 管理后端 |
 
 以下 PowerShell 命令均从仓库根目录执行，各步骤结束后回到根目录。只运行已构建的程序无需安装 Go、Flutter 或 Python 开发环境。
 
@@ -107,7 +107,7 @@ Go 未加入 PATH 时可传入 `-Go "Go 安装目录/bin/go.exe"`。脚本构建
 dist/
   launcher/                 # 中文名登录器 EXE
   launcher-components/      # OnlineBridge.exe、LoginSkin.dll、LoginSkinHost.exe
-  item-manager/             # 道具管理器完整目录，含 Go 后端、DLL 和 data
+  item-manager/             # GM管理器完整目录，含 Go 后端、DLL 和 data
 ```
 
 登录组件源码均在仓库内：Go 桥接为 `server/go-server/cmd/bridge`，C++ 登录界面为 `client/client-adapter/src/kk_login_skin*.cpp`；构建时嵌入 C# 登录器。运行时目录统一使用 `launcher-components/window-N` 和 `launcher-components/login-skin`，界面名称保留中文。
@@ -118,7 +118,7 @@ C++ 构建脚本当前使用 VS 2022 Build Tools 的默认安装路径，安装�
 
 | 字段 | 含义 |
 | --- | --- |
-| `url` | `tls://服务器地址:19091`；已有 WSS 部署也可填写对应 WSS 地址 |
+| `url` | `wss://jrnygtxy.top/kk/tunnel`；橙云部署见 [Cloudflare Tunnel](docs/CloudflareTunnel.md) |
 | `client_directory` | 已准备的客户端目录，例如 `runtime-local/client` |
 | `client_sha256` | 客户端 `gfld.dat` 的 SHA-256，小写十六进制 |
 | `config_hash` | 客户端 `Data/config.spf2` 的 SHA-256，与服务端配置一致 |
@@ -134,9 +134,9 @@ C++ 构建脚本当前使用 VS 2022 Build Tools 的默认安装路径，安装�
 
 `--root` 指向包含 `bridge.json` 的目录。登录器会准备各窗口的桥接组件；游戏登录使用 Go 服务端数据库中的测试账号。
 
-## 3. 构建并启动道具管理器
+## 3. 构建并启动GM管理器
 
-运行 `toosl/Build-Dist.ps1` 后，道具管理器位于 **`dist/item-manager/kungfu_item_manager.exe`**。同目录包含 `kungfu-desktop-admin.exe`、Flutter DLL 和 `data`，发布时复制整个目录。
+运行 `toosl/Build-Dist.ps1` 后，GM管理器位于 **`dist/GM管理器/GM管理器.exe`**。同目录包含 `kungfu-desktop-admin.exe`、Flutter DLL 和 `data`，发布时复制整个目录。
 
 在 `runtime-local/online-admin.json` 中填写自己的 SSH 配置，例如：
 
@@ -149,7 +149,9 @@ C++ 构建脚本当前使用 VS 2022 Build Tools 的默认安装路径，安装�
 }
 ```
 
-当前 Go 管理后端通过 SSH 调用 Linux 服务端，要求：
+GM管理器左侧选择本地测试服或线上服务器。道具、商城、钱包和战斗奖励统一使用所选环境；武器配置仅修改本机客户端。战斗奖励支持胜/负/平局的经验、金币配置，保存后由新版服务器下一次结算读取，无需重启。规则存储于对应数据库，详见 `toosl/item-manager/README.md`。
+
+本地模式先启动本地后台，读取 `dist/local-server/settings.private.json`；跨目录可传 `--local-settings <配置文件>`，仅允许独立测试库。线上模式的 Go 管理后端通过 SSH 调用 Linux 服务端，要求：
 
 - 服务端管理程序位于 `/opt/kungfu-go/kungfu-admin`。
 - `/etc/kungfu-go/game.env` 保存一行 `KK_MYSQL_DSN=实际连接信息`，由服务器端读取。
@@ -159,7 +161,7 @@ C++ 构建脚本当前使用 VS 2022 Build Tools 的默认安装路径，安装�
 管理器不会回退到旧 Python 服务或本地 SQLite。上述配置准备好后，在根目录运行：
 
 ```powershell
-.\toosl\Start-ItemManager.cmd --root "包含 runtime-local 的目录"
+.\dist\GM管理器\GM管理器.exe --root "包含 runtime-local 的目录"
 ```
 
 ## 4. 安装到游戏目录
@@ -180,8 +182,7 @@ C++ 构建脚本当前使用 VS 2022 Build Tools 的默认安装路径，安装�
   功夫小子登录器.exe
   bridge.json
   launcher-components/
-  item-manager/             # 完整道具管理器发布包
-  打开道具管理器.cmd
+  GM管理器/                # 完整发布包，直接双击里面的 GM管理器.exe
   package-backups/          # 替换前的旧发布包
 ```
 
@@ -212,3 +213,6 @@ EXE按自身所在目录读取 `settings.private.json`（dsn、ssh_config、data
 日志自动写入 `logs/protocol-年月日-时分秒.log`，并打印到控制台。内容包括时间、账号、角色名、UID、方向、通道、房间、状态、协议号、长度、完整hex和可解码GBK文本。TCP按完整协议包重组，UDP按完整数据报记录，广播标注各接收者。`S->C queued`只表示进入发送队列；认证凭据脱敏，认证前身份尚未确认。
 
 命令行方式可显式使用 `-trace-protocol -protocol-log <文件>`。配置、数据库凭据、密钥和原始客户端资源均不编译进EXE或提交仓库，交付时保留对应配置文件。
+
+
+桥接端可在 `bridge.json` 设置 `trace_protocol: true`，将游戏通道的 `native_read`、`server_write_complete`、`server_read`、`native_write_complete` 事件追加到各窗口 `online-client.log`，用于比较客户端请求与回包写入时序。包含账号、UID、通道、协议号、完整包体hex及微秒以上时间；写入失败单独记录。socket写入完成不代表客户端handler执行完毕，SDK认证凭据不按原始数据记录。修改后需重启对应游戏窗口，使新桥接与配置生效。
