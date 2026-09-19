@@ -132,6 +132,7 @@ func TestTitleSettingsLocalDatabase(t *testing.T) {
 	exec("UPDATE item_definitions SET record=?", item)
 	catalog := make([]byte, 108)
 	protocol.WriteUint32(catalog, 0, 7)
+	protocol.WriteUint32(catalog, 9, 7) // Native 85C5C0 directory key.
 	catalog[4] = protocol.ItemWeapon
 	protocol.WriteUint32(catalog, 5, 999999)
 	exec("INSERT INTO offers VALUES(7,?,TRUE)", catalog)
