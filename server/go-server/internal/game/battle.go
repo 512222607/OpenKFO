@@ -83,8 +83,21 @@ func (hub *Hub) battleMessage(session *Session, channel *Channel, message protoc
 		}
 		return nil
 	}
-	if len(payload) != length || protocol.ReadUint64(payload, 4) != session.UID {
+	if len(payload) != length {
 		return fmt.Errorf("battle envelope id=%d uid=%d bytes=%d", id, session.UID, len(payload))
+	}
+	sender := protocol.ReadUint64(payload, 4)
+	if id == protocol.BattleEventMovement {
+		// 82B230 resolves the moving entity from +4, not +39. The room
+		// controller can send movement for a registered monster only.
+		if actor, known := room.PVEActors[sender]; room.Type() == protocol.StageAssault && known && !actor.active {
+			return nil
+		}
+		if !room.controlsBattleActor(session, sender) {
+			return fmt.Errorf("battle movement ownership uid=%d actor=%d", session.UID, sender)
+		}
+	} else if sender != session.UID {
+		return fmt.Errorf("battle sender id=%d uid=%d actor=%d", id, session.UID, sender)
 	}
 	if id == 8155 {
 		var slots [8]uint64
@@ -162,10 +175,17 @@ func (hub *Hub) battleMessage(session *Session, channel *Channel, message protoc
 	// A controller can report the same event kind for several PVE entities.
 	// Track targets independently so reordering one entity cannot drop another.
 	key := battleEventKey{Kind: id}
-	if id != protocol.BattleEventMovement && id != protocol.BattleEventScoreboard {
+	if id == protocol.BattleEventMovement {
+		key.Actor = sender
+	} else if id != protocol.BattleEventScoreboard {
 		key.Actor = protocol.ReadUint64(payload, actorOffset)
 	}
 	sequence := protocol.ReadUint32(payload, 19)
+	if id == protocol.BattleEventMovement {
+		// 7D1520 uses its motion counter at +15 (7D0EF0/7D0EE0),
+		// not A3FBB0's event counter at +19. These domains cannot be compared.
+		sequence = protocol.ReadUint32(payload, 15)
+	}
 	if member.BattleEvents == nil {
 		member.BattleEvents = make(map[battleEventKey]battleSequence)
 	}

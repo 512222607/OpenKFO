@@ -191,3 +191,55 @@ func TestPVEReliableControllerLifecycle(t *testing.T) {
 	}
 	roomOutputs(t, peer)
 }
+
+func TestPVEMovementUsesNativeHeaderActor(t *testing.T) {
+	h, owner, peer, outsider := combatFixture()
+	r := owner.Room
+	r.Request[46] = byte(protocol.StageAssault)
+	r.PVEActors = map[uint64]pveActor{42: {active: true, sequence: 1}, 43: {active: true, sequence: 1}}
+	movement := func(actor uint64, seq uint32) protocol.Message {
+		// +39 is deliberately not an actor. Native 82B230 reads +4.
+		m := combatPacket(protocol.BattleEventMovement, 108, actor, 999999, 0)
+		protocol.WriteUint32(m.Payload, 15, seq)
+		protocol.WriteUint32(m.Payload, 19, 0) // Not the motion counter.
+		return m
+	}
+	for _, m := range []protocol.Message{movement(42, 10), movement(43, 9), movement(owner.UID, 8)} {
+		if err := h.battleMessage(owner, owner.game(), m); err != nil {
+			t.Fatal(err)
+		}
+		if got := roomOutputs(t, peer, 8071)[0]; !bytes.Equal(got.Payload, m.Payload) {
+			t.Fatal("native identity rewritten")
+		}
+	}
+	roomOutputs(t, outsider)
+	if err := h.battleMessage(owner, owner.game(), movement(42, 9)); err != nil {
+		t.Fatal(err)
+	}
+	roomOutputs(t, peer) // +19 is identical, but the +15 motion counter is older.
+	for _, actor := range []uint64{peer.UID, outsider.UID, 44} {
+		if h.battleMessage(owner, owner.game(), movement(actor, 11)) == nil {
+			t.Fatal("uncontrolled movement", actor)
+		}
+	}
+	if h.battleMessage(peer, peer.game(), movement(42, 11)) == nil {
+		t.Fatal("non-owner moved monster")
+	}
+	roomOutputs(t, owner)
+	roomOutputs(t, peer)
+	r.PVEActors[42] = pveActor{active: false, sequence: 12}
+	if err := h.battleMessage(owner, owner.game(), movement(42, 13)); err != nil {
+		t.Fatal(err)
+	}
+	roomOutputs(t, peer)
+	create := combatPacket(protocol.BattleEventPVEActorCreate, 67, owner.UID, 42, 0)
+	protocol.WriteUint32(create.Payload, 19, 20)
+	if err := h.battleMessage(owner, owner.game(), create); err != nil {
+		t.Fatal(err)
+	}
+	roomOutputs(t, peer, 8071)
+	if err := h.battleMessage(owner, owner.game(), movement(42, 1)); err != nil {
+		t.Fatal(err)
+	}
+	roomOutputs(t, peer, 8071)
+}

@@ -73,6 +73,13 @@ func (h *Hub) pveActorMessage(s *Session, message protocol.Message) error {
 		r.PVEActors = make(map[uint64]pveActor)
 	}
 	r.PVEActors[actor] = pveActor{sequence: sequence, active: create}
+	for _, member := range r.Members {
+		for key := range member.BattleEvents {
+			if key.Actor == actor {
+				delete(member.BattleEvents, key)
+			}
+		}
+	}
 	delete(r.Reliable, reliableActor{actor, 9000})
 	delete(r.Reliable, reliableActor{actor, 9500})
 	h.broadcast(r, message, s.UID)
