@@ -89,6 +89,7 @@ func TestTutorialBundleLocalDatabase(t *testing.T) {
 	// then fail while building 1550, leaving no usable selection for the client.
 	badCatalog := make([]byte, 108)
 	protocol.WriteUint32(badCatalog, 0, 1)
+	protocol.WriteUint32(badCatalog, 9, 1)
 	badCatalog[4] = protocol.ItemWeapon
 	protocol.WriteUint32(badCatalog, 5, 999999)
 	exec("INSERT INTO offers VALUES(1,?,TRUE)", badCatalog)
@@ -109,6 +110,25 @@ func TestTutorialBundleLocalDatabase(t *testing.T) {
 	}
 	if err = db.QueryRow("SELECT profile,gold,tickets FROM accounts WHERE uid=1").Scan(&before, &gold, &tickets); err != nil || !bytes.Equal(before, profile) || gold != 10 || tickets != 20 {
 		t.Fatal("unusable selector changed progress or balances", err)
+	}
+	exec("DELETE FROM offers")
+	// The native directory indexes +9, even when +0 and the SQL key differ.
+	// An unrelated shop entry can otherwise occupy the reward's lookup key;
+	// 1550 appends and will not replace that first entry on the client.
+	protocol.WriteUint32(badCatalog, 0, 99)
+	exec("INSERT INTO offers VALUES(99,?,TRUE)", badCatalog)
+	if _, err = store.RewardManager().CompleteTutorial(1, ""); err == nil {
+		t.Fatal("native +9 collision consumed tutorial completion")
+	}
+	var collisionReceipts int
+	if err = db.QueryRow("SELECT COUNT(*) FROM tutorial_rewards").Scan(&collisionReceipts); err != nil || collisionReceipts != 0 {
+		t.Fatal("native directory conflict persisted completion", err)
+	}
+	protocol.WriteUint32(badCatalog, 5, 250001)
+	exec("UPDATE offers SET record=? WHERE catalog_key=99", badCatalog)
+	nativeCatalog, err := store.RewardManager().WeaponChoiceCatalog([]uint32{1})
+	if err != nil || len(nativeCatalog) != 108 || protocol.ReadUint32(nativeCatalog, 9) != 1 {
+		t.Fatal("valid native +9 entry was not reused", err)
 	}
 	exec("DELETE FROM offers")
 	hash := strings.Repeat("a", 64)

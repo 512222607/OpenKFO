@@ -67,8 +67,9 @@ func weaponRewardCatalog(tx *sql.Tx, choices []uint32) (catalog []byte, err erro
 	if len(choices) == 0 {
 		return nil, ErrDenied
 	}
-	// 1550 is a complete catalogue. Preserve normal shop entries while adding
-	// display-only reward definitions; this does not create purchasable offers.
+	// Native A27F60/85C5C0 appends 108-byte entries indexed by DWORD +9,
+	// not +0. Keep ordinary entries and validate the same index the selector
+	// uses before adding display-only definitions (never purchasable offers).
 	rows, err := tx.Query("SELECT record FROM offers WHERE enabled=TRUE ORDER BY catalog_key LIMIT 4000")
 	if err != nil {
 		return nil, err
@@ -84,7 +85,10 @@ func weaponRewardCatalog(tx *sql.Tx, choices []uint32) (catalog []byte, err erro
 			err = ErrDenied
 			break
 		}
-		key := protocol.ReadUint32(record, 0)
+		key := protocol.ReadUint32(record, 9)
+		if _, ok := records[key]; ok {
+			continue // Native keeps the first entry; later duplicates cannot repair it.
+		}
 		records[key] = record
 		order = append(order, key)
 	}

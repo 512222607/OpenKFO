@@ -26,3 +26,11 @@
 装备、商城入口见 [session.go](../server/go-server/internal/game/session.go)；事务与商品参数见 [store.go](../server/go-server/internal/persistence/store.go)；消耗品入口见 [consumption.go](../server/go-server/internal/game/consumption.go)。
 
 表中购买169B的全部业务字段尚未逐项展开，当前只记录长度、事务入口与应答；不能把未解出的参数标为已确认。房间准备状态下装备操作被忽略，换装后的同房3090同步见 [RoomProtocol.md](RoomProtocol.md)。
+
+## 新手奖励目录索引修正（2026-09-20）
+
+当前客户端 `A27F60` 接收1550后逐条调用 `85C5C0`，以108字节记录的 DWORD +9 建立目录；重复键保留第一条，不覆盖。4125的候选键通过 `85BA40` 查询该目录。证据见 [tutorial-reward-catalog.asm](nixiang/tutorial-reward-catalog.asm)。
+
+服务端奖励目录改用 +9 匹配候选，检查客户端实际保留的首条记录，避免错误地按 +0 追加一个客户端不会采用的奖励条目。冲突在完成事务提交前拒绝，不消耗新手完成记录。已覆盖 +0/+9 不同的合法目录与冲突目录测试。
+
+完成链仍为1550目录 → 4125候选 → 玩家4126选择 → 2160入包。无候选的4125仅用于同步称号，仍可能显示空面板；尚未确认独立的无弹窗称号刷新协议，不把这一边界宣称已经修复。GM配置中的武器才是选择候选，不凭空补发旧记录奖励。

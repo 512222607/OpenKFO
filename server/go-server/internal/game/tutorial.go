@@ -3,6 +3,7 @@ package game
 import (
 	"bytes"
 	"kungfu.local/server/internal/protocol"
+	"log"
 )
 
 // Native 8A0F00/921430 creates this private introduction room before P2P
@@ -50,6 +51,7 @@ func (h *Hub) completeTutorial(s *Session, ch *Channel, payload []byte) error {
 	if err != nil {
 		return err
 	}
+	log.Printf("tutorial_reward uid=%d replay=%t choices=%v automatic_items=%d gold=%d tickets=%d", s.UID, result.Replay, result.Choices, len(result.Items), result.Gold, result.Tickets)
 	// Synchronize BEFORE leaving: otherwise 924010 sees the old title and
 	// immediately sends another 3010 despite the committed completion receipt.
 	// Use the catalogue validated by the completion transaction. A second DB
@@ -81,6 +83,8 @@ func (h *Hub) completeTutorial(s *Session, ch *Channel, payload []byte) error {
 	}
 	if announced {
 		s.sendGame(notice("新手引导已完成，请选择一件武器并确认领取；其他奖励已发放。"))
+	} else if len(result.Items) == 0 && !result.Replay {
+		s.sendGame(notice("新手引导已完成，本次没有可选武器奖励；金币、点券已结算。"))
 	} else {
 		s.sendGame(notice("新手引导已完成，已按配置发放奖励，请查看背包和余额。"))
 	}
