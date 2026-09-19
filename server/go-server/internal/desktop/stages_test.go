@@ -39,6 +39,11 @@ func TestStageCatalogueClientArchive(t *testing.T) {
 		}
 	}
 	t.Logf("read %d native map selections; archive unchanged", len(maps))
+	for _, row := range maps {
+		if row.MapID == 9170 && (row.Script != "script/pve/act_zombiedefend_normal.lua" || len(row.ScriptHash) != 64) {
+			t.Fatalf("native script binding lost: %+v", row)
+		}
+	}
 	requirements, _, err := ReadStageRequirements(path)
 	if err != nil {
 		t.Fatal(err)

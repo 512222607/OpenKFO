@@ -7,6 +7,8 @@ import (
 )
 
 type StageMap struct {
+	Script            string    `json:"script,omitempty"`
+	ScriptHash        string    `json:"script_hash,omitempty"`
 	Logic             uint32    `json:"logic"`
 	Group             uint32    `json:"group"`
 	Difficulty        uint32    `json:"difficulty"`
@@ -45,6 +47,9 @@ func ReadStageCatalogue(path string) ([]StageRequirement, []StageMap, string, er
 	}
 	pve, err := stageMaps(pveRoot)
 	if err != nil {
+		return nil, nil, "", err
+	}
+	if err := a.attachStageScripts(pve); err != nil {
 		return nil, nil, "", err
 	}
 	known := map[uint32]bool{}
@@ -112,7 +117,14 @@ func ReadStageMaps(path string) ([]StageMap, error) {
 	if err != nil {
 		return nil, err
 	}
-	return stageMaps(root)
+	maps, err := stageMaps(root)
+	if err != nil {
+		return nil, err
+	}
+	if err := a.attachStageScripts(maps); err != nil {
+		return nil, err
+	}
+	return maps, nil
 }
 
 func stageMaps(root *xmlNode) ([]StageMap, error) {
