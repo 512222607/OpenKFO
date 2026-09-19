@@ -39,6 +39,7 @@ func AdvanceLevel(level uint16, experience uint64, rules RewardRules) (uint16, u
 }
 
 type BattleReward struct {
+	StageMapID     uint32   `json:"stage_map_id,omitempty"`
 	TaskClientHash string   `json:"-"` // Server archive identity, never client supplied.
 	BattleMode     *byte    `json:"battle_mode,omitempty"`
 	HonourPeriod   uint32   `json:"honour_period,omitempty"`
@@ -75,7 +76,7 @@ const (
 // SettleStage shares the room transaction and progression/item managers, but
 // never awards competitive task counters, random PvP drops, or honour. The
 // caller must validate native reports and the server's wave state beforehand.
-func (m *BattleManager) SettleStage(serial uint32, reports []byte, rewards []BattleReward, growth RewardRules) ([]BattleReward, error) {
+func (m *BattleManager) SettleStage(serial uint32, mapID uint32, reports []byte, rewards []BattleReward, growth RewardRules) ([]BattleReward, error) {
 	rewards = append([]BattleReward(nil), rewards...)
 	for i := range rewards {
 		r := &rewards[i]
@@ -91,6 +92,7 @@ func (m *BattleManager) SettleStage(serial uint32, reports []byte, rewards []Bat
 		mode := byte(protocol.StageAssault)
 		r.BattleMode = &mode
 		r.TaskClientHash = ""
+		r.StageMapID = mapID
 	}
 	return m.settleBattle(serial, reports, rewards, true, growth)
 }
@@ -137,6 +139,9 @@ func (m *BattleManager) settleBattle(serial uint32, reports []byte, rewards []Ba
 			if stage && r.UID != rewards[i].UID {
 				return nil, ErrDenied
 			}
+			if stage && r.StageMapID != rewards[i].StageMapID {
+				return nil, ErrDenied
+			}
 		}
 		return saved, tx.Commit()
 	}
@@ -157,6 +162,13 @@ func (m *BattleManager) settleBattle(serial uint32, reports []byte, rewards []Ba
 	}
 	for i := range rewards {
 		r := &rewards[i]
+		if stage {
+			award, ok := growth[0].StageReward(r.StageMapID, r.Outcome)
+			if !ok {
+				return nil, ErrDenied
+			}
+			r.Gold, r.Experience = award.Gold, award.Experience
+		}
 		var gold uint64
 		if err = tx.QueryRow("SELECT profile,gold FROM accounts WHERE uid=? FOR UPDATE", r.UID).Scan(&r.Profile, &gold); err != nil {
 			return nil, err
@@ -178,6 +190,20 @@ func (m *BattleManager) settleBattle(serial uint32, reports []byte, rewards []Ba
 			return nil, ErrDenied
 		}
 		r.Items = nil
+		if stage {
+			award, ok := growth[0].StageReward(r.StageMapID, r.Outcome)
+			if !ok {
+				return nil, ErrDenied
+			}
+			bundle := award.RewardBundle
+			bundle.Gold = 0 // Gold and XP go through the shared progression below.
+			var stageItems [][]byte
+			_, stageItems, err = (RewardManager{}).GrantBundle(tx, r.UID, gold, bundle)
+			if err != nil {
+				return nil, err
+			}
+			r.Items = append(r.Items, stageItems...)
+		}
 		if !stage && len(growth) > 0 {
 			if err = awardDrops(tx, r, startLevel, growth[0].Drops); err != nil {
 				return nil, err

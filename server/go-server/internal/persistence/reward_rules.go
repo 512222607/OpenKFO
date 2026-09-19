@@ -19,17 +19,18 @@ type LevelReward struct {
 }
 
 type RewardRules struct {
-	Tutorial       *RewardBundle `json:"tutorial_reward,omitempty"`
-	LevelGifts     []LevelGift   `json:"level_gifts"`
-	Drops          []DropRule    `json:"drops,omitempty"`
-	GrowthEnabled  bool          `json:"growth_enabled"`
-	Levels         []LevelReward `json:"levels,omitempty"`
-	WinGold        uint32        `json:"win_gold"`
-	LossGold       uint32        `json:"loss_gold"`
-	DrawGold       uint32        `json:"draw_gold"`
-	WinExperience  uint32        `json:"win_experience"`
-	LossExperience uint32        `json:"loss_experience"`
-	DrawExperience uint32        `json:"draw_experience"`
+	StageRewards   []StageMapRewards `json:"stage_rewards"`
+	Tutorial       *RewardBundle     `json:"tutorial_reward,omitempty"`
+	LevelGifts     []LevelGift       `json:"level_gifts"`
+	Drops          []DropRule        `json:"drops,omitempty"`
+	GrowthEnabled  bool              `json:"growth_enabled"`
+	Levels         []LevelReward     `json:"levels,omitempty"`
+	WinGold        uint32            `json:"win_gold"`
+	LossGold       uint32            `json:"loss_gold"`
+	DrawGold       uint32            `json:"draw_gold"`
+	WinExperience  uint32            `json:"win_experience"`
+	LossExperience uint32            `json:"loss_experience"`
+	DrawExperience uint32            `json:"draw_experience"`
 }
 
 type RewardSettings struct {
@@ -71,7 +72,7 @@ func (m *RewardManager) SeedBattleRewards(rules RewardRules) error {
 
 func (m *RewardManager) SaveBattleRewards(revision uint64, rules RewardRules) (RewardSettings, error) {
 	// Older GM clients omit this field; omission must not erase existing gifts.
-	if rules.LevelGifts == nil || rules.Tutorial == nil {
+	if rules.LevelGifts == nil || rules.Tutorial == nil || rules.StageRewards == nil {
 		old, err := m.BattleRewards(RewardRules{})
 		if err != nil {
 			return RewardSettings{}, err
@@ -81,6 +82,9 @@ func (m *RewardManager) SaveBattleRewards(revision uint64, rules RewardRules) (R
 		}
 		if rules.Tutorial == nil {
 			rules.Tutorial = old.Rules.Tutorial
+		}
+		if rules.StageRewards == nil {
+			rules.StageRewards = old.Rules.StageRewards
 		}
 	}
 
@@ -135,6 +139,13 @@ func (m *RewardManager) SaveBattleRewards(revision uint64, rules RewardRules) (R
 			return RewardSettings{}, err
 		}
 	}
+	for _, stage := range rules.StageRewards {
+		for _, reward := range []StageReward{stage.Clear, stage.Failed} {
+			if err := m.validateBundleItems(reward.RewardBundle); err != nil {
+				return RewardSettings{}, err
+			}
+		}
+	}
 	data, err := json.Marshal(rules)
 	if err != nil {
 		return RewardSettings{}, err
@@ -168,6 +179,9 @@ func (r RewardRules) Normalized() RewardRules {
 	return r
 }
 func (r RewardRules) Validate() error {
+	if err := validateStageRewards(r.StageRewards); err != nil {
+		return err
+	}
 	if r.Tutorial != nil {
 		if err := r.Tutorial.Validate(); err != nil {
 			return err

@@ -39,7 +39,7 @@ func TestTutorialBundleLocalDatabase(t *testing.T) {
 		"CREATE TEMPORARY TABLE tutorial_rewards(uid BIGINT PRIMARY KEY,reward BLOB) ENGINE=InnoDB",
 		"CREATE TEMPORARY TABLE title_rewards(uid BIGINT,title_level TINYINT,choices BLOB,claimed_key INT UNSIGNED NULL,claimed_instance INT UNSIGNED NULL,PRIMARY KEY(uid,title_level)) ENGINE=InnoDB",
 		"CREATE TEMPORARY TABLE offers(catalog_key INT PRIMARY KEY,record BLOB,enabled BOOL) ENGINE=InnoDB",
-		"CREATE TEMPORARY TABLE battle_reward_rules(id INT PRIMARY KEY,rules BLOB) ENGINE=InnoDB",
+		"CREATE TEMPORARY TABLE battle_reward_rules(id INT PRIMARY KEY,rules BLOB,revision BIGINT DEFAULT 1) ENGINE=InnoDB",
 		"CREATE TEMPORARY TABLE task_rules(id INT PRIMARY KEY,revision BIGINT,rules BLOB) ENGINE=InnoDB",
 		"CREATE TEMPORARY TABLE extended_task_progress(uid BIGINT,task_key INT,cycle VARCHAR(10),state INT,rule_revision BIGINT,rule_data BLOB,counts BLOB,PRIMARY KEY(uid,task_key,cycle)) ENGINE=InnoDB",
 		"CREATE TEMPORARY TABLE item_definitions(definition_key INT PRIMARY KEY,revision BIGINT,record BLOB,days INT) ENGINE=InnoDB",
@@ -66,7 +66,7 @@ func TestTutorialBundleLocalDatabase(t *testing.T) {
 		if e != nil {
 			t.Fatal(e)
 		}
-		exec("REPLACE INTO battle_reward_rules VALUES(1,?)", raw)
+		exec("REPLACE INTO battle_reward_rules(id,rules) VALUES(1,?)", raw)
 	}
 	save()
 	if _, err = store.RewardManager().CompleteTutorial(1, ""); err == nil {

@@ -3,6 +3,7 @@ package persistence
 import (
 	"bytes"
 	"database/sql"
+	"encoding/json"
 	"os"
 	"reflect"
 	"strings"
@@ -39,10 +40,18 @@ func TestStageSettlementLocalDatabase(t *testing.T) {
 		`CREATE TEMPORARY TABLE counters(name VARCHAR(32) PRIMARY KEY,value BIGINT UNSIGNED) ENGINE=InnoDB`,
 		`CREATE TEMPORARY TABLE battle_settlements(serial INT PRIMARY KEY,reports BLOB,result BLOB) ENGINE=InnoDB`,
 		`CREATE TEMPORARY TABLE level_reward_receipts(uid BIGINT,level INT,items BLOB,PRIMARY KEY(uid,level)) ENGINE=InnoDB`,
+		`CREATE TEMPORARY TABLE item_definitions(definition_key INT PRIMARY KEY,revision BIGINT,record BLOB,days INT) ENGINE=InnoDB`,
+		`CREATE TEMPORARY TABLE inventory(uid BIGINT,instance INT UNSIGNED,record BLOB,PRIMARY KEY(uid,instance)) ENGINE=InnoDB`,
+		`CREATE TEMPORARY TABLE inventory_expirations(uid BIGINT,instance INT UNSIGNED,expires_at BIGINT,PRIMARY KEY(uid,instance)) ENGINE=InnoDB`,
 	} {
 		exec(q)
 	}
 	exec("INSERT INTO counters VALUES('battle',10)")
+	item := make([]byte, protocol.InventoryRecordSize)
+	item[4] = protocol.ItemWeapon
+	protocol.WriteUint32(item, 5, 253001)
+	protocol.WriteUint16(item, 23, 1)
+	exec("INSERT INTO item_definitions VALUES(12,1,?,1)", item)
 	p := make([]byte, 360)
 	protocol.WriteUint16(p, LevelOffset, 1)
 	protocol.WriteUint32(p, ExperienceOffset, 90)
@@ -53,9 +62,10 @@ func TestStageSettlementLocalDatabase(t *testing.T) {
 	for i := 0; i < 149; i++ {
 		rules.Levels[i].NextExperience = 100
 	}
+	rules.StageRewards = []StageMapRewards{{MapID: 20051, Clear: StageReward{RewardBundle: RewardBundle{Gold: 7, Tickets: 2, Items: []uint32{12}}, Experience: 20}, Failed: StageReward{RewardBundle: RewardBundle{Gold: 1}}}}
 	rules.LevelGifts = []LevelGift{{Level: 2, Gold: 5, Tickets: 3}}
 	awards := []BattleReward{{UID: 2, Outcome: StageOutcomeClear, Gold: 7, Experience: 20}, {UID: 1, Outcome: StageOutcomeClear, Gold: 7, Experience: 20}}
-	got, err := m.SettleStage(1, []byte("verified stage reports"), awards, rules)
+	got, err := m.SettleStage(1, 20051, []byte("verified stage reports"), awards, rules)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,6 +73,9 @@ func TestStageSettlementLocalDatabase(t *testing.T) {
 		t.Fatal("caller input mutated")
 	}
 	for _, r := range got {
+		if len(r.Items) != 1 || protocol.ReadUint32(r.Items[0], 5) != 253001 {
+			t.Fatal("stage item missing")
+		}
 		if r.Outcome != StageOutcomeClear || r.BattleMode == nil || *r.BattleMode != byte(protocol.StageAssault) || ProfileLevel(r.Profile) != 2 || protocol.ReadUint32(r.Profile, ExperienceOffset) != 10 || r.GoldBalance != uint32(r.UID)*10+12 {
 			t.Fatal("stage progression wrong", r)
 		}
@@ -71,16 +84,22 @@ func TestStageSettlementLocalDatabase(t *testing.T) {
 			t.Fatal("competitive counters changed")
 		}
 		var tickets uint32
-		if err := db.QueryRow("SELECT tickets FROM accounts WHERE uid=?", r.UID).Scan(&tickets); err != nil || tickets != 3 {
+		if err := db.QueryRow("SELECT tickets FROM accounts WHERE uid=?", r.UID).Scan(&tickets); err != nil || tickets != 5 {
 			t.Fatal("level gift missing", err, tickets)
 		}
 	}
 	awards[0].Gold = 999
-	again, err := m.SettleStage(1, nil, awards, rules)
+	rules.StageRewards[0].Clear.Gold = 999
+	again, err := m.SettleStage(1, 20051, nil, awards, rules)
 	if err != nil || !reflect.DeepEqual(got, again) {
 		t.Fatal("replay did not return original settlement", err)
 	}
-	if _, err = m.SettleStage(1, nil, awards[:1], rules); err == nil {
+	removed := rules
+	removed.StageRewards = nil
+	if replay, err := m.SettleStage(1, 20051, nil, awards, removed); err != nil || !reflect.DeepEqual(got, replay) {
+		t.Fatal("removed configuration invalidated receipt", err)
+	}
+	if _, err = m.SettleStage(1, 20051, nil, awards[:1], rules); err == nil {
 		t.Fatal("wrong party accepted replay")
 	}
 	if _, err = m.SettleBattle(1, nil, []BattleReward{{UID: 1, Outcome: "win"}}); err == nil {
@@ -88,11 +107,12 @@ func TestStageSettlementLocalDatabase(t *testing.T) {
 	}
 	// Seed a competitive receipt to verify the reverse boundary without touching tasks.
 	exec(`INSERT INTO battle_settlements VALUES(2,'[]','[{"uid":1,"outcome":"win"}]')`)
-	if _, err = m.SettleStage(2, nil, awards, rules); err == nil {
+	if _, err = m.SettleStage(2, 20051, nil, awards, rules); err == nil {
 		t.Fatal("PvP receipt returned to stage")
 	}
 	// A later participant's overflow must roll back the earlier account update.
-	if _, err = m.SettleStage(3, nil, []BattleReward{{UID: 1, Outcome: StageOutcomeFailed, Gold: 1}, {UID: 2, Outcome: StageOutcomeFailed, Gold: 0xffffffff}}, rules); err == nil {
+	exec("UPDATE accounts SET gold=4294967295 WHERE uid=2")
+	if _, err = m.SettleStage(3, 20051, nil, []BattleReward{{UID: 1, Outcome: StageOutcomeFailed, Gold: 1}, {UID: 2, Outcome: StageOutcomeFailed, Gold: 0xffffffff}}, rules); err == nil {
 		t.Fatal("overflow accepted")
 	}
 	var gold, count int
@@ -102,12 +122,31 @@ func TestStageSettlementLocalDatabase(t *testing.T) {
 	if err = db.QueryRow("SELECT COUNT(*) FROM battle_settlements WHERE serial=3").Scan(&count); err != nil || count != 0 {
 		t.Fatal("failed stage receipt persisted", count, err)
 	}
+	t.Run("older GM preserves stage configuration", func(t *testing.T) {
+		exec(`CREATE TEMPORARY TABLE battle_reward_rules(id INT PRIMARY KEY,revision BIGINT,rules BLOB) ENGINE=InnoDB`)
+		data, err := json.Marshal(rules)
+		if err != nil {
+			t.Fatal(err)
+		}
+		exec("INSERT INTO battle_reward_rules VALUES(1,1,?)", data)
+		legacy := RewardRules{LevelGifts: []LevelGift{}, Tutorial: &RewardBundle{}}.Normalized()
+		rm := (&Store{DB: db}).RewardManager()
+		saved, err := rm.SaveBattleRewards(1, legacy)
+		if err != nil || len(saved.Rules.StageRewards) != 1 {
+			t.Fatal("old GM erased stage rewards", err)
+		}
+		legacy.StageRewards = []StageMapRewards{}
+		cleared, err := rm.SaveBattleRewards(saved.Revision, legacy)
+		if err != nil || len(cleared.Rules.StageRewards) != 0 {
+			t.Fatal("explicit empty stage rules not saved", err)
+		}
+	})
 }
 
 func TestStageSettlementRejectsCompetitiveInputs(t *testing.T) {
 	m := (&Store{}).BattleManager() // Rejections must occur before DB access.
 	for _, r := range []BattleReward{{Outcome: "win"}, {Outcome: StageOutcomeClear, HonourPeriod: 1}, {Outcome: StageOutcomeClear, HonourPoints: 1}} {
-		if _, err := m.SettleStage(1, nil, []BattleReward{r}, RewardRules{}); err == nil {
+		if _, err := m.SettleStage(1, 20051, nil, []BattleReward{r}, RewardRules{}); err == nil {
 			t.Fatal("competitive input accepted")
 		}
 	}
