@@ -60,7 +60,10 @@ func (hub *Hub) settleReport(session *Session, payload []byte) error {
 	if room == nil || (room.Stage != "battle" && room.Stage != "finishing" && room.Stage != "settlement") {
 		return nil
 	}
-	if room.Type() == protocol.StageAssault || room.Type() == protocol.FosterMode {
+	if room.Type() == protocol.StageAssault {
+		return hub.stageFinishReport(session, payload)
+	}
+	if room.Type() == protocol.FosterMode {
 		// PVE completion is not last-player/team-standing. Its native reason
 		// and wave result must be handled by a separate settlement policy.
 		return nil
