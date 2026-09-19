@@ -30,6 +30,29 @@ func TestStageWaveTraceDirectionAndRawPayload(t *testing.T) {
 	}
 }
 
+func TestCreateRoomTraceNamesPVEWithoutGrantingAccess(t *testing.T) {
+	_, s, _, _ := waitingRoomFixture()
+	var output bytes.Buffer
+	s.Trace = log.New(&output, "", 0)
+	p := make([]byte, protocol.RoomRequestSize)
+	p[protocol.RoomTypeOffset], p[protocol.RoomCapacityOffset] = byte(protocol.StageAssault), 4
+	protocol.WriteUint32(p, protocol.RoomMapOffset, 9170)
+	s.tracePacket("C->S", 1, "game", protocol.MsgCreateRoom, p, false)
+	var entry map[string]any
+	if err := json.Unmarshal(output.Bytes(), &entry); err != nil {
+		t.Fatal(err)
+	}
+	text, _ := entry["content"].(string)
+	for _, want := range []string{"波次PVE", "尚未开放", "地图=9170", "容量=4", "不代表已获准"} {
+		if !strings.Contains(text, want) {
+			t.Fatal("missing room request diagnostic", text)
+		}
+	}
+	if len(entry["hex"].(string)) != len(p)*2 {
+		t.Fatal("lost raw request")
+	}
+}
+
 func TestProtocolTraceReassemblesAndLogsEveryRecipient(t *testing.T) {
 	hub, a, b, _ := waitingRoomFixture()
 	var output bytes.Buffer

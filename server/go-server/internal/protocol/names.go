@@ -1,5 +1,7 @@
 package protocol
 
+import "fmt"
+
 // RoomType is the native room-mode byte. Team modes remain distinct game rules.
 type RoomType byte
 
@@ -10,8 +12,33 @@ const (
 	TeamDeathmatch  RoomType = 3   // 团队死亡竞赛
 	NewPlayerGuide  RoomType = 4   // 新手引导
 	FreePractice    RoomType = 5   // 自由练习
+	FosterMode      RoomType = 10  // 地图脚本PVE；98C1B0创建CFosterMode。
+	StageAssault    RoomType = 21  // 波次PVE；98C1B0创建CStageAssaultMode。
 	UnknownRoomType RoomType = 255 // 缺失或无法读取房间请求
 )
+
+func (t RoomType) String() string {
+	switch t {
+	case SoloSurvival:
+		return "个人生存"
+	case TeamSurvival:
+		return "团队生存"
+	case SoloDeathmatch:
+		return "个人死亡竞赛"
+	case TeamDeathmatch:
+		return "团队死亡竞赛"
+	case NewPlayerGuide:
+		return "新手引导"
+	case FreePractice:
+		return "自由练习"
+	case FosterMode:
+		return "地图脚本PVE（尚未开放）"
+	case StageAssault:
+		return "波次PVE（尚未开放）"
+	default:
+		return fmt.Sprintf("未确认房型%d", byte(t))
+	}
+}
 
 func (t RoomType) IsTeam() bool        { return t == TeamSurvival || t == TeamDeathmatch }
 func (t RoomType) IsCompetitive() bool { return t <= TeamDeathmatch }

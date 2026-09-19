@@ -25,3 +25,9 @@
 3. 当前模式能转型为 `CFosterMode`（RTTI字符串12F900C）。成功后93FF50仅把模式对象 +18 BYTE置1，没有在此函数中发奖、写战绩或发送结算。
 
 另一处941910起的生成函数调用地图脚本 `map_update`、`is_finished`，检查返回值及模式对象 +18从旧值变为1后，同样构造47字节20407。因此不能把20407诊断为“唯一来自20572的波次回执”，也不能直接命名为“服务器确认整关完成”。这次定位了消费路径，但CFosterMode与具体房间模式的完整映射、脚本完成条件及结算调用链仍待继续核实。
+
+## 房间模式映射补充
+
+`nixiang/pve-mode-factory.asm` 核对98C1B0工厂：98C86C跳转表的模式10进入98C5BD、调用941620构造CFosterMode；模式21进入98C618、调用93B710构造CStageAssaultMode。RTTI类层次表BF5B54/BF5F44分别列出两者继承CPVEBaseMode/IBattleMode，StageAssault另外实现ILuaHelperDebugTextListener，两者互不继承。
+
+所以模式21的对象不满足827EF0要求的CFosterMode转型。20572对模式21的处理与20407对模式10的接收效果不能混为统一通关链。代码新增明确RoomType常量FosterMode=10、StageAssault=21，并在建房请求日志显示房型、地图、容量及尚未开放状态；没有扩大准入或把它们认定为竞技房间。该映射取代上一节关于房间模式映射待核的说明，脚本完成条件及结算链仍待恢复。

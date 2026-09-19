@@ -31,6 +31,10 @@ func (s *Session) tracePacket(direction string, channel uint32, transport string
 	} else {
 		entry["hex"] = hex.EncodeToString(payload)
 		if transport == "game" {
+			if opcode == protocol.MsgCreateRoom && strings.HasPrefix(direction, "C->S") && len(payload) == protocol.RoomRequestSize {
+				mode := protocol.RoomTypeFromRequest(payload)
+				entry["content"] = fmt.Sprintf("创建房间：类型=%s（%d），地图=%d，容量=%d；请求不代表已获准", mode, byte(mode), protocol.ReadUint32(payload, protocol.RoomMapOffset), payload[protocol.RoomCapacityOffset])
+			}
 			if opcode == protocol.MsgStageWaveControl && strings.HasPrefix(direction, "S->C") {
 				if r, err := protocol.ParseStageWaveControl(payload); err == nil {
 					entry["content"] = fmt.Sprintf("闯关波次控制：波次=%d，-1触发客户端结束流程；不等于通关奖励凭据", r.Wave)
