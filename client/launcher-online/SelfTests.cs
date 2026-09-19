@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json.Nodes;
 using System.Runtime.InteropServices;
 
@@ -14,27 +14,33 @@ internal static class SelfTests
         {
             TestCredentials(testRoot);
             string source = Path.Combine(testRoot, "client"); Directory.CreateDirectory(Path.Combine(source, "Data"));
+            Directory.CreateDirectory(Path.Combine(source, "OpenKFO", "backups"));
+            File.WriteAllText(Path.Combine(source, "OpenKFO", "backups", "private.json"), "must not copy");
+            File.WriteAllText(Path.Combine(source, "private-token.txt"), "must not copy");
             foreach (string name in new[] { "gfld.dat", "server.ini", "Data/config.xml", "Data/config.spf2" }) File.Copy(Path.Combine(real.SourceDirectory, name), Path.Combine(source, name));
             var config = new JsonObject
             {
-                ["url"] = "wss://jrnygtxy.top/kk/tunnel", ["client_directory"] = "client",
+                ["url"] = "wss://example.invalid/kk/tunnel", ["client_directory"] = "client",
+                ["instances_directory"] = "instances",
                 ["client_sha256"] = InstanceManager.FileHash(Path.Combine(source, "gfld.dat")),
                 ["config_hash"] = InstanceManager.FileHash(Path.Combine(source, "Data", "config.spf2")),
                 ["server_certificate"] = "origin.crt", ["login_certificate"] = "cert.pem", ["login_key"] = "key.pem"
             };
             File.WriteAllText(Path.Combine(testRoot, "bridge.json"), config.ToJsonString());
             var manager = new InstanceManager(testRoot);
-            Require(manager.EnvironmentName == "线上服务器" && manager.EnvironmentDescription.Contains("jrnygtxy.top"), "online environment label");
+            Require(manager.EnvironmentName == "线上服务器" && manager.EnvironmentDescription.Contains("example.invalid"), "online environment label");
             config["url"] = "tls://127.0.0.1:19091";
             File.WriteAllText(Path.Combine(testRoot, "bridge.json"), config.ToJsonString());
             var local = new InstanceManager(testRoot);
             Require(local.EnvironmentName == "本地测试服" && local.EnvironmentDescription.Contains("127.0.0.1:19091"), "local environment label");
-            config["url"] = "wss://jrnygtxy.top/kk/tunnel";
+            config["url"] = "wss://example.invalid/kk/tunnel";
             File.WriteAllText(Path.Combine(testRoot, "bridge.json"), config.ToJsonString());
             var progress = new Progress<string>();
             string originalHash = InstanceManager.FileHash(Path.Combine(source, "gfld.dat"));
             Require(manager.InstanceDirectory(2) == Path.Combine(testRoot, "launcher-components", "window-2"), "English component directory");
             string prepared = manager.Prepare(2, progress);
+            Require(manager.ClientDirectory(2) == Path.Combine(testRoot, "instances", "client-2"), "configured instance directory");
+            Require(!Directory.Exists(Path.Combine(manager.ClientDirectory(2), "OpenKFO")) && !File.Exists(Path.Combine(manager.ClientDirectory(2), "private-token.txt")), "exclude project and private files from client clone");
             var second = JsonNode.Parse(File.ReadAllText(prepared))!;
             Require(second["login_port"]!.GetValue<int>() == 18184, "second login port");
             Require(second["sdk_port"]!.GetValue<int>() == 18100, "second SDK port");
@@ -46,16 +52,31 @@ internal static class SelfTests
             Require(File.ReadAllText(Path.Combine(manager.ClientDirectory(2), "server.ini")).Contains("18184"), "native login port");
             Require(Encoding.Latin1.GetString(File.ReadAllBytes(Path.Combine(manager.ClientDirectory(2), "Data/config.xml"))).Contains("18100"), "native SDK port");
             manager.Prepare(2, progress);
-            Require(manager.HealthUri.AbsoluteUri == "https://jrnygtxy.top/health", "health URL");
-            config["url"] = "tls://jrnygtxy.top:19091";
+            Require(manager.HealthUri.AbsoluteUri == "https://example.invalid/health", "health URL");
+            config["url"] = "tls://example.invalid:19091";
             File.WriteAllText(Path.Combine(testRoot, "bridge.json"), config.ToJsonString());
             var direct = new InstanceManager(testRoot);
-            Require(direct.Endpoint.Scheme == "tls" && direct.Endpoint.Host == "jrnygtxy.top" && direct.HealthUri.Port == 19091, "direct TLS endpoint");
+            Require(direct.Endpoint.Scheme == "tls" && direct.Endpoint.Host == "example.invalid" && direct.HealthUri.Port == 19091, "direct TLS endpoint");
             Require(Enumerable.Range(1, 8).SelectMany(number => new[] { InstanceManager.LoginPort(number), InstanceManager.SDKPort(number), InstanceManager.GamePort(number) }).Distinct().Count() == 24, "eight isolated port sets");
             string image = Path.Combine(manager.ClientDirectory(2), "gfld.dat"); secondBytes[100] ^= 1; File.WriteAllBytes(image, secondBytes);
             bool rejected = false;
             try { manager.Prepare(2, progress); } catch (IOException) { rejected = true; }
             Require(rejected, "modified image rejected");
+            config["single_client"] = true;
+            File.WriteAllText(Path.Combine(testRoot, "bridge.json"), config.ToJsonString());
+            var single = new InstanceManager(testRoot);
+            Require(single.WindowCount == 1, "single client mode");
+            bool copyBlocked = false;
+            try { single.Prepare(2, progress); } catch (ArgumentOutOfRangeException) { copyBlocked = true; }
+            Require(copyBlocked, "single client cannot create copies");
+            config["shared_client"] = true;
+            File.WriteAllText(Path.Combine(testRoot, "bridge.json"), config.ToJsonString());
+            var shared = new InstanceManager(testRoot);
+            string sharedPrepared = shared.Prepare(3, progress);
+            var sharedConfig = JsonNode.Parse(File.ReadAllText(sharedPrepared))!;
+            Require(shared.WindowCount == 8 && shared.ClientDirectory(3) == source, "shared client multi-window");
+            Require(!Directory.Exists(Path.Combine(testRoot, "instances", "client-3")) && InstanceManager.FileHash(Path.Combine(source, "gfld.dat")) == originalHash, "no duplicate client or disk mutex patch");
+            Require(sharedConfig["login_port"]!.GetValue<int>() == 18084 && sharedConfig["control_directory"]!.GetValue<string>().EndsWith("shared"), "shared listener routing");
             File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "self-test-result.json"), new JsonObject { ["status"] = "passed", ["checks"] = 14, ["credential_checks"] = "encrypted persistence, window isolation, restore, clear, native edits, password masking, no auto-submit", ["real_game_login_tested"] = false, ["time"] = DateTimeOffset.Now.ToString("O") }.ToJsonString());
         }
         finally { Directory.Delete(testRoot, true); }

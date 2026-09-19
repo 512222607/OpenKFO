@@ -10,6 +10,8 @@ internal static class Program
         ApplicationConfiguration.Initialize();
         try
         {
+            int controlTest = Array.IndexOf(args,"--server-control-test");
+            if(controlTest>=0 && controlTest+1<args.Length){ServerControlTests.Run(args[controlTest+1]);return;}
             string root = AppContext.BaseDirectory;
             int rootOption = Array.IndexOf(args, "--root");
             if (rootOption >= 0 && rootOption + 1 < args.Length) root = Path.GetFullPath(args[rootOption + 1]);
@@ -55,7 +57,7 @@ internal static class Program
         }
         catch (Exception exception)
         {
-            if (args.Contains("--self-test"))
+            if (args.Contains("--self-test") || args.Contains("--server-control-test"))
             {
                 File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "self-test-error.txt"), exception.ToString());
                 Environment.ExitCode = 1;

@@ -39,17 +39,18 @@ func ReadFrame(reader *bufio.Reader, maximum int) ([]byte, error) {
 }
 
 type Frame struct {
-	Op         string `json:"op"`
-	Channel    uint32 `json:"channel,omitempty"`
-	Kind       string `json:"kind,omitempty"`
-	Data       []byte `json:"data,omitempty"`
-	Account    string `json:"account,omitempty"`
-	Password   string `json:"password,omitempty"`
-	ConfigHash string `json:"config_hash,omitempty"`
-	UID        uint64 `json:"uid,omitempty"`
-	Error      string `json:"error,omitempty"`
-	Port       uint16 `json:"port,omitempty"`
-	Value      uint32 `json:"value,omitempty"`
+	PeerReceipt string `json:"peer_receipt,omitempty"`
+	Op          string `json:"op"`
+	Channel     uint32 `json:"channel,omitempty"`
+	Kind        string `json:"kind,omitempty"`
+	Data        []byte `json:"data,omitempty"`
+	Account     string `json:"account,omitempty"`
+	Password    string `json:"password,omitempty"`
+	ConfigHash  string `json:"config_hash,omitempty"`
+	UID         uint64 `json:"uid,omitempty"`
+	Error       string `json:"error,omitempty"`
+	Port        uint16 `json:"port,omitempty"`
+	Value       uint32 `json:"value,omitempty"`
 }
 type Conn struct {
 	WS         *websocket.Conn

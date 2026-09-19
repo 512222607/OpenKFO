@@ -82,6 +82,25 @@ List<String> rewardDiff(
   Map<String, dynamic> target,
 ) {
   final a = rewardRows(source), b = rewardRows(target), result = <String>[];
+  final sourceDrops = source['drops'] as List? ?? [];
+  final targetDrops = target['drops'] as List? ?? [];
+  for (var i = 0; i < sourceDrops.length || i < targetDrops.length; i++) {
+    final from = i < targetDrops.length ? targetDrops[i] as Map : {};
+    final to = i < sourceDrops.length ? sourceDrops[i] as Map : {};
+    for (final key in [
+      'catalog_key',
+      'outcome',
+      'min_level',
+      'max_level',
+      'chance_per_10000',
+    ]) {
+      if (from[key] != to[key]) {
+        result.add(
+          '掉落规则 ${i + 1} $key：${from[key] ?? "无"} → ${to[key] ?? "无"}',
+        );
+      }
+    }
+  }
   if ((source['growth_enabled'] == true) !=
       (target['growth_enabled'] == true)) {
     result.add(

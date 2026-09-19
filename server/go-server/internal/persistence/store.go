@@ -63,6 +63,7 @@ var schema = []string{
         gold BIGINT UNSIGNED NOT NULL DEFAULT 0 ,
         tickets BIGINT UNSIGNED NOT NULL DEFAULT 0
     ) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS character_creations(uid BIGINT UNSIGNED PRIMARY KEY,nickname VARCHAR(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL UNIQUE,request VARBINARY(68) NOT NULL,FOREIGN KEY(uid) REFERENCES accounts(uid)) ENGINE=InnoDB`,
 	`CREATE TABLE IF NOT EXISTS inventory(
         uid BIGINT UNSIGNED NOT NULL ,
         instance INT UNSIGNED NOT NULL ,
@@ -341,6 +342,16 @@ func (store *Store) Offers(category, variant int) ([]Offer, error) {
 var Slots = map[byte][]uint16{12: {4}, 13: {3}, 14: {7}, 15: {2}, 16: {6}, 17: {5}, 18: {4}, 20: {10}, 21: {11}, 25: {8, 9}, 64: {27, 28}}
 
 func (store *Store) Equip(uid uint64, instance uint32, slot uint16) ([]byte, error) {
+	return store.equip(uid, instance, slot, false)
+}
+
+// EquipDefault resolves the warehouse's zero slot inside the ownership transaction.
+// Zero still means unequip for Equip callers (2300).
+func (store *Store) EquipDefault(uid uint64, instance uint32, slot uint16) ([]byte, error) {
+	return store.equip(uid, instance, slot, true)
+}
+
+func (store *Store) equip(uid uint64, instance uint32, slot uint16, automatic bool) ([]byte, error) {
 	transaction, err := store.DB.Begin()
 	if err != nil {
 		return nil, err
@@ -353,6 +364,13 @@ func (store *Store) Equip(uid uint64, instance uint32, slot uint16) ([]byte, err
 	var record []byte
 	if err = transaction.QueryRow(`SELECT record FROM inventory WHERE uid=? AND instance=?`, uid, instance).Scan(&record); err != nil || len(record) != 68 {
 		return nil, ErrDenied
+	}
+	if automatic && slot == 0 {
+		// Native 650CE0 establishes type 25's default; other kinds need evidence.
+		if record[4] != 25 {
+			return nil, ErrDenied
+		}
+		slot = 8
 	}
 	if slot == 0 && protocol.ReadUint16(record, 17) == 0 {
 		return nil, nil
@@ -541,16 +559,18 @@ func (store *Store) NextBattle() (uint32, error) {
 	return uint32(serial), transaction.Commit()
 }
 func (store *Store) Training(uid uint64, start bool) (uint32, bool, error) {
-	if _, err := store.DB.Exec(`INSERT IGNORE INTO training(uid) VALUES(?)`, uid); err != nil {
-		return 0, false, err
-	}
 	if start {
+		if _, err := store.DB.Exec(`INSERT IGNORE INTO training(uid) VALUES(?)`, uid); err != nil {
+			return 0, false, err
+		}
 		if _, err := store.DB.Exec(`UPDATE training SET started=? WHERE uid=? AND started IS NULL`, time.Now().Unix(), uid); err != nil {
 			return 0, false, err
 		}
 	}
 	var started sql.NullInt64
-	if err := store.DB.QueryRow(`SELECT started FROM training WHERE uid=?`, uid).Scan(&started); err != nil {
+	// A profile lookup must not create or start training for its target.
+	// LEFT JOIN distinguishes an existing idle account from a missing UID.
+	if err := store.DB.QueryRow(`SELECT t.started FROM accounts a LEFT JOIN training t ON t.uid=a.uid WHERE a.uid=?`, uid).Scan(&started); err != nil {
 		return 0, false, err
 	}
 	if !started.Valid {

@@ -22,6 +22,7 @@ func main() {
 	}
 	configPath := flag.String("config", filepath.Join(filepath.Dir(executable), "bridge.json"), "online client configuration")
 	launch := flag.Bool("launch", true, "start native client")
+	window := flag.Int("window", 1, "shared client window number")
 	flag.Parse()
 	logFile, err := os.OpenFile(filepath.Join(filepath.Dir(executable), "online-client.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
@@ -31,8 +32,11 @@ func main() {
 	log.SetOutput(logFile)
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
 	config, err := bridge.LoadConfig(*configPath)
+	if err == nil && config.SharedClient {
+		err = bridge.RequestSharedWindow(config, *window)
+	}
 	if err == nil {
-		if *launch {
+		if *launch && !config.SharedClient {
 			var active bool
 			active, err = bridge.ActivateExistingClient(filepath.Join(config.ClientDirectory, "gfld.dat"))
 			if err == nil && active {

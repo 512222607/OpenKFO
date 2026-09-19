@@ -25,7 +25,7 @@ void main(){
   tester.view.physicalSize=const Size(1400,1000);tester.view.devicePixelRatio=1;
   addTearDown(tester.view.resetPhysicalSize);addTearDown(tester.view.resetDevicePixelRatio);
   Map<String,dynamic>? saved;
-  Future<dynamic> api(Map<String,dynamic> r)async{if(r['operation']=='rewards_save')saved=r;return {'revision':4,'rules':saved?['rewards']??{'win_gold':20}};}
+  Future<dynamic> api(Map<String,dynamic> r)async{if(r['operation']=='rewards_save')saved=r;return {'revision':4,'rules':saved?['rewards']??{'win_gold':20,'drops':[{'catalog_key':123,'outcome':'win','min_level':1,'max_level':150,'chance_per_10000':100}]}};}
   await tester.pumpWidget(MaterialApp(home:RewardConfigPage(api:api,environment:'本地测试服')));await tester.pumpAndSettle();
   await tester.tap(find.text('批量修改'));await tester.pumpAndSettle();
   await tester.enterText(find.byKey(const ValueKey('win_gold')),'0');
@@ -33,6 +33,7 @@ void main(){
   expect(saved,isNull);
   await tester.tap(find.text('保存奖励配置'));await tester.pumpAndSettle();
   expect(saved?['reward_revision'],4);expect(saved?['rewards']['levels'][149]['win_gold'],0);
+  expect(saved?['rewards']['drops'][0]['catalog_key'],123);
   expect(tester.takeException(),isNull);
  });
 }

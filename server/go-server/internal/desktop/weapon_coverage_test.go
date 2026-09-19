@@ -63,8 +63,8 @@ func TestWeaponActionCoverage(t *testing.T) {
 			count := 0
 			editable := 0
 			for _, stage := range w.Stages {
-				if stage.State == "2031" && !strings.Contains(stage.Label, "功夫拳跑动普通攻击") {
-					t.Fatalf("missing animation description: %s", stage.Label)
+				if stage.State == "2031" && stage.Label != "未收录按键 · 状态 2031" {
+					t.Fatalf("missing explicit unmapped-input label: %s", stage.Label)
 				}
 				if strings.Contains(stage.Label, "客户端未标注") {
 					t.Fatal(stage.Label)

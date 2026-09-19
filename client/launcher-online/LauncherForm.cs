@@ -6,6 +6,10 @@ namespace KungFuLauncher;
 internal sealed class LauncherForm : Form
 {
     private readonly InstanceManager instances;
+    private readonly LocalServerController localServer;
+    private readonly Button startServer = MakeButton("启动本地服务器", false);
+    private readonly Button stopServer = MakeButton("停止本地服务器", false);
+    private bool controllingServer;
     private readonly HttpClient http = new() { Timeout = TimeSpan.FromSeconds(8) };
     private readonly Label serverState = new() { Text = "正在检测服务器…", AutoSize = true, Font = new Font("Microsoft YaHei UI", 15, FontStyle.Bold), ForeColor = Color.FromArgb(40, 80, 145) };
     private readonly Label serverDetail = new() { Text = "健康检查尚未完成", AutoSize = true, ForeColor = Color.DimGray };
@@ -29,6 +33,7 @@ internal sealed class LauncherForm : Form
     internal LauncherForm(InstanceManager manager, int[] startWindows)
     {
         instances = manager;
+        localServer = new LocalServerController(instances.RootDirectory, instances.Endpoint);
         AutoScaleDimensions = new SizeF(96, 96);
         AutoScaleMode = AutoScaleMode.Dpi;
         Text = $"功夫小子 · {instances.EnvironmentName}登录器";
@@ -39,7 +44,7 @@ internal sealed class LauncherForm : Form
         BackColor = Color.FromArgb(242, 245, 250);
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(28), ColumnCount = 1, RowCount = 7 };
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 110));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 145));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, localServer.Supported ? 195 : 145));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 108));
@@ -55,11 +60,15 @@ internal sealed class LauncherForm : Form
         var details = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false };
         details.Controls.AddRange(new Control[] { serverState, serverDetail });
         refresh.Anchor = AnchorStyles.None;
-        status.Controls.Add(details, 0, 0); status.Controls.Add(refresh, 1, 0);
+        var serverActions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection=FlowDirection.TopDown, WrapContents=false };
+        refresh.Margin=new Padding(0,0,0,6);startServer.Margin=new Padding(0,0,0,6);
+        serverActions.Controls.Add(refresh);
+        if(localServer.Supported){serverActions.Controls.Add(startServer);serverActions.Controls.Add(stopServer);details.Controls.Add(new Label{Text="停止服务器会断开所有本地玩家。",AutoSize=true,ForeColor=Color.DimGray});}
+        status.Controls.Add(details, 0, 0); status.Controls.Add(serverActions, 1, 0);
         layout.Controls.Add(status, 0, 1);
         layout.Controls.Add(new Label { Text = "游戏窗口", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, Font = new Font(Font, FontStyle.Bold) }, 0, 2);
         windows.Columns.Add("窗口", 300); windows.Columns.Add("状态", 440);
-        for (int number = 1; number <= InstanceManager.MaximumInstances; number++)
+        for (int number = 1; number <= instances.WindowCount; number++)
         {
             var item = new ListViewItem("窗口 " + number) { Tag = number };
             item.SubItems.Add("未启动");
@@ -87,6 +96,7 @@ internal sealed class LauncherForm : Form
         var focus = MakeButton("显示游戏窗口", false);
         var logs = MakeButton("查看窗口日志", false);
         actions.Controls.AddRange(new Control[] { launch, another, focus, logs });
+        another.Visible = instances.WindowCount > 1;
         layout.Controls.Add(actions, 0, 5);
         var footer = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2 };
         footer.RowStyles.Add(new RowStyle(SizeType.Percent, 55)); footer.RowStyles.Add(new RowStyle(SizeType.Percent, 45));
@@ -96,7 +106,7 @@ internal sealed class LauncherForm : Form
         launch.Click += async (_, _) => await LaunchSelected();
         another.Click += async (_, _) =>
         {
-            for (int number = 1; number <= InstanceManager.MaximumInstances; number++)
+            for (int number = 1; number <= instances.WindowCount; number++)
                 if (!instances.IsRunning(number)) { windows.Items[number - 1].Selected = true; await Launch(number); return; }
             activity.Text = "8 个窗口都已启动。";
         };
@@ -108,11 +118,14 @@ internal sealed class LauncherForm : Form
             else activity.Text = "这个窗口尚未生成新登录器日志。";
         };
         refresh.Click += async (_, _) => await CheckServer();
+        RefreshServerButtons();
+        startServer.Click += async (_, _) => await ControlServer(true);
+        stopServer.Click += async (_, _) => await ControlServer(false);
         timer.Tick += async (_, _) => { RefreshWindows(); if ((DateTime.UtcNow - lastCheck).TotalSeconds >= 15) await CheckServer(); };
         Shown += async (_, _) => { RefreshWindows(); timer.Start(); await CheckServer(); foreach (int number in startWindows) await Launch(number); };
         FormClosing += (_, args) =>
         {
-            if (launching) { args.Cancel = true; activity.Text = "正在准备客户端，请等待本次启动完成后再关闭。"; }
+            if (launching || controllingServer) { args.Cancel = true; activity.Text = "正在启动游戏或操作服务器，请等待完成后再关闭。"; }
             else if (!SaveCredentials()) args.Cancel = true;
         };
         FormClosed += (_, _) => { timer.Dispose(); http.Dispose(); };
@@ -189,6 +202,31 @@ internal sealed class LauncherForm : Form
             serverState.Text = $"●  {instances.EnvironmentName}暂不可达"; serverState.ForeColor = Color.FromArgb(185, 65, 55);
             serverDetail.Text = $"{DateTime.Now:HH:mm:ss} · " + (exception is TaskCanceledException ? "检测超时，可稍后重试" : "连接或健康检查失败");
         }
-        finally { lastCheck = DateTime.UtcNow; checking = false; if (!IsDisposed) refresh.Enabled = true; }
+        finally { lastCheck = DateTime.UtcNow; checking = false; if (!IsDisposed) { refresh.Enabled = !controllingServer; RefreshServerButtons(); } }
+    }
+    private void RefreshServerButtons()
+    {
+        bool running=localServer.IsRunning;
+        startServer.Enabled=localServer.Supported&&!controllingServer&&!running;
+        stopServer.Enabled=localServer.Supported&&!controllingServer&&running;
+    }
+    private async Task ControlServer(bool start)
+    {
+        if(controllingServer||launching)return;
+        controllingServer=true;refresh.Enabled=launch.Enabled=another.Enabled=false;RefreshServerButtons();
+        try {
+            activity.Text=start?"正在启动本地服务器…":"正在停止本地服务器…";
+            activity.Text=await (start?localServer.StartAsync():localServer.StopAsync());
+            if(start){
+                // SSH/database initialization can take a few seconds. Keep the
+                // UI responsive and distinguish process start from health ready.
+                var deadline=DateTime.UtcNow.AddSeconds(30);
+                bool healthy=false;
+                while(DateTime.UtcNow<deadline){try{await instances.CheckHealthAsync(http);healthy=true;activity.Text="本地服务器连接正常，可以启动游戏。";break;}catch{if(!localServer.IsRunning)throw new IOException("服务器启动失败，请查看后台窗口和 logs 目录。");await Task.Delay(500);}}
+                if(!healthy)throw new IOException("服务器进程已启动，但30秒内尚未就绪，请查看后台窗口和 logs 目录。");
+            }
+            await CheckServer();
+        }catch(Exception error){activity.Text="服务器操作失败："+error.Message;}
+        finally{controllingServer=false;refresh.Enabled=launch.Enabled=another.Enabled=true;RefreshServerButtons();}
     }
 }

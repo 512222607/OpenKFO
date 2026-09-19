@@ -18,6 +18,7 @@ type LevelReward struct {
 }
 
 type RewardRules struct {
+	Drops          []DropRule    `json:"drops,omitempty"`
 	GrowthEnabled  bool          `json:"growth_enabled"`
 	Levels         []LevelReward `json:"levels,omitempty"`
 	WinGold        uint32        `json:"win_gold"`
@@ -70,6 +71,12 @@ func (store *Store) SaveBattleRewards(revision uint64, rules RewardRules) (Rewar
 	if err := rules.Validate(); err != nil {
 		return RewardSettings{}, err
 	}
+	for _, drop := range rules.Drops {
+		var record []byte
+		if err := store.DB.QueryRow("SELECT grant_record FROM offers WHERE catalog_key=?", drop.CatalogKey).Scan(&record); err != nil || !validDropItem(record) {
+			return RewardSettings{}, fmt.Errorf("掉落商品 %d 不存在或不是有效的未装备武器", drop.CatalogKey)
+		}
+	}
 	data, err := json.Marshal(rules)
 	if err != nil {
 		return RewardSettings{}, err
@@ -103,6 +110,9 @@ func (r RewardRules) Normalized() RewardRules {
 	return r
 }
 func (r RewardRules) Validate() error {
+	if err := validateDrops(r.Drops); err != nil {
+		return err
+	}
 	if len(r.Levels) != 150 {
 		return fmt.Errorf("必须包含 1–150 级，共 150 行")
 	}

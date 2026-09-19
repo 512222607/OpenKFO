@@ -39,12 +39,14 @@ func AdvanceLevel(level uint16, experience uint64, rules RewardRules) (uint16, u
 }
 
 type BattleReward struct {
-	UID         uint64 `json:"uid"`
-	Outcome     string `json:"outcome"`
-	Gold        uint32 `json:"gold"`
-	GoldBalance uint32 `json:"gold_balance"`
-	Experience  uint32 `json:"experience"`
-	Profile     []byte `json:"profile"`
+	StartLevel  uint16   `json:"start_level,omitempty"`
+	Items       [][]byte `json:"items,omitempty"`
+	UID         uint64   `json:"uid"`
+	Outcome     string   `json:"outcome"`
+	Gold        uint32   `json:"gold"`
+	GoldBalance uint32   `json:"gold_balance"`
+	Experience  uint32   `json:"experience"`
+	Profile     []byte   `json:"profile"`
 }
 
 // Commit the entire room once. The persisted response makes retries independent
@@ -52,6 +54,11 @@ type BattleReward struct {
 func (store *Store) SettleBattle(serial uint32, reports []byte, rewards []BattleReward, growth ...RewardRules) ([]BattleReward, error) {
 	if serial == 0 || len(rewards) == 0 || len(rewards) > 8 {
 		return nil, ErrDenied
+	}
+	if len(growth) > 0 {
+		if err := growth[0].Validate(); err != nil {
+			return nil, err
+		}
 	}
 	sort.Slice(rewards, func(i, j int) bool { return rewards[i].UID < rewards[j].UID })
 	tx, err := store.DB.Begin()
@@ -91,6 +98,19 @@ func (store *Store) SettleBattle(serial uint32, reports []byte, rewards []Battle
 		}
 		if len(r.Profile) != 360 || gold+uint64(r.Gold) > math.MaxUint32 {
 			return nil, ErrDenied
+		}
+		startLevel := ProfileLevel(r.Profile)
+		if r.StartLevel != 0 {
+			startLevel = r.StartLevel
+		}
+		if startLevel > 150 {
+			return nil, ErrDenied
+		}
+		r.Items = nil
+		if len(growth) > 0 {
+			if err = awardDrops(tx, r, startLevel, growth[0].Drops); err != nil {
+				return nil, err
+			}
 		}
 		experience := uint64(protocol.ReadUint32(r.Profile, ExperienceOffset)) + uint64(r.Experience)
 		if r.Gold > math.MaxInt32 {

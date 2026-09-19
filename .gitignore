@@ -50,6 +50,7 @@ Secrets/
 *.enc
 *.bin
 *.log
+*.lnk
 *.jsonl
 *.exe
 *.dll

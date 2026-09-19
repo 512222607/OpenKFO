@@ -1,6 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kungfu_item_manager/reward_table.dart';
 void main(){
+ test('drop-only changes are included in online preview',(){
+  final a={'drops':[{'catalog_key':123,'outcome':'win','min_level':1,'max_level':150,'chance_per_10000':100}]};
+  final changes=rewardDiff(a,{});
+  expect(changes.length,5);
+  expect(changes.any((s)=>s.contains('chance_per_10000')&&s.contains('100')),isTrue);
+ });
  test('CSV round-trip keeps 150 levels and zero values',(){
   final rows=rewardRows({'win_gold':20});
   rows[149]['win_gold']=0;

@@ -167,6 +167,21 @@ func (admin *Admin) Call(request Request) (any, error) {
 		return call(remote)
 	}
 	client := filepath.Join(admin.Root, "runtime-local", "client")
+	pathConfig := filepath.Join(admin.Root, "runtime-local", "client-path.json")
+	if data, readErr := os.ReadFile(pathConfig); readErr == nil {
+		var config struct {
+			Directory string `json:"client_directory"`
+		}
+		if err := json.Unmarshal(data, &config); err != nil || strings.TrimSpace(config.Directory) == "" {
+			return nil, fmt.Errorf("客户端路径配置无效：%s", pathConfig)
+		}
+		client = config.Directory
+		if !filepath.IsAbs(client) {
+			client = filepath.Join(admin.Root, client)
+		}
+	} else if !os.IsNotExist(readErr) {
+		return nil, readErr
+	}
 	items, err := catalog(client, request.Operation == "catalog")
 	if err != nil {
 		return nil, err
@@ -175,7 +190,7 @@ func (admin *Admin) Call(request Request) (any, error) {
 		return shopImages(client, items, request.Keys)
 	}
 	if strings.HasPrefix(request.Operation, "weapon_") {
-		return weaponHandle(request, client, items, "")
+		return weaponHandle(request, client, items, filepath.Join(admin.Root, "runtime-local", "weapon-config"))
 	}
 	if request.Operation == "catalog" {
 		categories := map[byte]bool{}

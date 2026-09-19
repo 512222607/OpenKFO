@@ -122,7 +122,7 @@ func (hub *Hub) settleReport(session *Session, payload []byte) error {
 			outcome, gold = "unconfirmed", 0
 			experience = 0
 		}
-		rewards = append(rewards, persistence.BattleReward{UID: uid, Outcome: outcome, Gold: gold, Experience: experience})
+		rewards = append(rewards, persistence.BattleReward{UID: uid, Outcome: outcome, Gold: gold, Experience: experience, StartLevel: member.BattleLevel})
 	}
 	reports, err := json.Marshal(room.Reports)
 	if err != nil {
@@ -143,8 +143,15 @@ func (hub *Hub) settleReport(session *Session, payload []byte) error {
 		// 4300 carries absolute profile values, not the per-match delta.
 		s.sendGame(protocol.Message{ID: 4300, Payload: bytes.Clone(r.Profile[persistence.ExperienceOffset : persistence.ExperienceOffset+8])})
 		s.sendGame(protocol.Message{ID: 1240, Payload: protocol.Uint32Bytes(r.GoldBalance)})
+		for _, item := range r.Items {
+			s.sendGame(protocol.Message{ID: 2160, Payload: bytes.Clone(item)})
+			if s.Inventory == nil {
+				s.Inventory = map[uint32][]byte{}
+			}
+			s.Inventory[protocol.ReadUint32(item, 0)] = bytes.Clone(item)
+		}
 		s.sendGame(settlementPacket(room, rewards, r.UID))
-		log.Printf("battle_settled serial=%d room=%d uid=%d outcome=%s gold=%d experience=%d start_level=%d level=%d drops=disabled titles=disabled", room.Serial, room.ID, r.UID, r.Outcome, r.Gold, r.Experience, room.Members[r.UID].BattleLevel, persistence.ProfileLevel(r.Profile))
+		log.Printf("battle_settled serial=%d room=%d uid=%d outcome=%s gold=%d experience=%d start_level=%d level=%d drops=%d titles=disabled", room.Serial, room.ID, r.UID, r.Outcome, r.Gold, r.Experience, room.Members[r.UID].BattleLevel, persistence.ProfileLevel(r.Profile), len(r.Items))
 	}
 	return nil
 }

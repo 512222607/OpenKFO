@@ -142,7 +142,7 @@ func (server *Server) serveConnection(connection *tls.Conn) {
 		json.NewEncoder(connection).Encode(response)
 		return
 	}
-	if auth.Op != "auth" || len(auth.Account) > 20 || len(auth.Password) != 64 {
+	if auth.Op != "auth" || len(auth.Account) > 20 || len(auth.Password) != 64 || len(auth.PeerReceipt) > 72 {
 		return
 	}
 	encoder := json.NewEncoder(connection)
@@ -172,7 +172,7 @@ func (server *Server) serveConnection(connection *tls.Conn) {
 		deny("invalid_credentials")
 		return
 	}
-	session, err := server.Hub.Attach(account, auth.Port)
+	session, err := server.Hub.Attach(account, auth.Port, auth.PeerReceipt)
 	if err != nil {
 		deny("account_already_online")
 		return
@@ -202,6 +202,9 @@ func (server *Server) serveConnection(connection *tls.Conn) {
 	}()
 	for {
 		connection.SetReadDeadline(time.Now().Add(75 * time.Second))
+		if session.LoggedOut {
+			connection.SetReadDeadline(time.Now().Add(5 * time.Second))
+		}
 		encoded, err := tunnel.ReadFrame(reader, 100000)
 		if err != nil {
 			break

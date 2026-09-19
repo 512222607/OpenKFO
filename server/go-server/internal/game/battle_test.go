@@ -151,6 +151,7 @@ func TestMultiplayerPracticeNPCDoesNotKickOrBypassEnvelope(t *testing.T) {
 func TestExitCleansLoadingAndBattleAndTransfersWaitingOwner(t *testing.T) {
 	for _, stage := range []string{"room", "loading", "wait_ready", "battle"} {
 		hub, owner, peer, _ := combatFixture()
+		hub.Store = recoveryStore(t)
 		room := owner.Room
 		room.Stage = stage
 		peer.game().Phase = stage
@@ -161,7 +162,7 @@ func TestExitCleansLoadingAndBattleAndTransfersWaitingOwner(t *testing.T) {
 			if peer.Room != room || room.Owner != peer.UID || room.Members[peer.UID].Ready {
 				t.Fatal("waiting room owner transfer failed")
 			}
-		} else if peer.Room != nil || peer.game().Phase != "lobby" || len(hub.Rooms) != 0 || len(room.Members) != 0 || peer.ConsumeIntents != nil {
+		} else if peer.Room != room || peer.game().Phase != "room" || len(hub.Rooms) != 1 || len(room.Members) != 1 || peer.ConsumeIntents != nil || room.Owner != peer.UID {
 			t.Fatal("stale battle after exit", stage)
 		}
 		if hub.Sessions[peer.UID] != peer {

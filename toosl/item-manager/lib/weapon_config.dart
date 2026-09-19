@@ -12,7 +12,8 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
   final form = GlobalKey<FormState>();
   List<Map<String, dynamic>> rules = [];
   String query = '', message = '';
-  bool busy = true, dirty = false, failed = false, showOtherActions = false;
+  bool busy = true, dirty = false, failed = false;
+  String? selectedAction;
   int editorVersion = 0;
 
   @override
@@ -53,6 +54,7 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
 
   void select(Map<String, dynamic> value) {
     editorVersion++;
+    selectedAction = null;
     weapon = value;
     final stored = data!['drafts']['${value['id']}'] as List? ?? [];
     rules = (value['stages'] as List).map((stage) {
@@ -258,20 +260,149 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
     ];
   }
 
+  Widget stageEditor(int index) {
+    final rule = rules[index], stage = weapon!['stages'][index];
+    final enabled = stage['supported'] == true && !busy;
+    return Card(
+      key: ValueKey("$editorVersion-${weapon!['id']}-${rule['stage']}"),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              stage['label'] ?? '第 ${rule['stage']} 下 C',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+            ),
+            Text(
+              '状态 ${stage['state'] ?? rule['stage']} · 动作 ${stage['action']} · ${stage['property_ids'].length} 个命中属性',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            if (stage['supported'] != true)
+              Text(
+                stage['reason'],
+                style: const TextStyle(color: Colors.deepOrange),
+              ),
+            ...hitEditors(stage, rule, enabled),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: DropdownButtonFormField<int>(
+                    isExpanded: true,
+                    key: ValueKey(
+                      '${weapon!['id']}-${rule['stage']}-buff-${rule['buff']}',
+                    ),
+                    initialValue: rule['buff'],
+                    decoration: const InputDecoration(labelText: '命中效果'),
+                    items: (data!['buffs'] as List)
+                        .map(
+                          (b) => DropdownMenuItem<int>(
+                            value: b['id'],
+                            child: Text(b['name']),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: enabled
+                        ? (v) => setState(() {
+                            rule['buff'] = v;
+                            dirty = true;
+                          })
+                        : null,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: DropdownButtonFormField<int>(
+                    isExpanded: true,
+                    key: ValueKey(
+                      '${weapon!['id']}-${rule['stage']}-level-${rule['level']}',
+                    ),
+                    initialValue: rule['level'],
+                    decoration: const InputDecoration(labelText: '等级'),
+                    items: [1, 2, 3]
+                        .map(
+                          (v) => DropdownMenuItem(value: v, child: Text('$v')),
+                        )
+                        .toList(),
+                    onChanged: enabled && rule['buff'] != 0
+                        ? (v) => setState(() {
+                            rule['level'] = v;
+                            dirty = true;
+                          })
+                        : null,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: TextFormField(
+                    key: ValueKey('$editorVersion-${rule['stage']}-duration'),
+                    initialValue: '${rule['duration']}',
+                    enabled: enabled && rule['buff'] != 0,
+                    decoration: const InputDecoration(labelText: '持续周期（原生值）'),
+                    keyboardType: TextInputType.number,
+                    validator: (v) {
+                      final n = int.tryParse(v ?? '');
+                      return n == null || n < 1 || n > 60000
+                          ? '请输入 1–60000'
+                          : null;
+                    },
+                    onChanged: (v) => setState(() {
+                      rule['duration'] = int.tryParse(v) ?? 0;
+                      dirty = true;
+                    }),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget actionChoice(String key, int? index, String label) {
+    return Column(
+      children: [
+        ListTile(
+          title: Text(label),
+          subtitle: index == null ? const Text('提示中的状态没有对应动作，不能编辑') : null,
+          selected: selectedAction == key,
+          trailing: index == null ? null : const Icon(Icons.edit_outlined),
+          onTap: index == null || busy
+              ? null
+              : () {
+                  if (!(form.currentState?.validate() ?? true)) return;
+                  setState(() {
+                    selectedAction = selectedAction == key ? null : key;
+                  });
+                },
+        ),
+        if (selectedAction == key && index != null) stageEditor(index),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final weapons = (data?['weapons'] as List? ?? [])
         .where((w) => '${w['name']} ${w['id']}'.contains(query))
         .toList();
-    final visibleStages = List.generate(rules.length, (i) => i).where((i) {
-      final stage = weapon!['stages'][i];
-      final state =
-          int.tryParse('${stage['state'] ?? ''}') ?? (stage['stage'] as int);
-      return showOtherActions ||
-          (state >= 2000 && state < 3000) ||
-          state <= 6 ||
-          stage['supported'] == true;
-    }).toList();
+    final combos = weapon?['combos'] as List? ?? [];
+    final stageIndices = <String, int>{
+      for (var i = 0; i < rules.length; i++)
+        '${weapon!['stages'][i]['state']}': i,
+    };
+    final mapped = {
+      for (final c in combos)
+        for (final n in c['nodes'] as List) '${n['state']}',
+    };
+    final otherStages = stageIndices.entries
+        .where((e) => !mapped.contains(e.key))
+        .map((e) => e.value)
+        .toList();
     final applied = data?['applied']['${weapon?['id']}'] as List? ?? [];
     return PopScope(
       canPop: !dirty && !busy,
@@ -383,51 +514,11 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                                 ),
                                 const SizedBox(height: 8),
                                 const Text(
-                                  '命中目标时施加所选状态，替换该段原有异常状态；可分别设置各命中的基础伤害和攻击效果，保持原连招顺序。\n持续周期使用客户端原生数值（默认 3000），尚未验证与秒数的换算；多次命中的招式可能重复施加。',
+                                  '展开连招，选择动作段设置伤害和 BUFF。同一个动作被多条连招引用时，共用一份配置。\n持续时间单位为毫秒，3000 = 3 秒；多次命中可能重复施加。',
                                 ),
                                 if ((weapon!['combos'] as List? ?? []).isEmpty)
                                   const Text(
-                                    '当前配置包未找到该武器独立连招提示，已读取完整动作表。标有“动画说明”的文字来自原资源注释，不代表完整按键或正式招式名；共享动作可能保留其他武器的名称。',
-                                  ),
-                                CheckboxListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  title: Text(
-                                    '显示移动、受击等其他动作（共 ${rules.length} 项）',
-                                  ),
-                                  value: showOtherActions,
-                                  onChanged: busy
-                                      ? null
-                                      : (v) => setState(
-                                          () => showOtherActions = v ?? false,
-                                        ),
-                                ),
-                                if ((weapon!['combos'] as List? ?? [])
-                                    .isNotEmpty)
-                                  ExpansionTile(
-                                    title: const Text('该武器默认连招'),
-                                    initiallyExpanded: true,
-                                    children: [
-                                      SizedBox(
-                                        height: 150,
-                                        child: ListView(
-                                          children: [
-                                            for (final combo
-                                                in (weapon!['combos']
-                                                        as List? ??
-                                                    []))
-                                              ListTile(
-                                                dense: true,
-                                                title: Text(combo['name']),
-                                                subtitle: Text(
-                                                  (combo['nodes'] as List)
-                                                      .map((n) => n['keys'])
-                                                      .join(' → '),
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
+                                    '当前配置包没有该武器的独立按键提示；动作仍保留在“其他动作”，不会根据动画名称猜测按键。',
                                   ),
                                 if (weapon!['id'] == 253013)
                                   Align(
@@ -457,173 +548,51 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                                   child: Form(
                                     key: form,
                                     child: ListView.builder(
-                                      itemCount: visibleStages.length,
-                                      itemBuilder: (context, visibleIndex) {
-                                        final index =
-                                            visibleStages[visibleIndex];
-                                        final rule = rules[index],
-                                            stage = weapon!['stages'][index];
-                                        final enabled =
-                                            stage['supported'] == true && !busy;
-                                        return Card(
-                                          child: Padding(
-                                            padding: const EdgeInsets.all(14),
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  stage['label'] ??
-                                                      '第 ${rule['stage']} 下 C',
-                                                  style: const TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 17,
-                                                  ),
-                                                ),
-                                                Text(
-                                                  '状态 ${stage['state'] ?? rule['stage']} · 动作 ${stage['action']} · ${stage['property_ids'].length} 个命中属性',
-                                                  style: Theme.of(context)
-                                                      .textTheme
-                                                      .bodySmall,
-                                                ),
-                                                if (stage['supported'] != true)
-                                                  Text(
-                                                    stage['reason'],
-                                                    style: const TextStyle(
-                                                      color: Colors.deepOrange,
-                                                    ),
-                                                  ),
-                                                ...hitEditors(
-                                                  stage,
-                                                  rule,
-                                                  enabled,
-                                                ),
-                                                const SizedBox(height: 10),
-                                                Row(
-                                                  children: [
-                                                    Expanded(
-                                                      flex: 3,
-                                                      child: DropdownButtonFormField<int>(
-                                                        isExpanded: true,
-                                                        key: ValueKey(
-                                                          '${weapon!['id']}-${rule['stage']}-buff-${rule['buff']}',
-                                                        ),
-                                                        initialValue:
-                                                            rule['buff'],
-                                                        decoration:
-                                                            const InputDecoration(
-                                                              labelText: '命中效果',
-                                                            ),
-                                                        items: (data!['buffs'] as List)
-                                                            .map(
-                                                              (b) =>
-                                                                  DropdownMenuItem<
-                                                                    int
-                                                                  >(
-                                                                    value:
-                                                                        b['id'],
-                                                                    child: Text(
-                                                                      b['name'],
-                                                                    ),
-                                                                  ),
-                                                            )
-                                                            .toList(),
-                                                        onChanged: enabled
-                                                            ? (v) => setState(
-                                                                () {
-                                                                  rule['buff'] =
-                                                                      v;
-                                                                  dirty = true;
-                                                                },
-                                                              )
-                                                            : null,
-                                                      ),
-                                                    ),
-                                                    const SizedBox(width: 12),
-                                                    Expanded(
-                                                      child: DropdownButtonFormField<int>(
-                                                        isExpanded: true,
-                                                        key: ValueKey(
-                                                          '${weapon!['id']}-${rule['stage']}-level-${rule['level']}',
-                                                        ),
-                                                        initialValue:
-                                                            rule['level'],
-                                                        decoration:
-                                                            const InputDecoration(
-                                                              labelText: '等级',
-                                                            ),
-                                                        items: [1, 2, 3]
-                                                            .map(
-                                                              (v) =>
-                                                                  DropdownMenuItem(
-                                                                    value: v,
-                                                                    child: Text(
-                                                                      '$v',
-                                                                    ),
-                                                                  ),
-                                                            )
-                                                            .toList(),
-                                                        onChanged:
-                                                            enabled &&
-                                                                rule['buff'] !=
-                                                                    0
-                                                            ? (
-                                                                v,
-                                                              ) => setState(() {
-                                                                rule['level'] =
-                                                                    v;
-                                                                dirty = true;
-                                                              })
-                                                            : null,
-                                                      ),
-                                                    ),
-                                                    const SizedBox(width: 12),
-                                                    Expanded(
-                                                      flex: 2,
-                                                      child: TextFormField(
-                                                        key: ValueKey(
-                                                          '$editorVersion-${rule['stage']}-duration',
-                                                        ),
-                                                        initialValue:
-                                                            '${rule['duration']}',
-                                                        enabled:
-                                                            enabled &&
-                                                            rule['buff'] != 0,
-                                                        decoration:
-                                                            const InputDecoration(
-                                                              labelText:
-                                                                  '持续周期（原生值）',
-                                                            ),
-                                                        keyboardType:
-                                                            TextInputType
-                                                                .number,
-                                                        validator: (v) {
-                                                          final n =
-                                                              int.tryParse(
-                                                                v ?? '',
-                                                              );
-                                                          return n == null ||
-                                                                  n < 1 ||
-                                                                  n > 60000
-                                                              ? '请输入 1–60000'
-                                                              : null;
-                                                        },
-                                                        onChanged: (v) =>
-                                                            setState(() {
-                                                              rule['duration'] =
-                                                                  int.tryParse(
-                                                                    v,
-                                                                  ) ??
-                                                                  0;
-                                                              dirty = true;
-                                                            }),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ],
-                                            ),
+                                      itemCount:
+                                          combos.length +
+                                          (otherStages.isEmpty ? 0 : 1),
+                                      itemBuilder: (context, group) {
+                                        final other = group == combos.length;
+                                        final combo = other
+                                            ? null
+                                            : combos[group];
+                                        final nodes = other
+                                            ? <dynamic>[]
+                                            : combo['nodes'] as List;
+                                        final title = other
+                                            ? '其他动作（${otherStages.length}）'
+                                            : nodes.isEmpty
+                                            ? '按键提示不完整'
+                                            : '${nodes.last['keys']}';
+                                        return ExpansionTile(
+                                          key: ValueKey(
+                                            '${weapon!['id']}-combo-$group',
                                           ),
+                                          title: Text(title),
+                                          subtitle: Text(
+                                            other
+                                                ? '没有连招按键映射，按状态编号查看'
+                                                : '${combo['name']} · ${nodes.length} 个动作段',
+                                          ),
+                                          children: [
+                                            for (
+                                              var n = 0;
+                                              n <
+                                                  (other
+                                                      ? otherStages.length
+                                                      : nodes.length);
+                                              n++
+                                            )
+                                              actionChoice(
+                                                '$group:$n',
+                                                other
+                                                    ? otherStages[n]
+                                                    : stageIndices['${nodes[n]['state']}'],
+                                                other
+                                                    ? '状态 ${weapon!['stages'][otherStages[n]]['state']}'
+                                                    : '第 ${n + 1} 段 · ${nodes[n]['keys']}',
+                                              ),
+                                          ],
                                         );
                                       },
                                     ),

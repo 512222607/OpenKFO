@@ -88,10 +88,18 @@ func (hub *Hub) battleMessage(session *Session, channel *Channel, message protoc
 		}
 		if id == 8121 || id == 8126 || id == 8150 {
 			attacker := protocol.ReadUint64(payload, 47)
+			// Native replicas also report expiration of a remote actor's buff.
+			// Cleanup clears the source and parameters; it is not a new attack.
+			cleanup := id == 8150 && attacker == 0 && protocol.ReadUint32(payload, 55) != 0
+			if cleanup {
+				for offset := 59; offset <= 75; offset += 4 {
+					cleanup = cleanup && protocol.ReadUint32(payload, offset) == 0
+				}
+			}
 			if attacker != 0 && room.Members[attacker] == nil && len(room.Request) > 46 && room.Request[46] == 5 {
 				return nil
 			}
-			if (attacker != 0 && room.Members[attacker] == nil) || (actor != session.UID && attacker != session.UID) {
+			if (attacker != 0 && room.Members[attacker] == nil) || (!cleanup && actor != session.UID && attacker != session.UID) {
 				return fmt.Errorf("battle effect ownership id=%d uid=%d target=%d source=%d", id, session.UID, actor, attacker)
 			}
 		} else if actor != session.UID {

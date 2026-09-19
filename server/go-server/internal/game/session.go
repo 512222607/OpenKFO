@@ -3,6 +3,7 @@ package game
 import (
 	"bytes"
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -26,6 +27,7 @@ type Hub struct {
 	Rooms      map[uint16]*Room
 	Sessions   map[uint64]*Session
 	NextPlayer uint32
+	PeerKey    []byte
 }
 
 type Channel struct {
@@ -64,13 +66,15 @@ type Session struct {
 	UDPPort          uint16
 	LastUDPNotice    time.Time
 	UDPRelayed       uint64
+	Inventory        map[uint32][]byte
+	LoggedOut        bool
 }
 
 func NewHub(store *persistence.Store, config Config) *Hub {
 	return &Hub{Store: store, Config: config, Rooms: map[uint16]*Room{}, Sessions: map[uint64]*Session{}, NextPlayer: 1001}
 }
 
-func (hub *Hub) Attach(account persistence.Account, port uint16) (*Session, error) {
+func (hub *Hub) Attach(account persistence.Account, port uint16, peerReceipt ...string) (*Session, error) {
 	hub.Mutex.Lock()
 	defer hub.Mutex.Unlock()
 	if hub.Sessions[account.UID] != nil || len(hub.Sessions) >= 64 || port == 0 {
@@ -83,6 +87,14 @@ func (hub *Hub) Attach(account persistence.Account, port uint16) (*Session, erro
 	session := &Session{Trace: hub.Trace, UID: account.UID, Account: account.Account, Nickname: account.Nickname,
 		Namespace: hex.EncodeToString(nonce), Channels: map[uint32]*Channel{}, Output: make(chan tunnel.Frame, 128),
 		Done: make(chan struct{}), Port: port, GrantUntil: time.Now().Add(2 * time.Minute)}
+	if err := hub.initPeerKey(); err != nil {
+		return nil, err
+	}
+	if len(peerReceipt) > 0 {
+		if err := hub.resumePeer(session, peerReceipt[0]); err != nil {
+			return nil, err
+		}
+	}
 	hub.Sessions[session.UID] = session
 	return session, nil
 }
@@ -120,6 +132,7 @@ func (session *Session) sendGame(message protocol.Message) {
 	}
 }
 func (hub *Hub) Detach(session *Session) {
+	defer session.Close()
 	hub.Mutex.Lock()
 	defer hub.Mutex.Unlock()
 	if hub.Sessions[session.UID] != session {
@@ -138,7 +151,17 @@ func (hub *Hub) profileReady(session *Session) error {
 	if err != nil {
 		return err
 	}
+	if len(account.Profile) == 360 && bytes.Equal(account.Profile, make([]byte, 360)) {
+		options, err := persistence.CharacterOptions(hub.Config.CharacterChoices)
+		if err != nil {
+			return fmt.Errorf("character creation choices are not configured")
+		}
+		channel.Phase = "character_create"
+		session.send(channel.ID, protocol.Message{ID: 1125, Payload: options})
+		return nil
+	}
 	channel.Phase = "profile_sent"
+	session.rememberInventory(account.Inventory)
 	session.send(channel.ID, protocol.Message{ID: 1151, Payload: append(account.Profile, account.InventoryBytes()...)})
 	return nil
 }
@@ -149,12 +172,27 @@ func (hub *Hub) Handle(session *Session, frame tunnel.Frame) error {
 	hub.Mutex.Lock()
 	defer hub.Mutex.Unlock()
 	if hub.Sessions[session.UID] != session {
+		if session.LoggedOut {
+			// A native 2060 already released this account. The unchanged bridge
+			// may still request logout before authenticating the same process.
+			if frame.Op == "logout" {
+				session.emit(tunnel.Frame{Op: "logged_out"})
+			}
+			return nil
+		}
 		return persistence.ErrDenied
 	}
 	if frame.Op != "data" {
 		session.traceFrame("C->S", frame)
 	}
 	switch frame.Op {
+	case "logout":
+		hub.leave(session, false)
+		session.LoggedOut = true
+		delete(hub.Sessions, session.UID)
+		session.emit(tunnel.Frame{Op: "logged_out"})
+		log.Printf("logout_complete uid=%d account=%q", session.UID, session.Account)
+		return nil
 	case "ping":
 		session.emit(tunnel.Frame{Op: "pong"})
 		return nil
@@ -182,6 +220,9 @@ func (hub *Hub) Handle(session *Session, frame tunnel.Frame) error {
 		channel := session.Channels[frame.Channel]
 		if channel == nil || len(frame.Data) > 65536 {
 			return protocol.ErrFrame
+		}
+		if channel.Phase == "closed" {
+			return nil
 		}
 		if channel.Kind == "sdk" {
 			return hub.sdk(session, channel, frame.Data)
@@ -226,7 +267,10 @@ func (hub *Hub) sdk(session *Session, channel *Channel, data []byte) error {
 		session.tracePacket("C->S", channel.ID, "sdk", uint32(protocol.ReadUint16(body, 0)), body[2:], flags == 1)
 		channel.LoginBuffer = buffer[length:]
 		var reply protocol.Message
-		if flags == 1 && channel.Phase == "connected" {
+		if flags == 1 && (channel.Phase == "connected" || channel.Phase == "authenticated") {
+			// Re-authentication belongs to this already authenticated tunnel UID.
+			// Never retain the previous native channels or room across SDK login.
+			hub.resetNativeSession(session, channel.ID)
 			channel.Phase = "authenticated"
 			session.GrantUntil = time.Now().Add(2 * time.Minute)
 			reply = protocol.LoginAck(session.Account, session.UID)
@@ -271,6 +315,7 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 			return persistence.ErrDenied
 		}
 		session.HandoffUntil = time.Time{}
+		session.GrantUntil = time.Time{}
 		session.GameChannel = channel.ID
 		channel.Phase = "lobby"
 		session.send(channel.ID, protocol.Lobby(session.Port))
@@ -279,6 +324,9 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 	}
 	if channel.Phase == "connected" {
 		return protocol.ErrFrame
+	}
+	if handled, err := hub.characterMessage(session, channel, message); handled {
+		return err
 	}
 	if message.ID == 3320 {
 		if channel.ID != session.BootstrapChannel || (channel.Phase != "profile_sent" && channel.Phase != "handoff") || !bytes.Equal(payload, protocol.Uint32Bytes(1)) {
@@ -304,10 +352,34 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 	if channel.ID != session.GameChannel {
 		return nil
 	}
-	if message.ID == 1156 {
-		if len(payload) != 12 || time.Now().After(session.P2PUntil) || protocol.ReadUint64(payload, 0) != session.UID || protocol.ReadUint32(payload, 8) != session.P2P {
+	if message.ID == 2060 {
+		if len(payload) != 0 {
 			return protocol.ErrFrame
 		}
+		// 2060 leaves the current GS, including native channel switches. Only
+		// tunnel logout (before password reauthentication) releases the account.
+		session.send(channel.ID, protocol.Message{ID: 2070})
+		hub.leave(session, false)
+		session.GameChannel, session.BootstrapChannel = 0, 0
+		session.Bound = false
+		session.UDPRelayed = 0
+		session.ConsumeIntents, session.Inventory = nil, nil
+		session.GrantUntil = time.Now().Add(2 * time.Minute)
+		session.HandoffUntil = session.GrantUntil
+		for _, old := range session.Channels {
+			if old.Kind == "game" {
+				old.Phase = "closed"
+				old.LoginBuffer = nil
+			}
+		}
+		log.Printf("native_channel_left uid=%d channel=%d protocol=2070", session.UID, channel.ID)
+		return nil
+	}
+	if message.ID == 1156 {
+		if len(payload) != 12 || session.P2P == 0 || protocol.ReadUint64(payload, 0) != session.UID || protocol.ReadUint32(payload, 8) != session.P2P {
+			return protocol.ErrFrame
+		}
+		session.P2PUntil = time.Now().Add(time.Minute)
 		session.Bound = true
 		return nil
 	}
@@ -328,6 +400,36 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		return nil
 	}
 	switch message.ID {
+	case 2420:
+		if len(payload) != 8 {
+			return protocol.ErrFrame
+		}
+		target := protocol.ReadUint64(payload, 0)
+		account, err := hub.Store.Snapshot(target)
+		if err != nil {
+			session.sendGame(notice("未找到该玩家的资料。"))
+			return nil
+		}
+		reply, err := playerDetails(account)
+		if err != nil {
+			session.sendGame(notice("该玩家的资料暂时无法显示。"))
+			return nil
+		}
+		session.sendGame(reply)
+	case 2430:
+		if len(payload) != 8 {
+			return protocol.ErrFrame
+		}
+		target := protocol.ReadUint64(payload, 0)
+		account, err := hub.Store.Snapshot(target)
+		if err != nil {
+			session.sendGame(notice("未找到该玩家的武器资料。"))
+			return nil
+		}
+		if target == session.UID {
+			session.syncInventory(account.Inventory)
+		}
+		session.sendGame(weaponCollection(account))
 	case 2540, 2560:
 		if (message.ID == 2540 && len(payload) != 1) || (message.ID == 2560 && len(payload) != 9) {
 			return protocol.ErrFrame
@@ -438,6 +540,10 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		session.sendGame(protocol.Message{ID: balanceMessage, Payload: protocol.Uint32Bytes(balance)})
 		if len(item) == 68 {
 			session.sendGame(protocol.Message{ID: 2160, Payload: item})
+			if session.Inventory == nil {
+				session.Inventory = map[uint32][]byte{}
+			}
+			session.Inventory[protocol.ReadUint32(item, 0)] = bytes.Clone(item)
 		}
 		session.sendGame(protocol.Message{ID: 9050, Payload: catalog})
 		log.Printf("purchase uid=%d instance=%d", session.UID, protocol.ReadUint32(item, 0))
@@ -451,13 +557,22 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		slot := uint32(0)
 		if message.ID == 2080 {
 			slot = protocol.ReadUint32(payload, 4)
-			if slot == 0 || slot > 65535 {
-				return protocol.ErrFrame
+			if slot > 65535 {
+				session.sendGame(protocol.Message{ID: 2100, Payload: []byte{38, 0}})
+				return nil
 			}
 		}
-		changed, err := hub.Store.Equip(session.UID, protocol.ReadUint32(payload, 0), uint16(slot))
+		equip := hub.Store.Equip
+		if message.ID == 2080 {
+			equip = hub.Store.EquipDefault
+		}
+		changed, err := equip(session.UID, protocol.ReadUint32(payload, 0), uint16(slot))
 		if err != nil {
-			session.sendGame(notice("装备失败，请检查道具及栏位。"))
+			if message.ID == 2080 {
+				session.sendGame(protocol.Message{ID: 2100, Payload: []byte{38, 0}})
+			} else {
+				session.sendGame(notice("卸下失败，请检查道具及栏位。"))
+			}
 			return nil
 		}
 		if changed == nil {
@@ -467,11 +582,16 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		if err != nil {
 			return err
 		}
-		ack := protocol.Message{ID: message.ID + 10, Payload: append(bytes.Clone(payload), changed...)}
+		prefix := bytes.Clone(payload)
+		if message.ID == 2080 {
+			protocol.WriteUint32(prefix, 4, uint32(protocol.ReadUint16(changed, 17)))
+		}
+		ack := protocol.Message{ID: message.ID + 10, Payload: append(prefix, changed...)}
 		if message.ID == 2300 {
 			session.sendGame(ack)
 		}
 		session.sendGame(protocol.Message{ID: 1120, Payload: account.InventoryBytes()})
+		session.rememberInventory(account.Inventory)
 		if message.ID == 2080 {
 			session.sendGame(ack)
 		}
@@ -495,20 +615,33 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		}
 		session.sendGame(protocol.Message{ID: message.ID + 10})
 	case 20360:
-		if len(payload) != 12 || protocol.ReadUint64(payload, 0) != session.UID {
+		// The profile statistics tab queries the selected player's UID,
+		// not necessarily the authenticated viewer. The trailing word is
+		// client query state; the placeholder response does not consume it.
+		if len(payload) != 12 {
 			return protocol.ErrFrame
 		}
 		session.sendGame(protocol.Message{ID: 20370, Payload: append(make([]byte, 36), []byte("No ranked season configured.\x00")...)})
 	case 21000, 21002:
-		if (message.ID == 21000 && (len(payload) != 8 || protocol.ReadUint64(payload, 0) != session.UID)) || (message.ID == 21002 && len(payload) != 0) {
+		if (message.ID == 21000 && len(payload) != 8) || (message.ID == 21002 && len(payload) != 0) {
 			return protocol.ErrFrame
 		}
-		minutes, active, err := hub.Store.Training(session.UID, message.ID == 21002)
+		target := session.UID
+		if message.ID == 21000 {
+			// Viewing another player's 2421 automatically requests their
+			// training status. This UID is a read target, not an auth identity.
+			target = protocol.ReadUint64(payload, 0)
+		}
+		minutes, active, err := hub.Store.Training(target, message.ID == 21002)
 		if err != nil {
+			if message.ID == 21000 && err == sql.ErrNoRows {
+				session.sendGame(notice("未找到该玩家的训练资料。"))
+				return nil
+			}
 			return err
 		}
 		status := make([]byte, 56)
-		protocol.WriteUint64(status, 0, session.UID)
+		protocol.WriteUint64(status, 0, target)
 		protocol.WriteUint32(status, 20, minutes)
 		if active {
 			protocol.WriteUint32(status, 28, 1)
@@ -526,7 +659,7 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 
 func (hub *Hub) datagram(session *Session, frame tunnel.Frame) error {
 	payload := frame.Data
-	if len(payload) < 24 || len(payload) > 32768 || protocol.ReadUint16(payload, 0) != 1 || 24+int(payload[23]) > len(payload) || session.game() == nil {
+	if len(payload) < 24 || len(payload) > 32768 || protocol.ReadUint16(payload, 0) != 1 || 24+int(payload[23]) > len(payload) {
 		return protocol.ErrFrame
 	}
 	messageID := protocol.ReadUint16(payload, 2)
@@ -543,6 +676,9 @@ func (hub *Hub) datagram(session *Session, frame tunnel.Frame) error {
 			return protocol.ErrFrame
 		}
 		if session.P2P == 0 {
+			if err := hub.initPeerKey(); err != nil {
+				return err
+			}
 			session.P2P = hub.NextPlayer
 			hub.NextPlayer++
 		}
@@ -577,7 +713,11 @@ func (hub *Hub) datagram(session *Session, frame tunnel.Frame) error {
 	} else {
 		reply = append(reply, 0, 0, 0, 0)
 	}
-	session.emit(tunnel.Frame{Op: "udp", Port: frame.Port, Data: reply})
+	receipt := ""
+	if messageID == 1001 {
+		receipt = hub.peerReceipt(session.P2P)
+	}
+	session.emit(tunnel.Frame{Op: "udp", PeerReceipt: receipt, Port: frame.Port, Data: reply})
 	return nil
 }
 

@@ -1,0 +1,75 @@
+package game
+
+import (
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
+	"kungfu.local/server/internal/persistence"
+	"kungfu.local/server/internal/protocol"
+	"kungfu.local/server/internal/tunnel"
+	"time"
+)
+
+// A transport-only capability, never an account login token. Valid only for
+// this server lifetime; the bridge retains it only for the same native process.
+func (hub *Hub) peerReceipt(id uint32) string {
+	mac := hmac.New(sha256.New, hub.PeerKey)
+	body := protocol.Uint32Bytes(id)
+	mac.Write(body)
+	return hex.EncodeToString(append(body, mac.Sum(nil)...))
+}
+
+// Caller holds Hub.Mutex and has already authenticated the new account.
+func (hub *Hub) resumePeer(s *Session, receipt string) error {
+	if receipt == "" {
+		return nil
+	}
+	data, err := hex.DecodeString(receipt)
+	if err != nil || len(data) != 36 {
+		return persistence.ErrDenied
+	}
+	id := protocol.ReadUint32(data, 0)
+	if id == 0 || !hmac.Equal([]byte(receipt), []byte(hub.peerReceipt(id))) {
+		return persistence.ErrDenied
+	}
+	for _, other := range hub.Sessions {
+		if other != s && !other.LoggedOut && other.P2P == id {
+			return persistence.ErrDenied
+		}
+	}
+	s.P2P, s.P2PUntil = id, time.Now().Add(time.Minute)
+	return nil
+}
+
+func (hub *Hub) initPeerKey() error {
+	if len(hub.PeerKey) != 0 {
+		return nil
+	}
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		return err
+	}
+	hub.PeerKey = key
+	return nil
+}
+
+// Called only after SDK authentication on the UID-bound encrypted tunnel.
+// Preserve that SDK channel and table readiness; native game connections reopen.
+func (hub *Hub) resetNativeSession(s *Session, sdk uint32) {
+	hub.leave(s, false)
+	for id, ch := range s.Channels {
+		if id != sdk {
+			s.emit(tunnel.Frame{Op: "close", Channel: id})
+			ch.LoginBuffer = nil
+			// Keep a tombstone until the bridge acknowledges close: bytes already
+			// in flight on the old TCP channel must not terminate the new login.
+			ch.Phase = "closed"
+		}
+	}
+	s.GameChannel, s.BootstrapChannel = 0, 0
+	s.Bound = false
+	s.UDPRelayed = 0
+	s.HandoffUntil = time.Time{}
+	s.ConsumeIntents, s.Inventory = nil, nil
+}

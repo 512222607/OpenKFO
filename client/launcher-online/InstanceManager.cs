@@ -22,8 +22,12 @@ internal sealed class InstanceManager
     internal string SourceDirectory { get; }
     internal Uri HealthUri { get; }
     internal Uri Endpoint { get; }
+    internal string RootDirectory => root;
+    internal bool SharedClient => baseline["shared_client"]?.GetValue<bool>() == true;
+    private string SharedDirectory => Path.Combine(root, "launcher-components", "shared");
+    internal int WindowCount => SharedClient ? MaximumInstances : baseline["single_client"]?.GetValue<bool>() == true ? 1 : MaximumInstances;
     internal string EnvironmentName => Endpoint.IsLoopback ? "本地测试服" : "线上服务器";
-    internal string EnvironmentDescription => $"{EnvironmentName} · {Endpoint.Authority} · 多窗口登录";
+    internal string EnvironmentDescription => $"{EnvironmentName} · {Endpoint.Authority} · {(WindowCount == 1 ? "单客户端" : "多窗口登录")}";
 
     internal InstanceManager(string rootDirectory)
     {
@@ -80,13 +84,45 @@ internal sealed class InstanceManager
     internal static int LoginPort(int number) => 18084 + (number - 1) * 100;
     internal static int SDKPort(int number) => 18000 + (number - 1) * 100;
     internal static int GamePort(int number) => 18001 + (number - 1) * 100;
-    internal string ClientDirectory(int number) => number == 1 ? SourceDirectory : SourceDirectory + "-" + number;
+    internal string ClientDirectory(int number) => SharedClient || number == 1 ? SourceDirectory :
+        baseline["instances_directory"] is JsonValue configured
+            ? Path.Combine(Resolve(configured.GetValue<string>()), "client-" + number)
+            : SourceDirectory + "-" + number;
+
+    internal static IEnumerable<string> ClientFiles(string source)
+    {
+        // A client may share its root with source code and backups. Never clone those.
+        var extensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            { ".dll", ".dat", ".ini", ".xml", ".sdp", ".nlb", ".exe", ".sys", ".crt", ".ico" };
+        foreach (string file in Directory.EnumerateFiles(source))
+            if (extensions.Contains(Path.GetExtension(file)) || Path.GetFileName(file) is "SPC32" or "TipsCount.txt") yield return file;
+        foreach (string name in new[] { "Data", "effect", "GPK", "HostWidgets", "SDO", "spdata", "UI", "Weapon" })
+        {
+            string folder = Path.Combine(source, name);
+            if (Directory.Exists(folder))
+                foreach (string file in Directory.EnumerateFiles(folder, "*", new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint, IgnoreInaccessible = false }))
+                    yield return file;
+        }
+    }
     internal string InstanceDirectory(int number) => Path.Combine(root, "launcher-components", "window-" + number);
-    internal string LogPath(int number) => Path.Combine(InstanceDirectory(number), "online-client.log");
+    internal string LogPath(int number) => Path.Combine(SharedClient ? SharedDirectory : InstanceDirectory(number), "online-client.log");
 
     internal Process? FindGame(int number)
     {
         string expected = Path.Combine(ClientDirectory(number), "gfld.dat");
+        if (SharedClient)
+        {
+            Process? process = null;
+            try
+            {
+                var state = JsonNode.Parse(File.ReadAllText(Path.Combine(SharedDirectory, $"window-{number}.json")))!;
+                process = Process.GetProcessById(state["PID"]!.GetValue<int>());
+                if ((ulong)process.StartTime.ToFileTimeUtc() == state["Created"]!.GetValue<ulong>() && string.Equals(process.MainModule?.FileName, expected, StringComparison.OrdinalIgnoreCase)) return process;
+            }
+            catch (Exception ex) when (ex is IOException or System.Text.Json.JsonException or ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { }
+            process?.Dispose();
+            return null;
+        }
         foreach (var process in Process.GetProcesses())
         {
             bool retained = false;
@@ -116,7 +152,7 @@ internal sealed class InstanceManager
 
     internal async Task LaunchAsync(int number, IProgress<string> progress)
     {
-        if (number < 1 || number > MaximumInstances) throw new ArgumentOutOfRangeException(nameof(number));
+        if (number < 1 || number > WindowCount) throw new ArgumentOutOfRangeException(nameof(number));
         using (var existing = FindGame(number))
         {
             if (existing != null) { await PrepareLoginAsync(number, existing, progress); Activate(number); return; }
@@ -124,16 +160,17 @@ internal sealed class InstanceManager
         // Serialize preparation across launcher windows; never stop an existing game.
         string stateDirectory = Path.Combine(root, "launcher-components");
         Directory.CreateDirectory(stateDirectory);
-        using var preparationLock = new FileStream(Path.Combine(stateDirectory, $"window-{number}.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        using var preparationLock = new FileStream(Path.Combine(stateDirectory, SharedClient ? "shared.lock" : $"window-{number}.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         string config = await Task.Run(() => Prepare(number, progress));
         using (var existing = FindGame(number))
         {
             if (existing != null) { await PrepareLoginAsync(number, existing, progress); Activate(number); return; }
         }
-        CheckAvailablePorts(number);
-        string bridge = Path.Combine(InstanceDirectory(number), "OnlineBridge.exe");
-        var start = new ProcessStartInfo(bridge) { WorkingDirectory = InstanceDirectory(number), UseShellExecute = false, CreateNoWindow = true };
+        if (!SharedClient) CheckAvailablePorts(number);
+        string bridge = Path.Combine(SharedClient ? SharedDirectory : InstanceDirectory(number), "OnlineBridge.exe");
+        var start = new ProcessStartInfo(bridge) { WorkingDirectory = Path.GetDirectoryName(bridge)!, UseShellExecute = false, CreateNoWindow = true };
         start.ArgumentList.Add("-config"); start.ArgumentList.Add(config);
+        if (SharedClient) { start.ArgumentList.Add("-window"); start.ArgumentList.Add(number.ToString()); }
         using var helper = Process.Start(start) ?? throw new IOException("无法启动网络组件。");
         progress.Report($"窗口 {number} 正在启动游戏…");
         for (int attempt = 0; attempt < 60; attempt++)
@@ -141,7 +178,7 @@ internal sealed class InstanceManager
             await Task.Delay(500);
             using var game = FindGame(number);
             if (game != null) { await PrepareLoginAsync(number, game, progress); return; }
-            if (helper.HasExited) throw new IOException($"网络组件已退出，请查看窗口 {number} 的日志。");
+            if (helper.HasExited && (!SharedClient || helper.ExitCode != 0)) throw new IOException($"网络组件已退出，请查看窗口 {number} 的日志。");
         }
         throw new IOException($"窗口 {number} 启动超时，请查看日志；不要重复点击启动。");
     }
@@ -185,12 +222,13 @@ internal sealed class InstanceManager
 
     internal string Prepare(int number, IProgress<string> progress)
     {
+        if (number < 1 || number > WindowCount) throw new ArgumentOutOfRangeException(nameof(number));
         string directory = ClientDirectory(number);
         if (!Directory.Exists(directory))
         {
             string staging = directory + ".preparing";
             Directory.CreateDirectory(staging);
-            var files = Directory.EnumerateFiles(SourceDirectory, "*", SearchOption.AllDirectories).ToArray();
+            var files = ClientFiles(SourceDirectory).ToArray();
             for (int index = 0; index < files.Length; index++)
             {
                 string relative = Path.GetRelativePath(SourceDirectory, files[index]);
@@ -209,7 +247,7 @@ internal sealed class InstanceManager
         if (currentMutex != "KungfuKid" && currentMutex != "KungfuKi2" && currentMutex != $"Kungfu{number:000}") throw new IOException("不支持的游戏版本，未修改客户端。");
         Encoding.ASCII.GetBytes("KungfuKid\0").CopyTo(imageBytes, MutexOffset);
         if (!Hash(imageBytes).Equals(OriginalImageHash, StringComparison.OrdinalIgnoreCase)) throw new IOException("游戏文件校验不一致，未修改客户端。");
-        if (number > 1)
+        if (number > 1 && !SharedClient)
         {
             Encoding.ASCII.GetBytes(number == 2 ? "KungfuKi2\0" : $"Kungfu{number:000}\0").CopyTo(imageBytes, MutexOffset);
             if (!File.ReadAllBytes(image).AsSpan().SequenceEqual(imageBytes)) File.WriteAllBytes(image, imageBytes);
@@ -218,19 +256,21 @@ internal sealed class InstanceManager
             if (!FileHash(sourcePackage).Equals(baseline["config_hash"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase)) throw new IOException("武器配置与线上版本不一致，请先更新服务器允许的配置。");
             if (FileHash(sourcePackage) != FileHash(targetPackage)) File.Copy(sourcePackage, targetPackage, true);
         }
-        ReplacePort(Path.Combine(directory, "server.ini"), @"(?m)^port=\d+", "port=" + LoginPort(number));
-        ReplacePort(Path.Combine(directory, "Data", "config.xml"), "Port=\"[0-9]+\"", "Port=\"" + SDKPort(number) + "\"");
+        int portWindow = SharedClient ? 1 : number;
+        ReplacePort(Path.Combine(directory, "server.ini"), @"(?m)^port=\d+", "port=" + LoginPort(portWindow));
+        ReplacePort(Path.Combine(directory, "Data", "config.xml"), "Port=\"[0-9]+\"", "Port=\"" + SDKPort(portWindow) + "\"");
         Directory.CreateDirectory(InstanceDirectory(number));
         var config = (JsonObject)baseline.DeepClone();
         config["client_directory"] = directory;
         config["client_sha256"] = Hash(imageBytes);
-        config["login_port"] = LoginPort(number); config["sdk_port"] = SDKPort(number); config["game_port"] = GamePort(number);
+        config["login_port"] = LoginPort(portWindow); config["sdk_port"] = SDKPort(portWindow); config["game_port"] = GamePort(portWindow);
+        if (SharedClient) { Directory.CreateDirectory(SharedDirectory); config["control_directory"] = SharedDirectory; }
         foreach (string key in new[] { "server_certificate", "login_certificate", "login_key" }) config[key] = Resolve(baseline[key]!.GetValue<string>());
         string path = Path.Combine(InstanceDirectory(number), "bridge.json");
         File.WriteAllText(path, config.ToJsonString(new() { WriteIndented = true }));
         using var resource = Assembly.GetExecutingAssembly().GetManifestResourceStream("OnlineBridge.exe") ?? throw new IOException("缺少网络组件。");
         using var buffer = new MemoryStream(); resource.CopyTo(buffer);
-        string helper = Path.Combine(InstanceDirectory(number), "OnlineBridge.exe");
+        string helper = Path.Combine(SharedClient ? SharedDirectory : InstanceDirectory(number), "OnlineBridge.exe");
         byte[] helperBytes = buffer.ToArray();
         if (!File.Exists(helper) || FileHash(helper) != Hash(helperBytes)) File.WriteAllBytes(helper, helperBytes);
         return path;

@@ -244,30 +244,48 @@ func combos(a *archive, id string) ([]Combo, error) {
 	if err != nil {
 		return nil, err
 	}
+	return readComboSequences(root), nil
+}
+
+// Each ActNode is the next input in a sequence, not an independent shortcut.
+func readComboSequences(root *xmlNode) []Combo {
+	result := []Combo{}
 	root.walk(func(node *xmlNode) {
 		if node.tag != "Sequence" {
 			return
 		}
 		sequence := Combo{Name: node.get("Name"), Nodes: []ComboNode{}}
+		prefix := ""
+		complete := true
 		for _, child := range node.children {
-			if child.comment {
+			if child.comment || child.tag != "ActNode" {
 				continue
 			}
 			keys := []string{}
 			for _, input := range child.children {
-				if input.get("Name") != "" {
-					keys = append(keys, input.get("Name"))
+				if input.comment || input.tag != "Icon" {
+					continue
+				}
+				key := strings.TrimSpace(input.get("Name"))
+				if key == "" {
+					complete = false
+				} else {
+					keys = append(keys, key)
 				}
 			}
-			label := strings.Join(keys, "+")
-			if label == "" {
-				label = "原始按键未标注"
+			if len(keys) == 0 {
+				complete = false
+			}
+			prefix += strings.Join(keys, "")
+			label := prefix
+			if !complete {
+				label = "按键提示不完整（" + sequence.Name + "）"
 			}
 			sequence.Nodes = append(sequence.Nodes, ComboNode{child.get("State"), label})
 		}
 		result = append(result, sequence)
 	})
-	return result, nil
+	return result
 }
 
 type Hit struct {
@@ -531,16 +549,9 @@ func inspect(a *archive, items []Item) (*inspection, error) {
 			}
 			label := strings.Join(labels, " / ")
 			if label == "" {
-				label = "状态 " + state + "（按键映射待核实）"
-				if len(candidates) == 1 {
-					if description := actionDescription(candidates[0].node); description != "" {
-						label = description + "（动画说明）"
-					}
-				}
+				label = "未收录按键 · 状态 " + state
 			}
-			if number <= 6 {
-				label = fmt.Sprintf("第 %d 下 C", number)
-			}
+
 			weapon.Stages = append(weapon.Stages, Stage{number, state, label, action, refIDs, hits, reason == "", reason})
 		}
 		if len(weapon.Stages) > 0 {

@@ -64,6 +64,7 @@ func main() {
 		var request struct {
 			UID               uint64
 			Account, Password string
+			CreateCharacter   bool `json:"create_character"`
 		}
 		if err = input.Decode(&request); err == nil {
 			if *operation == "reset-password" {
@@ -73,6 +74,10 @@ func main() {
 			var account persistence.Account
 			account, err = persistence.NewAccount(request.UID, request.Account, request.Password)
 			if err == nil {
+				if request.CreateCharacter {
+					account.Profile = make([]byte, 360)
+					account.Inventory = nil
+				}
 				err = store.Create(account)
 			}
 		}

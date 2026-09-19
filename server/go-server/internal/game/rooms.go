@@ -12,10 +12,11 @@ import (
 )
 
 type Config struct {
-	Settlement SettlementRewards   `json:"settlement"`
-	ConfigHash string              `json:"config_hash"`
-	Pools      map[string][]uint32 `json:"pools"`
-	Groups     map[string][]uint32 `json:"groups"`
+	CharacterChoices []persistence.CharacterChoice `json:"character_choices"`
+	Settlement       SettlementRewards             `json:"settlement"`
+	ConfigHash       string                        `json:"config_hash"`
+	Pools            map[string][]uint32           `json:"pools"`
+	Groups           map[string][]uint32           `json:"groups"`
 }
 type Member struct {
 	BattleLevel          uint16
@@ -25,13 +26,14 @@ type Member struct {
 	BattleEvents         map[uint32]battleSequence
 }
 type Room struct {
-	Reports map[uint64][]byte
-	ID      uint16
-	Owner   uint64
-	Request []byte
-	Stage   string
-	Serial  uint32
-	Members map[uint64]*Member
+	LoadTimer *time.Timer
+	Reports   map[uint64][]byte
+	ID        uint16
+	Owner     uint64
+	Request   []byte
+	Stage     string
+	Serial    uint32
+	Members   map[uint64]*Member
 }
 
 func (hub *Hub) resolve(request []byte) ([]byte, error) {
@@ -175,24 +177,13 @@ func (hub *Hub) leave(session *Session, acknowledge bool) {
 		session.sendGame(protocol.Message{ID: 3115})
 	}
 	if len(room.Members) == 0 {
-		delete(hub.Rooms, room.ID)
-		return
-	}
-	if room.Stage != "room" {
-		log.Printf("battle_aborted room=%d serial=%d stage=%s leaving_uid=%d remaining=%d", room.ID, room.Serial, room.Stage, session.UID, len(room.Members))
-		for _, member := range room.Members {
-			member.Session.Room = nil
-			member.Session.ConsumeIntents = nil
-			if channel := member.Session.game(); channel != nil {
-				channel.Phase = "lobby"
-			}
-			member.Session.sendGame(protocol.Message{ID: 3115})
-			member.Session.sendGame(notice("有玩家离开，本局已结束，请重新创建房间。"))
+		if room.LoadTimer != nil {
+			room.LoadTimer.Stop()
 		}
-		clear(room.Members)
 		delete(hub.Rooms, room.ID)
 		return
 	}
+	interrupted := room.Stage != "room"
 	hub.broadcast(room, protocol.Message{ID: 3130, Payload: protocol.Uint64Bytes(session.UID)}, 0)
 	if room.Owner == session.UID {
 		var first *Member
@@ -203,6 +194,12 @@ func (hub *Hub) leave(session *Session, acknowledge bool) {
 		}
 		room.Owner = first.Session.UID
 		hub.broadcast(room, protocol.Message{ID: 3160, Payload: protocol.Uint64Bytes(room.Owner)}, 0)
+	}
+	if interrupted {
+		if err := hub.recoverRoom(room, "有玩家离开，本局中止，已返回房间。本次中止不发放奖励。"); err != nil {
+			log.Printf("room_recovery_failed room=%d error=%v", room.ID, err)
+		}
+		return
 	}
 	hub.clearRoomReady(room)
 }
@@ -324,6 +321,7 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 				return true, hub.install(target, session)
 			}
 		}
+		session.sendGame(notice("暂无可加入的房间，请创建房间或稍后重试。"))
 	case 3110:
 		if len(payload) != 0 {
 			return true, protocol.ErrFrame
@@ -467,7 +465,10 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 			room.Serial = serial
 			room.Reports = nil
 			room.Stage = "loading"
+			hub.watchLoading(room)
 			for _, member := range room.Members {
+				member.Loaded, member.Input = false, false
+				member.BattleEvents = nil
 				member.Session.ConsumeIntents = nil
 				response := make([]byte, 53)
 				protocol.WriteUint32(response, 0, uint32(room.ID))
@@ -483,14 +484,17 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 			}
 		}
 	case 4160:
-		if len(payload) != 0 || room == nil {
+		if len(payload) != 0 {
 			return true, protocol.ErrFrame
+		}
+		if room == nil {
+			return true, nil
 		}
 		if room.Members[uid].Loaded {
 			return true, nil
 		}
 		if room.Stage != "loading" {
-			return true, protocol.ErrFrame
+			return true, nil
 		}
 		room.Members[uid].Loaded = true
 		hub.broadcast(room, protocol.Message{ID: 4170, Payload: protocol.Uint64Bytes(uid)}, 0)
@@ -505,14 +509,17 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		}
 		hub.broadcast(room, protocol.Message{ID: 4180}, 0)
 	case 8040:
-		if len(payload) != 14 || room == nil || protocol.ReadUint16(payload, 0) != room.ID || protocol.ReadUint64(payload, 2) != uid {
+		if len(payload) != 14 || protocol.ReadUint64(payload, 2) != uid {
 			return true, protocol.ErrFrame
+		}
+		if room == nil || protocol.ReadUint16(payload, 0) != room.ID {
+			return true, nil
 		}
 		if room.Members[uid].Input {
 			return true, nil
 		}
 		if room.Stage != "wait_ready" {
-			return true, protocol.ErrFrame
+			return true, nil
 		}
 		room.Members[uid].Input = true
 		for _, member := range room.Members {
@@ -521,12 +528,19 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 			}
 		}
 		room.Stage = "battle"
+		if room.LoadTimer != nil {
+			room.LoadTimer.Stop()
+			room.LoadTimer = nil
+		}
 		for _, member := range room.Members {
 			member.Session.game().Phase = "battle"
 		}
 		response := append(protocol.Uint32Bytes(uint32(room.ID)), protocol.Uint32Bytes(uint32(room.ID))...)
 		response = append(response, protocol.Uint32Bytes(room.Serial)...)
 		hub.broadcast(room, protocol.Message{ID: 8070, Payload: response}, 0)
+		// 8070 initializes the native clock baseline; 8090 opens its run gate.
+		// Without it, timed effects never reach their expiration deadline.
+		hub.broadcast(room, protocol.Message{ID: 8090, Payload: protocol.Uint32Bytes(1)}, 0)
 	case 8071:
 		return true, hub.battleMessage(session, channel, message)
 	default:

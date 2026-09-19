@@ -29,6 +29,8 @@ import (
 )
 
 type Config struct {
+	SharedClient      bool   `json:"shared_client"`
+	ControlDirectory  string `json:"control_directory"`
 	TraceProtocol     bool   `json:"trace_protocol"`
 	LoginPort         int    `json:"login_port"`
 	SDKPort           int    `json:"sdk_port"`
@@ -42,11 +44,15 @@ type Config struct {
 	LoginKey          string `json:"login_key"`
 }
 type Bridge struct {
-	Config Config
-	Image  string
-	mutex  sync.Mutex
-	active *remoteSession
-	udp    *net.UDPConn
+	peerMutex    sync.Mutex
+	peerReceipts map[Identity]string
+	Config       Config
+	Image        string
+	mutex        sync.Mutex
+	active       *remoteSession
+	sessions     map[uint32]*remoteSession
+	udp          *net.UDPConn
+	relogin      chan *remoteSession
 }
 type remoteSession struct {
 	account     string
@@ -62,6 +68,7 @@ type remoteSession struct {
 	udpPorts    map[int]bool
 	nextChannel uint32
 	done        chan struct{}
+	loggedOut   chan struct{}
 	closeOnce   sync.Once
 }
 
@@ -141,7 +148,10 @@ func Run(ctx context.Context, config Config, launch bool) error {
 	if err != nil {
 		return err
 	}
-	bridge := &Bridge{Config: config, Image: image}
+	bridge := &Bridge{Config: config, Image: image, relogin: make(chan *remoteSession, 1)}
+	if config.SharedClient {
+		bridge.sessions = make(map[uint32]*remoteSession)
+	}
 	var listeners []net.Listener
 	defer func() {
 		for _, listener := range listeners {
@@ -182,26 +192,75 @@ func Run(ctx context.Context, config Config, launch bool) error {
 	defer bridge.udp.Close()
 	go bridge.datagrams()
 	log.Printf("online bridge ready: %s", config.URL)
+	if config.SharedClient {
+		return bridge.runShared(ctx)
+	}
 	var process *exec.Cmd
 	clientExited := make(chan struct{})
-	if launch {
-		process = exec.Command(image)
-		process.Dir = config.ClientDirectory
-		if err = process.Start(); err != nil {
+	startClient := func() error {
+		cmd := exec.Command(image)
+		cmd.Dir = config.ClientDirectory
+		if err := cmd.Start(); err != nil {
 			return err
 		}
-		go func() { process.Wait(); log.Print("client exited"); close(clientExited) }()
+		process = cmd
+		exited := make(chan struct{})
+		clientExited = exited
+		go func() { cmd.Wait(); log.Printf("client exited pid=%d", cmd.Process.Pid); close(exited) }()
+		return nil
 	}
-	select {
-	case <-ctx.Done():
-	case <-clientExited:
+	defer func() {
+		bridge.mutex.Lock()
+		defer bridge.mutex.Unlock()
+		if bridge.active != nil {
+			bridge.active.close()
+		}
+	}()
+	if launch {
+		if err = startClient(); err != nil {
+			return err
+		}
 	}
-	bridge.mutex.Lock()
-	if bridge.active != nil {
-		bridge.active.close()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-clientExited:
+			return nil
+		case old := <-bridge.relogin:
+			bridge.mutex.Lock()
+			current := bridge.active == old
+			if current {
+				bridge.active = nil
+			}
+			bridge.mutex.Unlock()
+			if !current {
+				continue
+			}
+			old.close()
+			if !launch || process == nil || uint32(process.Process.Pid) != old.identity.PID {
+				return errors.New("relogin requires a client started by this bridge")
+			}
+			identity, identityErr := processIdentity(old.identity.PID, image)
+			if identityErr != nil || identity != old.identity {
+				return errors.New("relogin client identity changed")
+			}
+			// Kill through the retained child process handle, never by executable
+			// name or a newly opened PID. Only this window loses its old runtime.
+			if err = process.Process.Kill(); err != nil {
+				return err
+			}
+			select {
+			case <-clientExited:
+			case <-time.After(10 * time.Second):
+				return errors.New("old client did not exit")
+			}
+			if err = startClient(); err != nil {
+				return err
+			}
+			log.Printf("relogin_client_recreated old_pid=%d new_pid=%d", old.identity.PID, process.Process.Pid)
+		}
 	}
-	bridge.mutex.Unlock()
-	return nil
 }
 
 func (bridge *Bridge) connect(account, password string, identity Identity) (*remoteSession, error) {
@@ -241,7 +300,8 @@ func (bridge *Bridge) connect(account, password string, identity Identity) (*rem
 		return nil, err
 	}
 	session := &remoteSession{account: account, traces: map[uint32]*packetTrace{}, identity: identity, connection: connection, reader: bufio.NewReaderSize(connection, 65536), encoder: json.NewEncoder(connection), channels: map[uint32]net.Conn{}, udpPorts: map[int]bool{}, done: make(chan struct{})}
-	if err = session.send(tunnel.Frame{Op: "auth", Account: account, Password: password, ConfigHash: bridge.Config.ConfigHash, Port: uint16(bridge.Config.GamePort)}); err != nil {
+	receipt := bridge.peerReceiptFor(identity)
+	if err = session.send(tunnel.Frame{PeerReceipt: receipt, Op: "auth", Account: account, Password: password, ConfigHash: bridge.Config.ConfigHash, Port: uint16(bridge.Config.GamePort)}); err != nil {
 		session.close()
 		return nil, err
 	}
@@ -256,6 +316,7 @@ func (bridge *Bridge) connect(account, password string, identity Identity) (*rem
 		return nil, fmt.Errorf("login rejected: %s", response.Error)
 	}
 	session.uid = response.UID
+	session.loggedOut = make(chan struct{})
 	connection.SetDeadline(time.Time{})
 	return session, nil
 }
@@ -281,6 +342,11 @@ func (bridge *Bridge) login(raw net.Conn, certificate tls.Certificate) {
 	// Serialize login replacement, while existing forwarding continues.
 	bridge.mutex.Lock()
 	defer bridge.mutex.Unlock()
+	// The shared listener routes by verified PID and process creation time.
+	// Keep the legacy replacement flow scoped to this requesting process.
+	if bridge.Config.SharedClient {
+		bridge.active = bridge.sessions[identity.PID]
+	}
 	if bridge.active != nil {
 		select {
 		case <-bridge.active.done:
@@ -288,8 +354,24 @@ func (bridge *Bridge) login(raw net.Conn, certificate tls.Certificate) {
 		default:
 			current, identityErr := processIdentity(bridge.active.identity.PID, bridge.Image)
 			if identityErr == nil && current == bridge.active.identity {
-				json.NewEncoder(connection).Encode(map[string]any{"code": 403, "msg": "Client already connected"})
-				return
+				if identity != bridge.active.identity {
+					json.NewEncoder(connection).Encode(map[string]any{"code": 403, "msg": "Client already connected"})
+					return
+				}
+				old := bridge.active
+				if err := old.send(tunnel.Frame{Op: "logout"}); err != nil {
+					old.close()
+					json.NewEncoder(connection).Encode(map[string]any{"code": 403, "msg": "Logout failed; retry login"})
+					return
+				}
+				select {
+				case <-old.loggedOut:
+					log.Printf("relogin_previous_session_released account=%q uid=%d", old.account, old.uid)
+				case <-time.After(5 * time.Second):
+					old.close()
+					json.NewEncoder(connection).Encode(map[string]any{"code": 403, "msg": "Logout timed out; retry login"})
+					return
+				}
 			}
 			bridge.active.close()
 			bridge.active = nil
@@ -311,6 +393,9 @@ func (bridge *Bridge) login(raw net.Conn, certificate tls.Certificate) {
 		return
 	}
 	bridge.active = session
+	if bridge.Config.SharedClient {
+		bridge.sessions[identity.PID] = session
+	}
 	token := make([]byte, 16)
 	if _, err = rand.Read(token); err != nil {
 		session.close()
@@ -349,6 +434,9 @@ func (bridge *Bridge) current(identity Identity) *remoteSession {
 	bridge.mutex.Lock()
 	defer bridge.mutex.Unlock()
 	session := bridge.active
+	if bridge.Config.SharedClient {
+		session = bridge.sessions[identity.PID]
+	}
 	if session == nil || session.identity != identity {
 		return nil
 	}
@@ -435,6 +523,22 @@ func (bridge *Bridge) receive(session *remoteSession) {
 			return
 		}
 		switch frame.Op {
+		case "relogin":
+			select {
+			case bridge.relogin <- session:
+			case <-session.done:
+			}
+			return
+		case "logged_out":
+			close(session.loggedOut)
+			return
+		case "close":
+			session.mutex.Lock()
+			connection := session.channels[frame.Channel]
+			session.mutex.Unlock()
+			if connection != nil {
+				connection.Close()
+			}
 		case "data":
 			session.mutex.Lock()
 			connection := session.channels[frame.Channel]
@@ -460,6 +564,7 @@ func (bridge *Bridge) receive(session *remoteSession) {
 				}
 			}
 		case "udp":
+			bridge.rememberPeerReceipt(session.identity, frame.PeerReceipt)
 			session.mutex.Lock()
 			allowed := session.udpPorts[int(frame.Port)]
 			session.mutex.Unlock()

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'reward_table.dart';
+import 'drop_config.dart';
 
 typedef RewardApi = Future<dynamic> Function(Map<String, dynamic>);
 
@@ -25,10 +26,15 @@ class RewardConfigPage extends StatefulWidget {
 
 class _RewardConfigPageState extends State<RewardConfigPage> {
   List<Map<String, int>> rows = [];
+  List<Map<String, dynamic>> drops = [];
   int? revision;
   bool busy = false, growth = false, dirty = false;
   String status = '';
-  Map<String, dynamic> get rules => {'growth_enabled': growth, 'levels': rows};
+  Map<String, dynamic> get rules => {
+    'growth_enabled': growth,
+    'levels': rows,
+    'drops': drops,
+  };
   @override
   void initState() {
     super.initState();
@@ -49,6 +55,9 @@ class _RewardConfigPageState extends State<RewardConfigPage> {
 
   void apply(dynamic r) {
     rows = rewardRows(Map<String, dynamic>.from(r['rules']));
+    drops = (r['rules']['drops'] as List? ?? [])
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
     growth = r['rules']['growth_enabled'] == true;
     revision = r['revision'] as int;
     dirty = false;
@@ -390,6 +399,24 @@ class _RewardConfigPageState extends State<RewardConfigPage> {
               spacing: 10,
               runSpacing: 8,
               children: [
+                OutlinedButton(
+                  onPressed: busy || revision == null
+                      ? null
+                      : () async {
+                          final result =
+                              await showDialog<List<Map<String, dynamic>>>(
+                                context: context,
+                                builder: (_) => DropConfigDialog(drops: drops),
+                              );
+                          if (result != null && mounted) {
+                            setState(() {
+                              drops = result;
+                              dirty = true;
+                            });
+                          }
+                        },
+                  child: Text('武器掉落（${drops.length}条）'),
+                ),
                 FilledButton(
                   onPressed: busy || revision == null || revision == 0
                       ? null
