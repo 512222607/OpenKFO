@@ -675,6 +675,7 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 			}
 		}
 		room.Stage = "wait_ready"
+		hub.sendInitialPVEBlocks(room)
 		if room.FosterPositions != nil {
 			// 941A90 only constructs/sends; include the controller as a recipient.
 			hub.broadcast(room, protocol.Message{ID: protocol.MsgBattleEvent, Payload: room.FosterPositions}, 0)

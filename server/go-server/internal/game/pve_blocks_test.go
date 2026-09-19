@@ -96,3 +96,83 @@ func TestPVEBlockLifecycle(t *testing.T) {
 		})
 	}
 }
+
+func TestPVEBlocksWaitForAllResources(t *testing.T) {
+	for _, mode := range []protocol.RoomType{protocol.FosterMode, protocol.StageAssault} {
+		for _, ownerFirst := range []bool{false, true} {
+			h, owner, peer, outsider := combatFixture()
+			r := owner.Room
+			r.Request[46] = byte(mode)
+			r.Stage = "loading"
+			for _, m := range r.Members {
+				m.Loaded = false
+				m.Session.game().Phase = "loading"
+			}
+			packet := func(create bool, id, seq uint32) []byte {
+				var p []byte
+				if create {
+					p = make([]byte, 92)
+					protocol.WriteUint32(p, 0, protocol.BattleEventPVEBlockCreate)
+					protocol.WriteUint32(p, 40, id)
+				} else {
+					p = make([]byte, 43)
+					protocol.WriteUint32(p, 0, protocol.BattleEventPVEBlockRemove)
+					protocol.WriteUint32(p, 39, id)
+				}
+				protocol.WriteUint64(p, 4, owner.UID)
+				protocol.WriteUint32(p, 19, seq)
+				return p
+			}
+			send := func(p []byte) error {
+				return h.battleMessage(owner, owner.game(), protocol.Message{ID: 8071, Payload: p})
+			}
+			first, last := owner, peer
+			if !ownerFirst {
+				first, last = peer, owner
+			}
+			// A peer may finish loading before the controller constructs its walls.
+			if !ownerFirst {
+				if e := h.route(first, first.game(), protocol.Message{ID: 4160}); e != nil {
+					t.Fatal(e)
+				}
+				roomOutputs(t, owner, 4170)
+				roomOutputs(t, peer, 4170)
+			}
+			want := packet(true, 200, 3)
+			for _, p := range [][]byte{packet(true, 100, 1), packet(false, 100, 2), want, packet(true, 100, 1)} {
+				if e := send(p); e != nil {
+					t.Fatal(e)
+				}
+			}
+			roomOutputs(t, owner)
+			roomOutputs(t, peer)
+			if ownerFirst {
+				if e := h.route(first, first.game(), protocol.Message{ID: 4160}); e != nil {
+					t.Fatal(e)
+				}
+				roomOutputs(t, owner, 4170)
+				roomOutputs(t, peer, 4170)
+				if e := send(packet(false, 200, 4)); e != nil {
+					t.Fatal(e)
+				}
+				if r.PVEBlocks[200].payload == nil {
+					t.Fatal("post-ready packet changed initial walls")
+				}
+			}
+			if e := h.route(last, last.game(), protocol.Message{ID: 4160}); e != nil {
+				t.Fatal(e)
+			}
+			roomOutputs(t, owner, 4170, 4180)
+			out := roomOutputs(t, peer, 4170, 8071, 4180)
+			if !bytes.Equal(out[1].Payload, want) {
+				t.Fatal("replayed removed/stale wall")
+			}
+			if e := h.route(last, last.game(), protocol.Message{ID: 4160}); e != nil {
+				t.Fatal(e)
+			}
+			roomOutputs(t, owner)
+			roomOutputs(t, peer)
+			roomOutputs(t, outsider)
+		}
+	}
+}

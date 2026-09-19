@@ -28,6 +28,9 @@ func (hub *Hub) battleMessage(session *Session, channel *Channel, message protoc
 	if len(payload) >= 4 && protocol.ReadUint32(payload, 0) == protocol.BattleEventFosterPositions {
 		return hub.fosterPositions(session, channel, payload)
 	}
+	if len(payload) >= 4 && (protocol.ReadUint32(payload, 0) == protocol.BattleEventPVEBlockCreate || protocol.ReadUint32(payload, 0) == protocol.BattleEventPVEBlockRemove) {
+		return hub.pveBlockMessage(session, channel, message)
+	}
 	if room == nil || room.Stage != "battle" || channel.Phase != "battle" {
 		return nil
 	}
@@ -36,9 +39,6 @@ func (hub *Hub) battleMessage(session *Session, channel *Channel, message protoc
 		return protocol.ErrFrame
 	}
 	id := protocol.ReadUint32(payload, 0)
-	if id == protocol.BattleEventPVEBlockCreate || id == protocol.BattleEventPVEBlockRemove {
-		return hub.pveBlockMessage(session, message)
-	}
 	if id == protocol.BattleEventPVEActorCreate || id == protocol.BattleEventPVEActorRemove {
 		return hub.pveActorMessage(session, message)
 	}
