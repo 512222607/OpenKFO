@@ -30,6 +30,9 @@ func TestStageFinishTraceUsesRoomMode(t *testing.T) {
 			if strings.Contains(text, "关卡原因=波次结束标记") != (mode == protocol.StageAssault && direction == "C->S") {
 				t.Fatal("mode-specific reason leaked", entry)
 			}
+			if strings.Contains(text, "关卡原因=地图脚本完成标记") != (mode == protocol.FosterMode && direction == "C->S") {
+				t.Fatal("script completion confused with waves", entry)
+			}
 			if len(entry["hex"].(string)) != len(p)*2 {
 				t.Fatal("raw report lost")
 			}

@@ -16,7 +16,7 @@ func validateStageFinish(r *Room, payload []byte) (string, error) {
 	if r == nil || r.Type() != protocol.StageAssault || r.StageWaves == nil {
 		return "", nil
 	}
-	_, reason, err := protocol.ParseStageFinishReport(payload)
+	_, reason, err := protocol.ParsePVEFinishReport(r.Type(), payload)
 	if err != nil {
 		return "", err
 	}

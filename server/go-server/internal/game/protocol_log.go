@@ -55,9 +55,9 @@ func (s *Session) tracePacket(direction string, channel uint32, transport string
 				if rows, err := protocol.ParseBattleReport(payload); err == nil {
 					var detail strings.Builder
 					detail.WriteString("客户端结算报告（仍需服务器验证）")
-					if s.Room != nil && s.Room.Type() == protocol.StageAssault {
-						if _, reason, err := protocol.ParseStageFinishReport(payload); err == nil {
-							fmt.Fprintf(&detail, "；关卡原因=%s（%d），不是竞技胜负或发奖凭据", reason, reason)
+					if s.Room != nil && (s.Room.Type() == protocol.StageAssault || s.Room.Type() == protocol.FosterMode) {
+						if _, reason, err := protocol.ParsePVEFinishReport(s.Room.Type(), payload); err == nil {
+							fmt.Fprintf(&detail, "；关卡原因=%s（%d），不是竞技胜负或发奖凭据", reason.Description(s.Room.Type()), reason)
 						} else {
 							detail.WriteString("；关卡报告字段不一致或原因未确认")
 						}

@@ -19,6 +19,16 @@ func TestStageFinishReport(t *testing.T) {
 		if err != nil || got != reason || rows[7].UID == rows[0].UID || got.String() == "未知关卡结束原因" {
 			t.Fatal("native report rejected", got, err)
 		}
+		for _, mode := range []RoomType{StageAssault, FosterMode, FreePractice, TeamSurvival, UnknownRoomType} {
+			parsed, code, e := ParsePVEFinishReport(mode, p)
+			if mode == StageAssault || mode == FosterMode {
+				if e != nil || parsed != rows || code != reason {
+					t.Fatal("shared native report changed", mode, e)
+				}
+			} else if e == nil {
+				t.Fatal("non-PVE report accepted", mode)
+			}
+		}
 		for _, failure := range []string{"mixed reason", "unknown reason", "room", "serial", "duplicate", "empty slot", "empty", "short"} {
 			t.Run(reason.String()+"/"+failure, func(t *testing.T) {
 				bad := bytes.Clone(p)
@@ -41,8 +51,10 @@ func TestStageFinishReport(t *testing.T) {
 				case "short":
 					bad = bad[:len(bad)-1]
 				}
-				if _, _, err := ParseStageFinishReport(bad); err == nil {
-					t.Fatal("invalid report accepted")
+				for _, mode := range []RoomType{StageAssault, FosterMode} {
+					if _, _, err := ParsePVEFinishReport(mode, bad); err == nil {
+						t.Fatal("invalid report accepted", mode)
+					}
 				}
 			})
 		}
