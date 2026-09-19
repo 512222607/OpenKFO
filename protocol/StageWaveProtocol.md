@@ -271,3 +271,13 @@ leave现在区分活动关卡和已提交的settlement：loading/wait_ready/batt
 `ParsePVEFinishReport`显式接收房间类型，仅允许模式10/21；对原因、UID重复、空槽、房间和场次一致性复用严格解析。日志按模式显示“地图脚本完成标记”或“波次结束标记”，避免将相同数值错误解释为同一完成条件。解析不授权发奖，模式10准入和结算仍未开放；需继续恢复具体地图脚本目标、进度验证及结果页布局。
 
 测试覆盖两种模式的三类原因及畸形报告、竞技模式拒绝、上下行日志区分。`go test ./...`通过；数据库专项和真实客户端画面不属于该命令的默认覆盖。
+
+## 模式10实际脚本运行库（2026-09-20）
+
+`nixiang/foster-script-init.asm`记录942910：构造并依次执行地图脚本目录下的`include`、`config.lua`与所选地图的`.lua`，之后调用`main`。不能只读取相邻的`pve.lua`就认定它是运行代码。
+
+当前Data/config.spf2的`script/pve/include`为28397B Lua 5.1编译块，SHA256为`0a083607cab1456c0976038f1e78658a208607355c015060a4492259cde5280f`，头部为`1b4c75615100010404040800`。只读结构解析得到78个函数原型；顶层包含`libs/apis.lua`、`libs/pve.lua`、`libs/event.lua`、`libs/monster.lua`、`libs/timer.lua`。没有执行该字节码。
+
+其中`libs/pve.lua`的map_init函数原型为源行5–34，参数players/events/count/check_finished；其内行15–17的默认结束函数常量为event_mgr、size、0。旁侧libs/pve.lua明文（SHA256 `2c80d4e1718a25f2c4a994d722e74e7e46cc823369a5a496e1a7fd50b16e3457`）可交叉核对默认事件管理器清空条件。地图也可以提供自定义check_finished，不能将默认条件泛化到所有地图。地图8110由config.lua实际绑定act_jiedoudazhan_easy，包含区域触发与分组生成，并非20571波次脚本。
+
+配置读取代码新增模式10的runtime_script/runtime_hash字段，指向实际加载的include；缺失运行文件时报告错误，不用旁侧源码代替。保留原有地图脚本哈希，模式21继续采用既有StageAssault运行库。实包测试验证模式隔离、实际include指纹以及读取不修改客户端。此字段为证据及后续规则版本绑定所用，不代表脚本已在服务器执行或模式10已开放。

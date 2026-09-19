@@ -10,6 +10,8 @@ type StageMap struct {
 	WavePreview       *StageWavePreview `json:"wave_preview,omitempty"`
 	Script            string            `json:"script,omitempty"`
 	ScriptHash        string            `json:"script_hash,omitempty"`
+	RuntimeScript     string            `json:"runtime_script,omitempty"`
+	RuntimeHash       string            `json:"runtime_hash,omitempty"`
 	Logic             uint32            `json:"logic"`
 	Group             uint32            `json:"group"`
 	Difficulty        uint32            `json:"difficulty"`

@@ -2,6 +2,7 @@ package desktop
 
 import (
 	"fmt"
+	"kungfu.local/server/internal/protocol"
 	"regexp"
 	"strconv"
 	"strings"
@@ -65,6 +66,7 @@ func (a *archive) attachStageScripts(maps []StageMap) error {
 	if err != nil {
 		return err
 	}
+	var fosterRuntimeHash string
 	for i := range maps {
 		name := bindings[maps[i].MapID]
 		if name == "" {
@@ -75,7 +77,20 @@ func (a *archive) attachStageScripts(maps []StageMap) error {
 			return fmt.Errorf("PVE map %d script: %w", maps[i].MapID, err)
 		}
 		maps[i].Script, maps[i].ScriptHash = name, digest(raw)
-		if maps[i].MapType == 21 {
+		if maps[i].MapType == uint32(protocol.FosterMode) {
+			// 942910 executes the compiled include before config.lua and the
+			// selected map script. The adjacent pve.lua is not that runtime.
+			const runtime = "script/pve/include"
+			if fosterRuntimeHash == "" {
+				compiled, e := a.raw(runtime)
+				if e != nil {
+					return fmt.Errorf("PVE mode 10 runtime: %w", e)
+				}
+				fosterRuntimeHash = digest(compiled)
+			}
+			maps[i].RuntimeScript, maps[i].RuntimeHash = runtime, fosterRuntimeHash
+		}
+		if maps[i].MapType == uint32(protocol.StageAssault) {
 			maps[i].WavePreview, err = a.stageWavePreview(name, raw)
 			if err != nil {
 				return err

@@ -40,6 +40,13 @@ func TestStageCatalogueClientArchive(t *testing.T) {
 	}
 	t.Logf("read %d native map selections; archive unchanged", len(maps))
 	for _, row := range maps {
+		if row.MapType == 10 {
+			if row.RuntimeScript != "script/pve/include" || row.RuntimeHash != "0a083607cab1456c0976038f1e78658a208607355c015060a4492259cde5280f" {
+				t.Fatalf("mode 10 must bind the loaded bytecode, not a loose Lua source: %+v", row)
+			}
+		} else if row.RuntimeScript != "" || row.RuntimeHash != "" {
+			t.Fatal("mode 10 runtime leaked to another mode", row.MapID)
+		}
 		if row.MapID == 9170 && (row.Script != "script/pve/act_zombiedefend_normal.lua" || len(row.ScriptHash) != 64) {
 			t.Fatalf("native script binding lost: %+v", row)
 		}
