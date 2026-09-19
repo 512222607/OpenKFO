@@ -103,6 +103,8 @@ const (
 	MsgTutorialComplete     = 4124
 	MsgTitleAward           = 4125
 	MsgClaimTitleReward     = 4126
+	MsgNetworkDelayReply    = 4140
+	MsgNetworkDelayProbe    = 4150
 	MsgResourceReady        = 4160
 	MsgPlayerResourceReady  = 4170
 	MsgAllResourcesReady    = 4180

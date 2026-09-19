@@ -86,6 +86,8 @@ func TestTasksTLS(t *testing.T) {
 	protocol.WriteUint32(catalog, 9, 7)
 	exec(`INSERT INTO offers VALUES(7,0,0,?,?,TRUE)`, catalog, item)
 	exec(`INSERT INTO offer_lifetimes VALUES(7,1)`)
+	exec(`CREATE TEMPORARY TABLE item_definitions(definition_key INT PRIMARY KEY,revision BIGINT,record BLOB,days INT) ENGINE=InnoDB`)
+	exec(`INSERT INTO item_definitions VALUES(7,1,?,1)`, item)
 	rules := persistence.TaskRules{ClientHash: strings.Repeat("a", 64), Catalogue: []persistence.TaskCatalogueEntry{{ID: 1001, Next: 1002, Enabled: true}, {ID: 1002, Enabled: true}}, Enabled: true, Tasks: []persistence.TaskRule{
 		{ID: 1001, Enabled: true, Matches: 2, Next: 1002, Counters: make([]uint32, 29), Experience: 40, Gold: 30, RewardCatalog: 7},
 		{ID: 1002, Enabled: true, Matches: 1, Counters: make([]uint32, 29), Experience: 20},
@@ -292,7 +294,7 @@ func TestTasksTLS(t *testing.T) {
 		if protocol.ReadUint32(claim[0].Payload, 0) != expectedXP || protocol.ReadUint32(claim[1].Payload, 0) != expectedGold || protocol.ReadUint32(claim[2].Payload, 5) != 250001 {
 			t.Fatal("extended reward mismatch", claim)
 		}
-		expect(send(uint32(6311+i), request), 20150)
+		expect(send(uint32(6311+i), request), uint32(6301+i))
 	}
 	// Await explicit transport logout acknowledgement before re-authentication.
 	if e = c.send(tunnel.Frame{Op: "logout"}); e != nil {
@@ -391,8 +393,9 @@ func playTaskBattlesTLS(t *testing.T, owner, peer *client, a, b persistence.Acco
 		find(drain(peer), 4050)
 		drain(owner)
 		send(owner, 4030, nil)
-		start := find(drain(owner), 4080)
-		find(drain(peer), 4080)
+		starts := completeNetworkProbeTLS(t, owner, peer, drain)
+		start := find(starts[0], 4080)
+		find(starts[1], 4080)
 		serial := protocol.ReadUint32(start, 5)
 		send(owner, 4160, nil)
 		drain(owner)

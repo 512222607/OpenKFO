@@ -207,6 +207,8 @@ func TestMySQLTransactionsAndTwoPlayers(t *testing.T) {
 	}
 	send(peer, 4030, nil)
 	send(owner, 4030, nil)
+	send(owner, protocol.MsgNetworkDelayReply, nil)
+	send(peer, protocol.MsgNetworkDelayReply, nil)
 	if owner.Room.Stage != "loading" {
 		t.Fatal("room did not start")
 	}

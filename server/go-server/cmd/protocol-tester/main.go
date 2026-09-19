@@ -52,14 +52,15 @@ func emit(o output) {
 }
 
 type client struct {
-	observe  func(protocol.Message)
-	conn     net.Conn
-	reader   *bufio.Reader
-	encoder  *json.Encoder
-	mutex    sync.Mutex
-	decoders map[uint32]*protocol.Decoder
-	uid      uint64
-	p2p      uint32
+	manualNetworkProbe bool
+	observe            func(protocol.Message)
+	conn               net.Conn
+	reader             *bufio.Reader
+	encoder            *json.Encoder
+	mutex              sync.Mutex
+	decoders           map[uint32]*protocol.Decoder
+	uid                uint64
+	p2p                uint32
 }
 
 func (c *client) send(f tunnel.Frame) error {
@@ -105,6 +106,11 @@ func (c *client) read() (tunnel.Frame, []protocol.Message, error) {
 	}
 	messages, err := decoder.Feed(f.Data)
 	for _, m := range messages {
+		if m.ID == protocol.MsgNetworkDelayProbe && len(m.Payload) == 0 && !c.manualNetworkProbe {
+			if e := c.game(f.Channel, protocol.MsgNetworkDelayReply, nil); e != nil {
+				return f, messages, e
+			}
+		}
 		if c.observe != nil {
 			c.observe(m)
 		}

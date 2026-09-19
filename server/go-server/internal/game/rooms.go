@@ -27,6 +27,7 @@ type Config struct {
 	Groups            map[string][]uint32              `json:"groups"`
 }
 type Member struct {
+	NetworkDelay         uint32
 	TalismanEvents       map[uint64]uint32
 	BattleLevel          uint16
 	Session              *Session
@@ -35,6 +36,7 @@ type Member struct {
 	BattleEvents         map[uint32]battleSequence
 }
 type Room struct {
+	NetworkProbe    *roomNetworkProbe
 	TutorialPending bool
 	Reliable        map[reliableActor]*reliableExchange
 	ReliableSerial  uint32
@@ -215,6 +217,7 @@ func (hub *Hub) completeRoomJoin(room *Room, member *Member, own []byte, peers [
 }
 
 func (hub *Hub) clearRoomReady(room *Room) {
+	hub.cancelNetworkProbe(room)
 	hub.cancelSeatExchange(room)
 	for uid, member := range room.Members {
 		if member.Ready {
@@ -232,6 +235,7 @@ func (hub *Hub) leave(session *Session, acknowledge bool) {
 		}
 		return
 	}
+	hub.cancelNetworkProbe(room)
 	hub.cancelSeatExchange(room)
 	delete(room.Members, session.UID)
 	delete(room.Reliable, reliableActor{session.UID, 9000})
@@ -537,6 +541,7 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 			return true, protocol.ErrFrame
 		}
 		if message.ID == protocol.MsgCancelReady {
+			hub.cancelNetworkProbe(room)
 			hub.cancelSeatExchange(room)
 			member.Ready = false
 			hub.broadcast(room, protocol.Message{ID: protocol.MsgPlayerNotReady, Payload: protocol.Uint64Bytes(uid)}, 0)
@@ -577,34 +582,13 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 					return true, nil
 				}
 			}
-			for uid, member := range room.Members {
-				account, err := hub.Store.RoleManager().Snapshot(uid)
-				if err != nil {
-					return true, err
-				}
-				member.BattleLevel = persistence.ProfileLevel(account.Profile)
+			if tutorialRoom(room) {
+				return true, hub.startBattle(room)
 			}
-			serial, err := hub.Store.BattleManager().NextBattle()
-			if err != nil {
-				return true, err
-			}
-			room.Serial = serial
-			room.Reliable = nil
-			room.ReliableSerial = serial
-			room.Reports = nil
-			room.Stage = "loading"
-			hub.watchLoading(room)
-			for _, member := range room.Members {
-				member.Loaded, member.Input = false, false
-				member.BattleEvents = nil
-				member.TalismanEvents = nil
-				member.Session.ConsumeIntents = nil
-				member.Session.TalismanPending = nil
-				response := battleStartPayload(room)
-				member.Session.game().Phase = "loading"
-				member.Session.sendGame(protocol.Message{ID: protocol.MsgBattleLoading, Payload: response})
-			}
+			hub.beginNetworkProbe(room)
 		}
+	case protocol.MsgNetworkDelayReply:
+		return true, hub.networkDelayReply(session, payload)
 	case protocol.MsgResourceReady:
 		if len(payload) != 0 {
 			return true, protocol.ErrFrame
@@ -672,6 +656,37 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 	return true, nil
 }
 
+func (hub *Hub) startBattle(room *Room) error {
+	for uid, member := range room.Members {
+		account, err := hub.Store.RoleManager().Snapshot(uid)
+		if err != nil {
+			return err
+		}
+		member.BattleLevel = persistence.ProfileLevel(account.Profile)
+	}
+	serial, err := hub.Store.BattleManager().NextBattle()
+	if err != nil {
+		return err
+	}
+	room.Serial = serial
+	room.Reliable = nil
+	room.ReliableSerial = serial
+	room.Reports = nil
+	room.Stage = "loading"
+	hub.watchLoading(room)
+	for _, member := range room.Members {
+		member.Loaded, member.Input = false, false
+		member.BattleEvents = nil
+		member.TalismanEvents = nil
+		member.Session.ConsumeIntents = nil
+		member.Session.TalismanPending = nil
+		response := battleStartPayload(room)
+		member.Session.game().Phase = "loading"
+		member.Session.sendGame(protocol.Message{ID: protocol.MsgBattleLoading, Payload: response})
+	}
+	return nil
+}
+
 // Native 81E1A0 passes +11 to 818910, which enables entity+1B74 only
 // for that slot. Every recipient must select the same battle controller.
 // The server chooses the room owner; +11 is not the recipient's own slot.
@@ -681,9 +696,13 @@ func battleStartPayload(room *Room) []byte {
 	protocol.WriteUint32(response, 5, room.Serial)
 	protocol.WriteUint16(response, 11, uint16(room.Members[room.Owner].Slot))
 	// +13 holds eight GetNetDelay values (81E1A0 -> 5495A0 -> 5564A0),
-	// not peer IDs. Until 4150/4140 probing is implemented, preserve the
-	// native object's initial zero values; these are not measured RTTs.
-	// Peer identities remain in each room member record at +67.
+	// not peer IDs. Values are server-observed application round trips.
+	// Empty slots and the guide (which skips P2P probing) retain zero.
+	for _, member := range room.Members {
+		if member.Slot < 8 {
+			protocol.WriteUint32(response, 13+int(member.Slot)*4, member.NetworkDelay)
+		}
+	}
 	protocol.WriteUint32(response, 45, uint32(room.ID))
 	protocol.WriteUint32(response, 49, room.Serial)
 	return response

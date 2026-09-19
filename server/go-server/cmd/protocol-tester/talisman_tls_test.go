@@ -68,6 +68,12 @@ func TestTalismanTLS(t *testing.T) {
 			}
 		}()
 	}
+	// Isolate map policy from the running debug server's GM settings.
+	store.DB.SetMaxOpenConns(1)
+	store.DB.SetMaxIdleConns(1)
+	if _, err = store.DB.Exec(`CREATE TEMPORARY TABLE stage_access(id INT PRIMARY KEY,revision BIGINT NOT NULL,rules BLOB NOT NULL) ENGINE=InnoDB`); err != nil {
+		t.Fatal(err)
+	}
 	root := t.TempDir()
 	cert, err := tunnel.Certificate(root)
 	if err != nil {
@@ -147,8 +153,9 @@ func TestTalismanTLS(t *testing.T) {
 	find(drain(r), 4050)
 	drain(s)
 	send(s, 4030, nil)
-	start := find(drain(s), 4080).Payload
-	peerStart := find(drain(r), 4080).Payload
+	starts := completeNetworkProbeTLS(t, s, r, drain)
+	start := find(starts[0], 4080).Payload
+	peerStart := find(starts[1], 4080).Payload
 	if len(start) != 53 || len(peerStart) != 53 || protocol.ReadUint16(start, 11) != 0 || protocol.ReadUint16(peerStart, 11) != 0 {
 		t.Fatal("both native clients must select room owner's slot 0 as controller")
 	}
