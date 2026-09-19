@@ -13,12 +13,14 @@ func (h *Hub) changeRoomOwner(s *Session, p []byte) error {
 		reason = "你当前不在请求的房间。"
 	case r.Owner != s.UID:
 		reason = "只有当前房主可以移交房主。"
-	case r.Stage != "room":
+	case r.Stage != "room" || s.game() == nil || s.game().Phase != "room":
 		reason = "只能在房间等待阶段移交房主。"
 	case request.TargetUID == s.UID:
 		reason = "请选择其他房间玩家接任房主。"
 	case r.Members[request.TargetUID] == nil || r.Members[request.TargetUID].Session == nil || r.Members[request.TargetUID].Session.Room != r:
 		reason = "目标玩家已离开房间。"
+	case r.Members[request.TargetUID].Session.game() == nil || r.Members[request.TargetUID].Session.game().Phase != "room":
+		reason = "目标玩家尚未返回等待房间，请稍后再移交房主。"
 	}
 	if reason != "" {
 		s.sendGame(notice(reason))

@@ -13,14 +13,16 @@ func (h *Hub) kickRoomPlayer(s *Session, payload []byte) error {
 		reason = "你当前不在该房间。"
 	case r.Owner != s.UID:
 		reason = "只有房主可以踢出玩家。"
-	case r.Stage != "room":
+	case r.Stage != "room" || s.game() == nil || s.game().Phase != "room":
 		reason = "请在房间等待阶段踢出玩家。"
 	case request.ClientFlag != 0:
 		reason = "当前客户端的踢人标志尚不支持，未移除玩家。"
 	case request.TargetUID == s.UID:
 		reason = "不能踢出自己，请使用退出房间。"
-	case r.Members[request.TargetUID] == nil:
+	case r.Members[request.TargetUID] == nil || r.Members[request.TargetUID].Session == nil || r.Members[request.TargetUID].Session.Room != r:
 		reason = "目标玩家已经离开房间。"
+	case r.Members[request.TargetUID].Session.game() == nil || r.Members[request.TargetUID].Session.game().Phase != "room":
+		reason = "目标玩家尚未返回等待房间，请稍后再踢出。"
 	}
 	if reason != "" {
 		s.sendGame(notice(reason))
