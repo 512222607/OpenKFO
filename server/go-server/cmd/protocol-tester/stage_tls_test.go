@@ -77,6 +77,15 @@ func TestStageGateTLS(t *testing.T) {
 			}
 		}()
 	}
+	// These weapons belong only to the disposable account. Exercise the actual
+	// equip/replace/unequip routes after joining, not a direct hub callback.
+	for i := uint32(1); i <= 2; i++ {
+		item := make([]byte, protocol.InventoryRecordSize)
+		protocol.WriteUint32(item, 0, i)
+		item[4] = protocol.ItemWeapon
+		protocol.WriteUint32(item, 5, 253000+i)
+		exec("INSERT INTO inventory(uid,instance,record) VALUES(?,?,?)", accounts[0].UID, i, item)
+	}
 	root := t.TempDir()
 	cert, err := tunnel.Certificate(root)
 	if err != nil {
@@ -172,6 +181,7 @@ func TestStageGateTLS(t *testing.T) {
 	send(peer, 3070, join)
 	find(drain(peer), 3100)
 	drain(host)
+	checkEquipmentRefreshTLS(t, host, peer, accounts[0].UID, send, drain)
 	checkRoomOwnerTransferTLS(t, host, peer, accounts[0].UID, accounts[1].UID, protocol.ReadUint16(entry, 0), send, drain)
 	send(peer, 4030, nil)
 	find(drain(peer), 4050)
