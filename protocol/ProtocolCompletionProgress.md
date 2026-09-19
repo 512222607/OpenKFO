@@ -1,3 +1,9 @@
+## 2026-09-20 分步事件边界与GM诊断复测
+
+当前PE核实96A1A0→4C52D0→45C6B0为本地事件入队，保留0–6/21–24/10/27等内部事件范围，不将其作为网络包号。完整有界提取及结论写入new-player-guide/README.md和step-event-queue.asm；全体虚函数及其他封装未覆盖，不宣称所有步骤均无上行。整体4124完成处理保持已有实现，没有猜测分步完成协议。
+
+此前未完成的Flutter用例，本次未改动代码、按文件加诊断输出复测：training_config_test.dart 2项通过，talisman_config_test.dart 3项通过，均退出0。日志保存在本机dist/training-test-diagnostic.log和dist/talisman-test-diagnostic.log。只能证明这次独立运行通过，不将间歇性未完成归因于未经验证的原因，也不宣称全量稳定性已解决。
+
 ## 2026-09-20 新手引导与扩展任务联动
 
 依据 nixiang/new-player-guide 的4124完成入口与 nixiang/tasks 的141B列表/条件槽及状态通知，新增显式配置事件 `tutorial_complete`。这是模拟器的服务器事件绑定，不把客户端条件编号0直接解释为完成引导，也不接收客户端自行提交的完成状态作为依据。
