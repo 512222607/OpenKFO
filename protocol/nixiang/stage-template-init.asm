@@ -37,7 +37,7 @@
 0093DBA1 call 0x939bf0
 0093DBA6 mov esp, ebp
 0093DBA8 pop ebp
-0093DBA9 ret 
+0093DBA9 ret
 ; region 0x939bf0
 00939BF0 push ebp
 00939BF1 mov ebp, esp
@@ -653,19 +653,19 @@
 004D8B7A call 0x4d8bb0
 004D8B7F add esp, 0xc
 004D8B82 pop ebp
-004D8B83 ret 
-004D8B84 int3 
-004D8B85 int3 
-004D8B86 int3 
-004D8B87 int3 
-004D8B88 int3 
-004D8B89 int3 
-004D8B8A int3 
-004D8B8B int3 
-004D8B8C int3 
-004D8B8D int3 
-004D8B8E int3 
-004D8B8F int3 
+004D8B83 ret
+004D8B84 int3
+004D8B85 int3
+004D8B86 int3
+004D8B87 int3
+004D8B88 int3
+004D8B89 int3
+004D8B8A int3
+004D8B8B int3
+004D8B8C int3
+004D8B8D int3
+004D8B8E int3
+004D8B8F int3
 004D8B90 push ebp
 004D8B91 mov ebp, esp
 004D8B93 push ecx
@@ -677,20 +677,20 @@
 004D8BA3 mov esp, ebp
 004D8BA5 pop ebp
 004D8BA6 ret 4
-004D8BA9 int3 
-004D8BAA int3 
-004D8BAB int3 
-004D8BAC int3 
-004D8BAD int3 
-004D8BAE int3 
-004D8BAF int3 
+004D8BA9 int3
+004D8BAA int3
+004D8BAB int3
+004D8BAC int3
+004D8BAD int3
+004D8BAE int3
+004D8BAF int3
 004D8BB0 push ebp
 004D8BB1 mov ebp, esp
 004D8BB3 sub esp, 0xc
 004D8BB6 push esi
 004D8BB7 mov eax, dword ptr [ebp + 0xc]
 004D8BBA sub eax, dword ptr [ebp + 8]
-004D8BBD cdq 
+004D8BBD cdq
 004D8BBE mov ecx, 0x1c
 004D8BC3 idiv ecx
 004D8BC5 mov dword ptr [ebp - 4], eax
@@ -707,25 +707,25 @@
 004D8BE8 call 0x4d8cf0
 004D8BED add esp, 0xc
 004D8BF0 mov eax, dword ptr [ebp + 0x10]
-004D8BF3 cdq 
+004D8BF3 cdq
 004D8BF4 sub eax, edx
 004D8BF6 sar eax, 1
 004D8BF8 mov dword ptr [ebp + 0x10], eax
 004D8BFB mov eax, dword ptr [ebp + 0x10]
-004D8BFE cdq 
+004D8BFE cdq
 004D8BFF sub eax, edx
 004D8C01 sar eax, 1
 004D8C03 add eax, dword ptr [ebp + 0x10]
 004D8C06 mov dword ptr [ebp + 0x10], eax
 004D8C09 mov eax, dword ptr [ebp - 0xc]
 004D8C0C sub eax, dword ptr [ebp + 8]
-004D8C0F cdq 
+004D8C0F cdq
 004D8C10 mov ecx, 0x1c
 004D8C15 idiv ecx
 004D8C17 mov ecx, eax
 004D8C19 mov eax, dword ptr [ebp + 0xc]
 004D8C1C sub eax, dword ptr [ebp - 8]
-004D8C1F cdq 
+004D8C1F cdq
 004D8C20 mov esi, 0x1c
 004D8C25 idiv esi
 004D8C27 cmp ecx, eax
@@ -784,10 +784,10 @@
 004D8CF3 sub esp, 0x24
 004D8CF6 mov eax, dword ptr [ebp + 0x10]
 004D8CF9 sub eax, dword ptr [ebp + 0xc]
-004D8CFC cdq 
+004D8CFC cdq
 004D8CFD mov ecx, 0x1c
 004D8D02 idiv ecx
-004D8D04 cdq 
+004D8D04 cdq
 004D8D05 sub eax, edx
 004D8D07 sar eax, 1
 004D8D09 imul eax, eax, 0x1c
@@ -995,8 +995,8 @@
 004D9306 call 0x6634fb
 004D930B mov esp, ebp
 004D930D pop ebp
-004D930E ret 
-004D930F int3 
+004D930E ret
+004D930F int3
 004D9310 push ebp
 ; region 0x4120b0
 004120B0 push ebp
@@ -1010,7 +1010,7 @@
 004120C3 setl cl
 004120C6 mov al, cl
 004120C8 pop ebp
-004120C9 ret 
+004120C9 ret
 ; region 0x4057a0
 004057A0 push ebp
 004057A1 mov ebp, esp
@@ -1102,7 +1102,7 @@
 0040112F call 0x663e3f
 00401134 add esp, 0xc
 00401137 pop ebp
-00401138 ret 
+00401138 ret
 ; region 0x663e3f
 00663E3F mov edi, edi
 00663E41 push ebp
