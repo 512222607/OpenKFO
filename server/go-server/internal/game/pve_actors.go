@@ -35,6 +35,7 @@ func (h *Hub) pveActorMessage(s *Session, message protocol.Message) error {
 		return nil
 	}
 	var sender, actor uint64
+	var template uint32
 	create := protocol.ReadUint32(p, 0) == protocol.BattleEventPVEActorCreate
 	if create {
 		event, err := protocol.ParsePVEActorCreate(p)
@@ -42,6 +43,7 @@ func (h *Hub) pveActorMessage(s *Session, message protocol.Message) error {
 			return err
 		}
 		sender, actor = event.Sender, event.Actor
+		template = event.TemplateValue
 	} else {
 		event, err := protocol.ParsePVEActorRemove(p)
 		if err != nil {
@@ -66,6 +68,9 @@ func (h *Hub) pveActorMessage(s *Session, message protocol.Message) error {
 		if !seen && len(r.PVEActors) >= stageAssaultActorPoolSize {
 			return protocol.ErrFrame
 		}
+		if r.StageWaves != nil && !r.StageWaves.canSpawn(template) {
+			return nil
+		}
 	} else if !seen || !previous.active {
 		return nil
 	}
@@ -73,6 +78,9 @@ func (h *Hub) pveActorMessage(s *Session, message protocol.Message) error {
 		r.PVEActors = make(map[uint64]pveActor)
 	}
 	r.PVEActors[actor] = pveActor{sequence: sequence, active: create}
+	if create && r.StageWaves != nil {
+		r.StageWaves.spawned[template]++
+	}
 	for _, member := range r.Members {
 		for key := range member.BattleEvents {
 			if key.Actor == actor {

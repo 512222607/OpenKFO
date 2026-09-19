@@ -12,6 +12,7 @@ import (
 )
 
 type Config struct {
+	StageWaves        map[uint32][]StageWavePlan       `json:"stage_waves,omitempty"`
 	TitleLevels       []byte                           `json:"title_levels,omitempty"` // Verified roletitle.xml levels; empty disables announcements.
 	TalismanUses      []TalismanUseRule                `json:"talisman_uses,omitempty"`
 	TalismanRepairs   []persistence.TalismanRepairRule `json:"talisman_repairs,omitempty"`
@@ -36,6 +37,7 @@ type Member struct {
 	BattleEvents         map[battleEventKey]battleSequence
 }
 type Room struct {
+	StageWaves      *stageWaves
 	PVEActors       map[uint64]pveActor
 	NetworkProbe    *roomNetworkProbe
 	TutorialPending bool
@@ -685,6 +687,8 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		hub.broadcast(room, protocol.Message{ID: protocol.MsgBattleClock, Payload: protocol.Uint32Bytes(1)}, 0)
 	case protocol.MsgBattleEvent:
 		return true, hub.battleMessage(session, channel, message)
+	case protocol.MsgStageWaveReport:
+		return true, hub.stageWaveReport(session, channel, payload)
 	default:
 		return false, nil
 	}
@@ -692,6 +696,14 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 }
 
 func (hub *Hub) startBattle(room *Room) error {
+	var waves *stageWaves
+	if room.Type() == protocol.StageAssault {
+		var err error
+		waves, err = newStageWaves(hub.Config.StageWaves[protocol.ReadUint32(room.Request, protocol.RoomMapOffset)])
+		if err != nil {
+			return err
+		}
+	}
 	for uid, member := range room.Members {
 		account, err := hub.Store.RoleManager().Snapshot(uid)
 		if err != nil {
@@ -704,6 +716,7 @@ func (hub *Hub) startBattle(room *Room) error {
 		return err
 	}
 	room.Serial = serial
+	room.StageWaves = waves
 	room.PVEActors = nil
 	room.Reliable = nil
 	room.ReliableSerial = serial
