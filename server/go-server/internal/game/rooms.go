@@ -680,9 +680,10 @@ func battleStartPayload(room *Room) []byte {
 	protocol.WriteUint32(response, 0, uint32(room.ID))
 	protocol.WriteUint32(response, 5, room.Serial)
 	protocol.WriteUint16(response, 11, uint16(room.Members[room.Owner].Slot))
-	for _, peer := range room.Members {
-		protocol.WriteUint32(response, 13+int(peer.Slot)*4, peer.Session.P2P)
-	}
+	// +13 holds eight GetNetDelay values (81E1A0 -> 5495A0 -> 5564A0),
+	// not peer IDs. Until 4150/4140 probing is implemented, preserve the
+	// native object's initial zero values; these are not measured RTTs.
+	// Peer identities remain in each room member record at +67.
 	protocol.WriteUint32(response, 45, uint32(room.ID))
 	protocol.WriteUint32(response, 49, room.Serial)
 	return response

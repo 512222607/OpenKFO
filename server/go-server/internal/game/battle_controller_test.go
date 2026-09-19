@@ -17,8 +17,10 @@ func TestBattleStartUsesOneController(t *testing.T) {
 		if len(p) != 53 || protocol.ReadUint16(p, 11) != uint16(r.Members[uid].Slot) {
 			t.Fatal("controller is not the selected owner")
 		}
-		if protocol.ReadUint32(p, 13+3*4) != 1234 || protocol.ReadUint32(p, 13+6*4) != 5678 {
-			t.Fatal("P2P roster changed")
+		for slot := 0; slot < 8; slot++ {
+			if protocol.ReadUint32(p, 13+slot*4) != 0 {
+				t.Fatal("unmeasured network delay contains a peer ID", slot)
+			}
 		}
 		if protocol.ReadUint32(p, 0) != 1 || protocol.ReadUint32(p, 5) != 7 || protocol.ReadUint32(p, 45) != 1 || protocol.ReadUint32(p, 49) != 7 {
 			t.Fatal("battle context changed")

@@ -292,6 +292,15 @@ func TestStageGateTLS(t *testing.T) {
 	setGrants(1, []uint32{104})
 	selection(peer, 1)
 	send(host, 4030, nil)
-	find(drain(host), 4080)
-	find(drain(peer), 4080)
+	for _, c := range []*client{host, peer} {
+		start := find(drain(c), 4080).Payload
+		if len(start) != 53 {
+			t.Fatal("battle start length")
+		}
+		for slot := 0; slot < 8; slot++ {
+			if protocol.ReadUint32(start, 13+slot*4) != 0 {
+				t.Fatal("peer ID leaked into unmeasured delay field", slot)
+			}
+		}
+	}
 }
