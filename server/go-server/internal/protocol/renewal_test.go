@@ -2,6 +2,26 @@ package protocol
 
 import "testing"
 
+func TestRenewalResultNativeReadBounds(t *testing.T) {
+	for _, tc := range []struct {
+		p              []byte
+		valid, success bool
+		instance       uint32
+	}{
+		{nil, false, false, 0},
+		{[]byte{0}, true, false, 0},
+		{[]byte{1}, false, false, 0},
+		{[]byte{1, 42, 0, 0}, false, false, 0},
+		{[]byte{1, 42, 0, 0, 0}, true, true, 42},
+		{[]byte{2, 42, 0, 0, 0, 0xab}, true, true, 42},
+	} {
+		r, err := ParseRenewalResult(tc.p)
+		if (err == nil) != tc.valid || r.Succeeded != tc.success || r.InventoryInstance != tc.instance {
+			t.Fatal(tc, r, err)
+		}
+	}
+}
+
 func TestRenewalRequestNativeLayout(t *testing.T) {
 	p := make([]byte, 173)
 	// Fixed wire bytes, independent of the parser's read offsets.

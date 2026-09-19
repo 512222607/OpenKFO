@@ -31,6 +31,15 @@ func (s *Session) tracePacket(direction string, channel uint32, transport string
 	} else {
 		entry["hex"] = hex.EncodeToString(payload)
 		if transport == "game" {
+			if opcode == protocol.MsgRenewItemResult && strings.HasPrefix(direction, "S->C") {
+				if r, err := protocol.ParseRenewalResult(payload); err == nil {
+					if r.Succeeded {
+						entry["content"] = fmt.Sprintf("续费成功回执：库存实例=%d", r.InventoryInstance)
+					} else {
+						entry["content"] = "续费失败回执"
+					}
+				}
+			}
 			if opcode == protocol.MsgRenewItem && strings.HasPrefix(direction, "C->S") {
 				if r, err := protocol.ParseRenewalRequest(payload); err == nil {
 					entry["content"] = fmt.Sprintf("请求续费：库存实例=%d，商品目录键=%d，申报金额=%d（不代表已扣款），操作原值=%d，发起UID=%d，目标UID=%d", r.InventoryInstance(), r.CatalogKey(), r.QuotedAmount(), r.Operation(), r.SenderUID(), r.RecipientUID())

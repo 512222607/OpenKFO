@@ -1,6 +1,30 @@
 package protocol
 
-const MsgRenewItem uint32 = 1420
+const (
+	MsgRenewItem       uint32 = 1420
+	MsgRenewItemResult uint32 = 1430
+)
+
+// Native 826B30 reads one status byte; on success it also reads an instance
+// DWORD at +1. Trailing fields, if any, are not interpreted.
+type RenewalResult struct {
+	Succeeded         bool
+	InventoryInstance uint32
+}
+
+func ParseRenewalResult(payload []byte) (r RenewalResult, err error) {
+	if len(payload) == 0 {
+		return r, ErrFrame
+	}
+	r.Succeeded = payload[0] != 0
+	if r.Succeeded {
+		if len(payload) < 5 {
+			return RenewalResult{}, ErrFrame
+		}
+		r.InventoryInstance = ReadUint32(payload, 1)
+	}
+	return r, nil
+}
 
 // RenewalRequest is the 173-byte request built by native 8C2820.
 // Amount is untrusted client input, not an authoritative price. Operation 105
