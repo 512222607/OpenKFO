@@ -49,6 +49,12 @@ internal static class SelfTests
             var row = TraceRow.Parse(packet);
             Check(row.Flow.Contains("待发送") && row.Description.Contains("测试玩家"), "中文身份与队列方向");
             Check(row.Original.Contains("02 00") && row.Raw == packet, "原始JSON和HEX无损");
+            foreach (uint opcode in new uint[] {4140, 4150})
+            {
+                string sample = JsonSerializer.Serialize(new { direction = opcode == 4140 ? "C->S" : "S->C", transport = "game", protocol = opcode, content = "检测状态详情", hex = "" });
+                var probe = TraceRow.Parse(sample);
+                Check(probe.Name.Contains("网络检测") && probe.Description.Contains("检测状态详情") && probe.Raw == sample, $"网络检测{opcode}中文名称与原文");
+            }
             Check(row.Matches("localtest1", false) && !row.Matches("localtest2", false), "账号筛选");
             Check(!TraceRow.Parse("{\"direction\":\"C->S\",\"protocol\":1157}").Matches("", true), "心跳筛选");
             Check(TraceRow.Parse("{\"protocol\":{}}").Direction == "", "损坏字段保留为运行日志");

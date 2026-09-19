@@ -232,3 +232,37 @@ func TestInputReadyTraceKeepsUntrustedClientValue(t *testing.T) {
 		t.Fatal(row)
 	}
 }
+
+func TestNetworkDelayTraceDirectionAndRawBytes(t *testing.T) {
+	start := make([]byte, 53)
+	protocol.WriteUint32(start, 0, 9)
+	protocol.WriteUint16(start, 11, 2)
+	protocol.WriteUint32(start, 13, 125)
+	for _, tc := range []struct {
+		id        uint32
+		direction string
+		payload   []byte
+		want      string
+	}{
+		{4080, "S->C queued", start, "延迟(ms)=[125 0 0 0 0 0 0 0]"},
+		{4080, "C->S", start, ""},
+		{4080, "S->C", start[:52], ""},
+		{4150, "S->C", nil, "等待本玩家"},
+		{4150, "C->S", nil, ""},
+		{4140, "C->S", nil, "不代表检测已通过"},
+		{4140, "S->C", nil, ""},
+		{4140, "C->S", []byte{1}, ""},
+	} {
+		var output bytes.Buffer
+		s := &Session{Account: "tester", UID: 42, Trace: log.New(&output, "", 0)}
+		s.tracePacket(tc.direction, 3, "game", tc.id, tc.payload, false)
+		var row map[string]any
+		if err := json.Unmarshal(output.Bytes(), &row); err != nil {
+			t.Fatal(err)
+		}
+		content, ok := row["content"].(string)
+		if ok != (tc.want != "") || (ok && !strings.Contains(content, tc.want)) || row["account"] != "tester" || len(row["hex"].(string)) != len(tc.payload)*2 {
+			t.Fatal(row)
+		}
+	}
+}

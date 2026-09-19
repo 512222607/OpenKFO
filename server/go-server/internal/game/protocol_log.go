@@ -31,6 +31,17 @@ func (s *Session) tracePacket(direction string, channel uint32, transport string
 	} else {
 		entry["hex"] = hex.EncodeToString(payload)
 		if transport == "game" {
+			if opcode == protocol.MsgBattleLoading && strings.HasPrefix(direction, "S->C") {
+				if r, err := protocol.ParseBattleStart(payload); err == nil {
+					entry["content"] = fmt.Sprintf("加载战斗：房间=%d，主控槽位=%d，槽位0–7延迟(ms)=%v；0表示未测量，耗时包含客户端处理和服务器调度", r.RoomID, r.ControllerSlot, r.NetworkDelay)
+				}
+			}
+			if opcode == protocol.MsgNetworkDelayProbe && strings.HasPrefix(direction, "S->C") && len(payload) == 0 {
+				entry["content"] = "开战前网络检测：等待本玩家返回4140空包"
+			}
+			if opcode == protocol.MsgNetworkDelayReply && strings.HasPrefix(direction, "C->S") && len(payload) == 0 {
+				entry["content"] = "玩家返回网络检测空回执；由服务器核对当前检测状态，不代表检测已通过"
+			}
 			if opcode == protocol.MsgBattleInputReady && strings.HasPrefix(direction, "C->S") {
 				if r, err := protocol.ParseBattleInputReady(payload); err == nil {
 					entry["content"] = fmt.Sprintf("输入就绪请求：房间=%d，申报UID=%d，客户端尾值=%d（语义未确认，不作为授权）", r.RoomID, r.UID, r.ClientValue)

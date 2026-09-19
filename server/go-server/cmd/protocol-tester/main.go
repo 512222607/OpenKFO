@@ -119,6 +119,25 @@ func (c *client) read() (tunnel.Frame, []protocol.Message, error) {
 	return f, messages, err
 }
 func describe(m protocol.Message) string {
+	if m.ID == protocol.MsgBattleLoading {
+		r, err := protocol.ParseBattleStart(m.Payload)
+		if err != nil {
+			return "战斗加载4080长度错误：必须53B，请查看原始数据"
+		}
+		return fmt.Sprintf("加载战斗：房间=%d，主控槽位=%d，槽位0–7延迟(ms)=%v；0表示未测量，包含客户端处理和服务器调度", r.RoomID, r.ControllerSlot, r.NetworkDelay)
+	}
+	if m.ID == protocol.MsgNetworkDelayProbe {
+		if len(m.Payload) != 0 {
+			return "网络检测4150长度错误：应为空包"
+		}
+		return "开战前网络检测4150：客户端应返回4140空包"
+	}
+	if m.ID == protocol.MsgNetworkDelayReply {
+		if len(m.Payload) != 0 {
+			return "网络检测回执4140长度错误：应为空包"
+		}
+		return "网络检测空回执4140：服务器按当前检测计时，不含客户端申报延迟"
+	}
 	if m.ID == 3090 || m.ID == 3105 || m.ID == 3130 {
 		return describeRoomMembers(m)
 	}
