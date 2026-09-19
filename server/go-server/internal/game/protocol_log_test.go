@@ -45,6 +45,7 @@ func TestStageResultTraceUsesRoomMode(t *testing.T) {
 	protocol.WriteUint64(p, 0, s.UID)
 	protocol.WriteUint32(p, 92, 25)
 	protocol.WriteUint32(p, 96, 125)
+	protocol.WriteUint32(p, 100, uint32(protocol.StageGradeSSS))
 	for _, mode := range []protocol.RoomType{protocol.StageAssault, protocol.FreePractice} {
 		s.Room.Request[46] = byte(mode)
 		for _, direction := range []string{"S->C queued", "C->S"} {
@@ -58,7 +59,7 @@ func TestStageResultTraceUsesRoomMode(t *testing.T) {
 			if annotated != (mode == protocol.StageAssault && direction == "S->C queued") {
 				t.Fatal("misclassified result", entry)
 			}
-			if annotated && (!strings.Contains(text, "波数=25") || !strings.Contains(text, "用时秒=125")) {
+			if annotated && (!strings.Contains(text, "波数=25") || !strings.Contains(text, "用时秒=125") || !strings.Contains(text, "评级=SSS（原值7）")) {
 				t.Fatal(text)
 			}
 			if len(entry["hex"].(string)) != 1000 {

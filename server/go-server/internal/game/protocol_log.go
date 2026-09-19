@@ -36,7 +36,7 @@ func (s *Session) tracePacket(direction string, channel uint32, transport string
 					var detail strings.Builder
 					detail.WriteString("PVE结算界面数据（非开战初始化）")
 					for _, row := range rows {
-						fmt.Fprintf(&detail, "；UID=%d 结果原值=%d 波数=%d 用时秒=%d 评级原值=%d 经验=%d 金币=%d 展示物品=%d", row.UID, row.ResultValue, row.Waves, row.ElapsedSeconds, row.GradeValue, row.Experience, row.Gold, row.ItemID)
+						fmt.Fprintf(&detail, "；UID=%d 结果原值=%d 波数=%d 用时秒=%d 评级=%s（原值%d） 经验=%d 金币=%d 展示物品=%d", row.UID, row.ResultValue, row.Waves, row.ElapsedSeconds, protocol.StageGrade(row.GradeValue), row.GradeValue, row.Experience, row.Gold, row.ItemID)
 					}
 					entry["content"] = detail.String()
 				}
