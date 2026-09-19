@@ -31,6 +31,11 @@ func (s *Session) tracePacket(direction string, channel uint32, transport string
 	} else {
 		entry["hex"] = hex.EncodeToString(payload)
 		if transport == "game" {
+			if opcode == protocol.MsgBattlePose && strings.HasPrefix(direction, "S->C") {
+				if r, err := protocol.ParseBattlePose(payload); err == nil {
+					entry["content"] = fmt.Sprintf("战斗姿态通知：UID=%d，姿态原值=%d；不是席位锁定", r.UID, r.Pose)
+				}
+			}
 			if opcode == 4110 && strings.HasPrefix(direction, "C->S") {
 				if rows, err := protocol.ParseBattleReport(payload); err == nil {
 					var detail strings.Builder

@@ -150,6 +150,16 @@ func describe(m protocol.Message) string {
 	if m.ID == protocol.MsgRoomAnimationRequest {
 		return "房间动作请求3410：仅确认Lua名称，请求结构未确认，不按3420布局解释或转发"
 	}
+	if m.ID == protocol.MsgBattlePoseRequest {
+		return "战斗姿态请求3430：发送结构未确认，不按3440布局解释"
+	}
+	if m.ID == protocol.MsgBattlePose {
+		r, err := protocol.ParseBattlePose(m.Payload)
+		if err != nil {
+			return "战斗姿态通知3440无效：必须9B，姿态范围0至3"
+		}
+		return fmt.Sprintf("战斗姿态通知3440：UID=%d，姿态原值=%d；不是席位锁定", r.UID, r.Pose)
+	}
 	if m.ID == protocol.MsgRoomAnimation {
 		r, err := protocol.ParseRoomAnimation(m.Payload)
 		if err != nil {
