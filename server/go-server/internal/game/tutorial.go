@@ -57,8 +57,6 @@ func (h *Hub) completeTutorial(s *Session, ch *Channel, payload []byte) error {
 	announced := false
 	if len(result.Choices) != 0 {
 		announced, err = sendTutorialReward(s, result.Choices, result.Catalog)
-	} else if result.Replay {
-		announced, err = h.announceTutorialReward(s)
 	}
 	if err != nil {
 		return err

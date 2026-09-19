@@ -154,6 +154,9 @@ func TestTutorialBundleLocalDatabase(t *testing.T) {
 		if err != nil || !r.Replay || len(r.Items) != 0 || r.Gold != 110 || r.Tickets != 70 {
 			t.Fatal("duplicate tutorial reward", r, err)
 		}
+		if len(r.Choices) != 1 || r.Choices[0] != 1 || len(r.Catalog) != 108 || protocol.ReadUint32(r.Catalog, 0) != 1 {
+			t.Fatal("completion retry lost pending weapon selector", r, err)
+		}
 	}
 	for i := uint16(0); i < 3; i++ {
 		var state int
@@ -189,6 +192,10 @@ func TestTutorialBundleLocalDatabase(t *testing.T) {
 	choices, _, err = store.RewardManager().TutorialChoices(1)
 	if err != nil || len(choices) != 0 {
 		t.Fatal("claimed choice still offered", err)
+	}
+	r, err = store.RewardManager().CompleteTutorial(1, hash)
+	if err != nil || !r.Replay || len(r.Choices) != 0 || len(r.Catalog) != 0 || len(r.Items) != 0 {
+		t.Fatal("claimed tutorial reward offered or granted again", r, err)
 	}
 	if err = db.QueryRow("SELECT COUNT(*) FROM inventory").Scan(&n); err != nil || n != 3 {
 		t.Fatal("claim inventory count", n, err)

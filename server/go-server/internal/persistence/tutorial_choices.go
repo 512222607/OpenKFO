@@ -16,6 +16,16 @@ func (m *RewardManager) TutorialChoices(uid uint64) (choices []uint32, catalog [
 		return nil, nil, err
 	}
 	defer tx.Rollback()
+	choices, catalog, err = tutorialChoices(tx, uid)
+	if err != nil {
+		return nil, nil, err
+	}
+	return choices, catalog, tx.Commit()
+}
+
+// Completion retries and login recovery must restore the same persisted offer.
+// Never rebuild it from a GM configuration that may have changed after earning it.
+func tutorialChoices(tx *sql.Tx, uid uint64) (choices []uint32, catalog []byte, err error) {
 	var data []byte
 	err = tx.QueryRow(`SELECT t.choices FROM title_rewards t JOIN tutorial_rewards r ON r.uid=t.uid WHERE t.uid=? AND t.title_level=2 AND t.claimed_key IS NULL`, uid).Scan(&data)
 	if err == sql.ErrNoRows {
@@ -31,7 +41,7 @@ func (m *RewardManager) TutorialChoices(uid uint64) (choices []uint32, catalog [
 	if err != nil {
 		return nil, nil, err
 	}
-	return choices, catalog, tx.Commit()
+	return choices, catalog, nil
 }
 
 // Validate the same display catalogue before committing completion and when

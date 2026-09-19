@@ -36,6 +36,12 @@ func (m *RewardManager) CompleteTutorial(uid uint64, clientHash string) (r Tutor
 	}
 	if exists || r.Profile[TitleLevelOffset] >= 2 {
 		r.Replay = true
+		if exists {
+			r.Choices, r.Catalog, err = tutorialChoices(tx, uid)
+			if err != nil {
+				return r, err
+			}
+		}
 		return r, tx.Commit()
 	}
 	var raw []byte
