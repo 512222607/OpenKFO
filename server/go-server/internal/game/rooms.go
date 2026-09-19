@@ -36,6 +36,7 @@ type Member struct {
 	BattleEvents         map[uint32]battleSequence
 }
 type Room struct {
+	PVEActors       map[uint64]pveActor
 	NetworkProbe    *roomNetworkProbe
 	TutorialPending bool
 	Reliable        map[reliableActor]*reliableExchange
@@ -703,6 +704,7 @@ func (hub *Hub) startBattle(room *Room) error {
 		return err
 	}
 	room.Serial = serial
+	room.PVEActors = nil
 	room.Reliable = nil
 	room.ReliableSerial = serial
 	room.Reports = nil

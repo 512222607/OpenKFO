@@ -28,6 +28,9 @@ func (hub *Hub) battleMessage(session *Session, channel *Channel, message protoc
 		return protocol.ErrFrame
 	}
 	id := protocol.ReadUint32(payload, 0)
+	if id == protocol.BattleEventPVEActorCreate || id == protocol.BattleEventPVEActorRemove {
+		return hub.pveActorMessage(session, message)
+	}
 	if (id >= 9000 && id <= 9002) || (id >= 9500 && id <= 9502) {
 		return hub.reliableBattleEvent(session, message)
 	}
