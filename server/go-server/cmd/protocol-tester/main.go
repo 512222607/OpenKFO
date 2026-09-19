@@ -119,6 +119,16 @@ func (c *client) read() (tunnel.Frame, []protocol.Message, error) {
 	return f, messages, err
 }
 func describe(m protocol.Message) string {
+	if m.ID == protocol.MsgRoomAnimationRequest {
+		return "房间动作请求3410：仅确认Lua名称，请求结构未确认，不按3420布局解释或转发"
+	}
+	if m.ID == protocol.MsgRoomAnimation {
+		r, err := protocol.ParseRoomAnimation(m.Payload)
+		if err != nil {
+			return "房间动作通知3420长度错误：必须9B"
+		}
+		return fmt.Sprintf("房间动作通知3420：对象字段=%d，中间DWORD=%d，动作值=%d；对象映射及动作范围未确认，不作为发包授权", r.SubjectValue, r.UnknownValue, r.Animation)
+	}
 	if m.ID == protocol.MsgBattleLoading {
 		r, err := protocol.ParseBattleStart(m.Payload)
 		if err != nil {
