@@ -52,7 +52,14 @@ func (h *Hub) completeTutorial(s *Session, ch *Channel, payload []byte) error {
 	}
 	// Synchronize BEFORE leaving: otherwise 924010 sees the old title and
 	// immediately sends another 3010 despite the committed completion receipt.
-	announced, err := h.announceTutorialReward(s)
+	// Use the catalogue validated by the completion transaction. A second DB
+	// read after committing could fail or see GM edits before the offer is sent.
+	announced := false
+	if len(result.Choices) != 0 {
+		announced, err = sendTutorialReward(s, result.Choices, result.Catalog)
+	} else if result.Replay {
+		announced, err = h.announceTutorialReward(s)
+	}
 	if err != nil {
 		return err
 	}
@@ -90,6 +97,10 @@ func (h *Hub) announceTutorialReward(s *Session) (bool, error) {
 	if err != nil || len(choices) == 0 {
 		return false, err
 	}
+	return sendTutorialReward(s, choices, catalog)
+}
+
+func sendTutorialReward(s *Session, choices []uint32, catalog []byte) (bool, error) {
 	p, err := protocol.EncodeTitleAward(2, choices)
 	if err != nil {
 		return false, err

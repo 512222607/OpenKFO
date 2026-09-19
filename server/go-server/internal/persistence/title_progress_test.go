@@ -92,14 +92,17 @@ func TestTitleProgressLocalDatabase(t *testing.T) {
 	rules.Enabled = true
 	save()
 	exec("UPDATE offers SET enabled=FALSE WHERE catalog_key=7")
+	// Reward definitions are independent of shop availability. A missing
+	// definition must still fail atomically; an unsold reward remains valid.
+	exec("DELETE FROM item_definitions WHERE definition_key=7")
 	if _, e := s.TitleManager().AdvanceTitle(1, []byte{1, 2}, ""); e == nil {
-		t.Fatal("disabled offer accepted")
+		t.Fatal("missing reward definition accepted")
 	}
 	var unchanged []byte
 	if e := db.QueryRow("SELECT profile FROM accounts WHERE uid=1").Scan(&unchanged); e != nil || unchanged[TitleLevelOffset] != 0 {
 		t.Fatal("failed grant changed title", e)
 	}
-	exec("UPDATE offers SET enabled=TRUE WHERE catalog_key=7")
+	exec(seedDefinitionsSQL)
 	advance(true, []byte{1, 2})
 	advance(false, []byte{1, 2})
 	rules.Titles[1].Choices = []uint32{8}

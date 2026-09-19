@@ -142,6 +142,13 @@ func TestTutorialBundleLocalDatabase(t *testing.T) {
 	if err != nil || r.Replay || len(r.Items) != 2 || len(r.Choices) != 1 || r.Choices[0] != 1 || r.Gold != 110 || r.Tickets != 70 || r.Profile[TitleLevelOffset] != 2 {
 		t.Fatal("tutorial reward", r, err)
 	}
+	if len(r.Catalog) != 108 || protocol.ReadUint32(r.Catalog, 0) != r.Choices[0] || protocol.ReadUint32(r.Catalog, 5) != 250001 {
+		t.Fatal("completion missing validated display snapshot")
+	}
+	var receipt []byte
+	if err = db.QueryRow("SELECT reward FROM tutorial_rewards WHERE uid=1").Scan(&receipt); err != nil || bytes.Contains(receipt, []byte(`"Catalog"`)) {
+		t.Fatal("transient shop catalogue persisted in receipt", err)
+	}
 	for i := 0; i < 2; i++ {
 		r, err = store.RewardManager().CompleteTutorial(1, hash)
 		if err != nil || !r.Replay || len(r.Items) != 0 || r.Gold != 110 || r.Tickets != 70 {
