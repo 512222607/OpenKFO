@@ -85,6 +85,26 @@ func TestTutorialBundleLocalDatabase(t *testing.T) {
 	}
 	rules.Tutorial.Items = []uint32{1, 2, 3}
 	save()
+	// A mismatched shop key used to commit completion and automatic gifts,
+	// then fail while building 1550, leaving no usable selection for the client.
+	badCatalog := make([]byte, 108)
+	protocol.WriteUint32(badCatalog, 0, 1)
+	badCatalog[4] = protocol.ItemWeapon
+	protocol.WriteUint32(badCatalog, 5, 999999)
+	exec("INSERT INTO offers VALUES(1,?,TRUE)", badCatalog)
+	if _, err = store.RewardManager().CompleteTutorial(1, ""); err == nil {
+		t.Fatal("conflicting display catalogue accepted")
+	}
+	for _, table := range []string{"inventory", "tutorial_rewards", "title_rewards"} {
+		var n int
+		if err = db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&n); err != nil || n != 0 {
+			t.Fatal("unusable selector consumed reward", table, n, err)
+		}
+	}
+	if err = db.QueryRow("SELECT profile,gold,tickets FROM accounts WHERE uid=1").Scan(&before, &gold, &tickets); err != nil || !bytes.Equal(before, profile) || gold != 10 || tickets != 20 {
+		t.Fatal("unusable selector changed progress or balances", err)
+	}
+	exec("DELETE FROM offers")
 	hash := strings.Repeat("a", 64)
 	extended := &ExtendedTaskRules{ClientHash: hash}
 	for i := uint16(0); i < 3; i++ {

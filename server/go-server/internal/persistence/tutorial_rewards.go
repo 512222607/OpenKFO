@@ -70,6 +70,9 @@ func (m *RewardManager) CompleteTutorial(uid uint64, clientHash string) (r Tutor
 		// Create the pending choice in the same transaction as completion.
 		// No weapon enters inventory until authenticated 4126 chooses it.
 		if len(r.Choices) > 0 {
+			if _, err = tutorialChoiceCatalog(tx, r.Choices); err != nil {
+				return r, err
+			}
 			if err = grantTitleChoices(tx, uid, 2, r.Choices); err != nil {
 				return r, err
 			}

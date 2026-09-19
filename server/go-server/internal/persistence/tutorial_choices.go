@@ -27,11 +27,21 @@ func (m *RewardManager) TutorialChoices(uid uint64) (choices []uint32, catalog [
 	if json.Unmarshal(data, &choices) != nil || len(choices) == 0 || len(choices) > 7 {
 		return nil, nil, ErrDenied
 	}
+	catalog, err = tutorialChoiceCatalog(tx, choices)
+	if err != nil {
+		return nil, nil, err
+	}
+	return choices, catalog, tx.Commit()
+}
+
+// Validate the same display catalogue before committing completion and when
+// restoring a pending selection. A broken catalogue must not consume rewards.
+func tutorialChoiceCatalog(tx *sql.Tx, choices []uint32) (catalog []byte, err error) {
 	// 1550 is a complete catalogue. Preserve normal shop entries while adding
 	// display-only reward definitions; this does not create purchasable offers.
 	rows, err := tx.Query("SELECT record FROM offers WHERE enabled=TRUE ORDER BY catalog_key LIMIT 4000")
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	records := map[uint32][]byte{}
 	order := []uint32{}
@@ -51,28 +61,28 @@ func (m *RewardManager) TutorialChoices(uid uint64) (choices []uint32, catalog [
 	rowErr := rows.Err()
 	rows.Close()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if rowErr != nil {
-		return nil, nil, rowErr
+		return nil, rowErr
 	}
 	seen := map[uint32]bool{}
 	for _, key := range choices {
 		if seen[key] {
-			return nil, nil, ErrDenied
+			return nil, ErrDenied
 		}
 		seen[key] = true
 		d, e := readDefinition(tx, key)
 		if e != nil {
-			return nil, nil, e
+			return nil, e
 		}
 		if d.Record[4] != protocol.ItemWeapon {
-			return nil, nil, ErrDenied
+			return nil, ErrDenied
 		}
 		existing, ok := records[key]
 		if ok {
 			if existing[4] != d.Record[4] || !bytes.Equal(existing[5:9], d.Record[5:9]) {
-				return nil, nil, ErrDenied
+				return nil, ErrDenied
 			}
 			continue
 		}
@@ -88,5 +98,5 @@ func (m *RewardManager) TutorialChoices(uid uint64) (choices []uint32, catalog [
 	for _, key := range order {
 		catalog = append(catalog, records[key]...)
 	}
-	return choices, catalog, tx.Commit()
+	return catalog, nil
 }
