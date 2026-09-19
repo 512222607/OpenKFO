@@ -223,3 +223,11 @@ stageassault.lua按MonsterList的顺序下标取怪物，并非随机选模板�
 现有ReadStageCatalogue及ReadStageMaps已接入绑定读取：有该Lua配置时只解析字面量maps表，不执行Lua、不根据地图XML文件名拼脚本；拒绝重复地图、越界编号、动态表达式、路径穿越和缺失脚本。返回StageMap.script与script_hash，哈希计算于解包后原始脚本字节。没有该配置的旧归档保留原有目录读取行为，不伪造绑定。
 
 实包测试验证9170指向script/pve/act_zombiedefend_normal.lua和只读归档哈希；合成测试覆盖CRLF、注释、大小写路径归一与非法条目。这里只确认绑定，尚未把normal脚本的波次、人数条件及完整怪物目录导入服务器计划。
+
+## 9170波次预览（2026-09-20）
+
+目录读取返回wave_preview：模板名称按原始GBK字节排序，三个variants分别覆盖1–2、3–4、5–8人，各25波。怪物列表直接从实际脚本读取；人数选择及Count公式为已核验版本的适配，不执行客户端Lua。Count超过列表长度的部分不计怪物，与StageAssault的nil项不生成实体分支一致。
+
+适配同时要求act_zombiedefend_normal.lua原始字节SHA256为2d966acbb0f2c255e3f0b644b45a845c863ab90acc4eec0dc517235920587c94、stageassault.lua为0528f4d1d668b73982d66cd7ff167fc869e2ce1e410bbe81f34ef2d41b21a84d。任一版本变化时不返回旧波次推测；其他地图仍只返回脚本绑定。尚未提供GM应用预览到服务器配置的流程，PVE准入仍未开放。
+
+实包测试覆盖3个人数档25波结构，1/3/4/11/14/21/25波的实际数量和模板索引边界；独立测试验证未知脚本版本不套用规则。未将上述测试声称为原生关卡实测。

@@ -7,15 +7,16 @@ import (
 )
 
 type StageMap struct {
-	Script            string    `json:"script,omitempty"`
-	ScriptHash        string    `json:"script_hash,omitempty"`
-	Logic             uint32    `json:"logic"`
-	Group             uint32    `json:"group"`
-	Difficulty        uint32    `json:"difficulty"`
-	MapID             uint32    `json:"map_id"`
-	MapType           uint32    `json:"map_type"`
-	DisplayDifficulty uint32    `json:"display_difficulty"`
-	RewardItems       [3]uint32 `json:"reward_items"`
+	WavePreview       *StageWavePreview `json:"wave_preview,omitempty"`
+	Script            string            `json:"script,omitempty"`
+	ScriptHash        string            `json:"script_hash,omitempty"`
+	Logic             uint32            `json:"logic"`
+	Group             uint32            `json:"group"`
+	Difficulty        uint32            `json:"difficulty"`
+	MapID             uint32            `json:"map_id"`
+	MapType           uint32            `json:"map_type"`
+	DisplayDifficulty uint32            `json:"display_difficulty"`
+	RewardItems       [3]uint32         `json:"reward_items"`
 }
 
 // Map requirements are separate from PVE difficulty/reward display entries.

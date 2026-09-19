@@ -75,6 +75,12 @@ func (a *archive) attachStageScripts(maps []StageMap) error {
 			return fmt.Errorf("PVE map %d script: %w", maps[i].MapID, err)
 		}
 		maps[i].Script, maps[i].ScriptHash = name, digest(raw)
+		if maps[i].MapType == 21 {
+			maps[i].WavePreview, err = a.stageWavePreview(name, raw)
+			if err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }

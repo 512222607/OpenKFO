@@ -43,6 +43,29 @@ func TestStageCatalogueClientArchive(t *testing.T) {
 		if row.MapID == 9170 && (row.Script != "script/pve/act_zombiedefend_normal.lua" || len(row.ScriptHash) != 64) {
 			t.Fatalf("native script binding lost: %+v", row)
 		}
+		if row.MapID == 9170 {
+			p := row.WavePreview
+			if p == nil || len(p.Templates) != 5 || len(p.Variants) != 3 {
+				t.Fatal("missing verified native wave preview", p)
+			}
+			for i, variant := range p.Variants {
+				if len(variant.Waves) != 25 {
+					t.Fatal("wrong wave count")
+				}
+				for _, check := range []struct{ wave, total int }{{1, 2}, {3, 4}, {4, 4}, {11, 3}, {14, 4}, {21, 2}, {25, 4}} {
+					total := uint32(0)
+					for id, count := range variant.Waves[check.wave-1].Monsters {
+						if id >= uint32(len(p.Templates)) {
+							t.Fatal("unknown template")
+						}
+						total += count
+					}
+					if total != uint32(check.total*(i+2)) {
+						t.Fatalf("variant %d wave %d: %d", i, check.wave, total)
+					}
+				}
+			}
+		}
 	}
 	requirements, _, err := ReadStageRequirements(path)
 	if err != nil {
