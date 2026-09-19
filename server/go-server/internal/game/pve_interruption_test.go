@@ -15,6 +15,7 @@ func TestPVELeaveAbortsWithoutControllerMigration(t *testing.T) {
 			r.Request[46] = byte(protocol.StageAssault)
 			r.StageWaves, _ = newStageWaves([]StageWavePlan{{Monsters: map[uint32]uint32{7: 1}}})
 			r.PVEActors = map[uint64]pveActor{42: {active: true}}
+			r.PVEBlocks = map[uint32]pveBlock{100: {sequence: 1, payload: []byte{1}}}
 			r.Reports = map[uint64][]byte{owner.UID: settlementReport(r)}
 			r.LoadTimer = time.NewTimer(time.Hour)
 			leaver, remaining := owner, peer
@@ -25,7 +26,7 @@ func TestPVELeaveAbortsWithoutControllerMigration(t *testing.T) {
 			roomOutputs(t, leaver)
 			roomOutputs(t, remaining, protocol.MsgRoomLeft, 20150)
 			roomOutputs(t, outsider)
-			if len(h.Rooms) != 0 || len(r.Members) != 0 || r.PVEActors != nil || r.StageWaves != nil || r.Reports != nil || r.LoadTimer != nil {
+			if len(h.Rooms) != 0 || len(r.Members) != 0 || r.PVEActors != nil || r.PVEBlocks != nil || r.StageWaves != nil || r.Reports != nil || r.LoadTimer != nil {
 				t.Fatal("stage state survived departure", phase, ownerLeaves)
 			}
 			if remaining.Room != nil || remaining.game().Phase != "lobby" {

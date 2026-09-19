@@ -33,6 +33,9 @@ func (hub *Hub) battleMessage(session *Session, channel *Channel, message protoc
 		return protocol.ErrFrame
 	}
 	id := protocol.ReadUint32(payload, 0)
+	if id == protocol.BattleEventPVEBlockCreate || id == protocol.BattleEventPVEBlockRemove {
+		return hub.pveBlockMessage(session, message)
+	}
 	if id == protocol.BattleEventPVEActorCreate || id == protocol.BattleEventPVEActorRemove {
 		return hub.pveActorMessage(session, message)
 	}

@@ -42,6 +42,7 @@ type Room struct {
 	StageElapsedSeconds uint32
 	StageWaves          *stageWaves
 	PVEActors           map[uint64]pveActor
+	PVEBlocks           map[uint32]pveBlock
 	NetworkProbe        *roomNetworkProbe
 	TutorialPending     bool
 	Reliable            map[reliableActor]*reliableExchange
@@ -746,6 +747,7 @@ func (hub *Hub) startBattle(room *Room) error {
 	room.Serial = serial
 	room.StageWaves = waves
 	room.PVEActors = nil
+	room.PVEBlocks = nil
 	room.Reliable = nil
 	room.ReliableSerial = serial
 	room.Reports = nil

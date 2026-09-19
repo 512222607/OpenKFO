@@ -165,6 +165,12 @@ func (s *Session) tracePacket(direction string, channel uint32, transport string
 		if opcode == 8071 && len(payload) >= 4 {
 			entry["subprotocol"] = protocol.ReadUint32(payload, 0)
 			if transport == "game" {
+				if r, err := protocol.ParsePVEBlockCreate(payload); err == nil {
+					entry["content"] = fmt.Sprintf("PVE创建地图阻挡：申报UID=%d，阻挡ID=%d，布尔原值=%t，四角=%v", r.Sender, r.ID, r.Flag, r.Corners)
+				}
+				if r, err := protocol.ParsePVEBlockRemove(payload); err == nil {
+					entry["content"] = fmt.Sprintf("PVE解除地图阻挡：申报UID=%d，阻挡ID=%d；不是通关或发奖凭据", r.Sender, r.ID)
+				}
 				if r, err := protocol.ParsePVEActorCreate(payload); err == nil {
 					entry["content"] = fmt.Sprintf("PVE创建怪物：申报UID=%d，实体=%d，模板原值=%d，位置=%v，朝向原值=%d；仍需服务端授权", r.Sender, r.Actor, r.TemplateValue, r.Position, r.DirectionValue)
 				}
