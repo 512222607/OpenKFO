@@ -21,7 +21,15 @@ func (s *TaskManager) ExtendedTasks(uid uint64, hash string) ([]ExtendedTaskStat
 	if err != nil {
 		return nil, err
 	}
-	return result, tx.Commit()
+	// Hide claimed newbie tasks only in the public list. Claim processing
+	// still needs their durable receipts to acknowledge a lost response.
+	visible := result[:0]
+	for _, state := range result {
+		if state.Snapshot.Rule.Kind != "newbie" || state.State != 3 {
+			visible = append(visible, state)
+		}
+	}
+	return visible, tx.Commit()
 }
 
 // Reused by settlement so counts and battle rewards commit together.
@@ -112,9 +120,6 @@ func extendedTasksTx(tx *sql.Tx, uid uint64, hash string) ([]ExtendedTaskState, 
 				cycle = today
 			}
 			r = ExtendedTaskState{Key: rule.ID, Cycle: cycle, State: 1, Revision: settings.Revision, Snapshot: ExtendedTaskSnapshot{ClientHash: hash, Rule: rule, Template: catalogue[rule.ID]}}
-		}
-		if rule.Kind == "newbie" && r.State == 3 {
-			continue
 		}
 		result = append(result, r)
 	}

@@ -32,6 +32,13 @@ func (s *TaskManager) ClaimExtendedTask(uid uint64, hash string, action uint32, 
 			break
 		}
 	}
+	if task != nil && task.State == 3 {
+		// extendedTasksTx validated owner, client hash, kind and current cycle.
+		// Never recreate deleted rewards or rerun growth on an acknowledged claim.
+		r.AlreadyClaimed = true
+		r.Keys = []uint16{task.Key}
+		return r, tx.Commit()
+	}
 	if task == nil || task.State != 4 || !extendedTaskConditionsMet(*task) {
 		return r, ErrDenied
 	}

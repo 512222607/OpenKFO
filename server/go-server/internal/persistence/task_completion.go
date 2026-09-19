@@ -7,6 +7,7 @@ import (
 )
 
 type TaskAwards struct {
+	AlreadyClaimed    bool
 	NotificationRules TaskRules
 	Keys              []uint16
 	Profile           []byte

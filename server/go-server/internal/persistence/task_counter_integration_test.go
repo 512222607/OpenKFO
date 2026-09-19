@@ -152,8 +152,8 @@ func TestTaskCountersSettlementLocalDatabase(t *testing.T) {
 	if err != nil || award.GoldBalance != 500 || protocol.ReadUint32(award.Profile, ExperienceOffset) != 50 {
 		t.Fatal("claim", award, err)
 	}
-	if _, err = store.TaskManager().ClaimExtendedTask(1, hash, 6312, 3002, (RewardRules{}).Normalized()); err == nil {
-		t.Fatal("duplicate claim accepted")
+	if replay, e := store.TaskManager().ClaimExtendedTask(1, hash, 6312, 3002, (RewardRules{}).Normalized()); e != nil || !replay.AlreadyClaimed || len(replay.Items) != 0 || replay.Gold != 0 || replay.Experience != 0 {
+		t.Fatal("claim receipt missing", replay, e)
 	}
 	var balance uint32
 	if err = db.QueryRow("SELECT profile,gold FROM accounts WHERE uid=1").Scan(&saved, &balance); err != nil || balance != 500 || protocol.ReadUint32(saved, ExperienceOffset) != 50 {

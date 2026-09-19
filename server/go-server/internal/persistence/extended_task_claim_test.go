@@ -120,8 +120,8 @@ func TestExtendedTaskItemClaimLocalDatabase(t *testing.T) {
 	if err = db.QueryRow("SELECT expires_at FROM inventory_expirations WHERE uid=1").Scan(&deadline); err != nil || deadline < start+86400 || deadline > time.Now().Unix()+86400 {
 		t.Fatal("expiry", deadline, err)
 	}
-	if _, err = claim(); err == nil {
-		t.Fatal("duplicate award")
+	if replay, e := claim(); e != nil || !replay.AlreadyClaimed || len(replay.Items) != 0 || replay.Gold != 0 || replay.Experience != 0 {
+		t.Fatal("missing claim receipt", replay, e)
 	}
 	var count int
 	if err = db.QueryRow("SELECT COUNT(*) FROM inventory WHERE uid=1").Scan(&count); err != nil || count != 1 {
@@ -129,8 +129,8 @@ func TestExtendedTaskItemClaimLocalDatabase(t *testing.T) {
 	}
 	exec("DELETE FROM inventory_expirations WHERE uid=1")
 	exec("DELETE FROM inventory WHERE uid=1")
-	if _, err = claim(); err == nil {
-		t.Fatal("deleted item resurrected")
+	if replay, e := claim(); e != nil || !replay.AlreadyClaimed || len(replay.Items) != 0 {
+		t.Fatal("deleted item receipt", replay, e)
 	}
 	if err = db.QueryRow("SELECT COUNT(*) FROM inventory").Scan(&count); err != nil || count != 0 {
 		t.Fatal("resurrected inventory", count, err)

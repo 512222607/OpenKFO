@@ -265,7 +265,17 @@ func TestExtendedTaskActionsTLS(t *testing.T) {
 		if len(messages) != 3 || messages[0].ID != 4300 || messages[1].ID != 1240 || messages[2].ID != uint32(6301+i) || len(messages[2].Payload) != 3 || protocol.ReadUint16(messages[2].Payload, 0) != key || messages[2].Payload[2] != 3 {
 			t.Fatal("claim responses", messages)
 		}
-		send(uint32(6311+i), p, 20150)
+		// Simulate loss of the successful acknowledgement: retry must only
+		// replay the claimed state, never emit another inventory/wallet grant.
+		if e = c.game(3, uint32(6311+i), p); e != nil {
+			t.Fatal(e)
+		}
+		retry := drain()
+		if len(retry) != 1 || retry[0].ID != uint32(6301+i) || len(retry[0].Payload) != 3 || protocol.ReadUint16(retry[0].Payload, 0) != key || retry[0].Payload[2] != 3 {
+			t.Fatal("claim retry did not acknowledge without awards", retry)
+		}
+		// The receipt must not authorize a request for the other task kind.
+		send(uint32(6312-i), p, 20150)
 	}
 	after, e := store.RoleManager().Snapshot(uid)
 	if e != nil || after.Gold != before.Gold+40 {
@@ -273,5 +283,13 @@ func TestExtendedTaskActionsTLS(t *testing.T) {
 	}
 	if rows := query(); len(rows) != 1 || rows[2001].State != 3 {
 		t.Fatal("claimed task lists", rows)
+	}
+	// Yesterday's receipt must not acknowledge today's unearned daily reward.
+	exec("UPDATE extended_task_progress SET cycle=DATE_FORMAT(UTC_DATE()-INTERVAL 1 DAY,'%Y-%m-%d') WHERE uid=? AND task_key=2001", uid)
+	protocol.WriteUint16(p, 0, 2001)
+	p[2] = 3
+	send(6311, p, 20150)
+	if rows := query(); rows[2001].State != 1 {
+		t.Fatal("previous cycle leaked into current claim", rows)
 	}
 }

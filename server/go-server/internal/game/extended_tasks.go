@@ -99,17 +99,19 @@ func (h *Hub) extendedTaskAction(s *Session, m protocol.Message) error {
 			s.sendGame(notice("任务奖励未发放：请确认已完成、尚未领取且配置仍开放。"))
 			return nil
 		}
-		s.sendGame(protocol.Message{ID: 4300, Payload: bytes.Clone(award.Profile[persistence.ExperienceOffset : persistence.ExperienceOffset+8])})
-		s.sendGame(protocol.Message{ID: 1240, Payload: protocol.Uint32Bytes(award.GoldBalance)})
-		for _, item := range award.Items {
-			s.sendGame(protocol.Message{ID: protocol.MsgItemAdded, Payload: bytes.Clone(item)})
-			if s.Inventory == nil {
-				s.Inventory = map[uint32][]byte{}
+		if !award.AlreadyClaimed {
+			s.sendGame(protocol.Message{ID: 4300, Payload: bytes.Clone(award.Profile[persistence.ExperienceOffset : persistence.ExperienceOffset+8])})
+			s.sendGame(protocol.Message{ID: 1240, Payload: protocol.Uint32Bytes(award.GoldBalance)})
+			for _, item := range award.Items {
+				s.sendGame(protocol.Message{ID: protocol.MsgItemAdded, Payload: bytes.Clone(item)})
+				if s.Inventory == nil {
+					s.Inventory = map[uint32][]byte{}
+				}
+				s.Inventory[protocol.ReadUint32(item, 0)] = bytes.Clone(item)
 			}
-			s.Inventory[protocol.ReadUint32(item, 0)] = bytes.Clone(item)
-		}
-		if err := h.rewardBalances(s, growth.Rules.LevelGifts); err != nil {
-			return err
+			if err := h.rewardBalances(s, growth.Rules.LevelGifts); err != nil {
+				return err
+			}
 		}
 		// Native 6301/6302 consumers update the daily/newbie state using
 		// WORD key + BYTE state; newbie state 3 removes the received entry.
