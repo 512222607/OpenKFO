@@ -31,6 +31,18 @@ func (s *Session) tracePacket(direction string, channel uint32, transport string
 	} else {
 		entry["hex"] = hex.EncodeToString(payload)
 		if transport == "game" {
+			if opcode == protocol.MsgJoinRoom && strings.HasPrefix(direction, "C->S") {
+				if r, err := protocol.ParseRoomJoinRequest(payload); err == nil {
+					mode := fmt.Sprintf("未确认模式%d", r.Mode)
+					if r.Mode == protocol.JoinAsPlayer {
+						mode = "参战"
+					}
+					if r.Mode == protocol.JoinAsSpectator {
+						mode = "观战（尚未接入完整业务）"
+					}
+					entry["content"] = fmt.Sprintf("请求进入房间=%d，方式=%s", r.RoomID, mode)
+				}
+			}
 			if opcode == protocol.MsgWatchGameRequest && strings.HasPrefix(direction, "C->S") {
 				entry["content"] = "观战请求（A_WATCH_GAME_REQ）；字段尚未确认，请查看原始数据"
 			}

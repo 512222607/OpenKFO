@@ -367,10 +367,11 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		hub.Rooms[id] = newRoom
 		log.Printf("room_created uid=%d room=%d mode=%d rooms=%d", uid, id, resolvedRequest[protocol.RoomTypeOffset], len(hub.Rooms))
 	case protocol.MsgJoinRoom:
-		if len(payload) != 14 {
+		join, err := protocol.ParseRoomJoinRequest(payload)
+		if err != nil {
 			return true, protocol.ErrFrame
 		}
-		id := protocol.ReadUint16(payload, 0)
+		id := join.RoomID
 		if room != nil && room.ID == id && channel.Phase == "room" {
 			if tutorialRoom(room) && room.TutorialPending {
 				return true, hub.acknowledgeTutorialJoin(session, room)
@@ -383,7 +384,7 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		target := hub.Rooms[id]
 		code := uint32(0)
 		switch {
-		case payload[2] != 0:
+		case join.Mode != protocol.JoinAsPlayer:
 			code = 130
 		case target == nil || target.LobbyID != session.LobbyID:
 			code = 29
@@ -391,7 +392,7 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 			code = 30
 		case len(target.Members) >= int(target.Request[37]):
 			code = 32
-		case !bytes.Equal(bytes.SplitN(payload[3:14], []byte{0}, 2)[0], bytes.SplitN(target.Request[21:32], []byte{0}, 2)[0]):
+		case !bytes.Equal(bytes.SplitN(join.Password[:], []byte{0}, 2)[0], bytes.SplitN(target.Request[21:32], []byte{0}, 2)[0]):
 			code = 31
 		}
 		if code != 0 {

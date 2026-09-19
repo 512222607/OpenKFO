@@ -169,3 +169,25 @@ func TestWatchTracePreservesUnknownPayload(t *testing.T) {
 		}
 	}
 }
+
+func TestJoinTraceDistinguishesSpectatorFromPlayer(t *testing.T) {
+	for _, tc := range []struct {
+		mode byte
+		want string
+	}{{0, "参战"}, {1, "观战"}, {255, "未确认模式255"}} {
+		p := make([]byte, 14)
+		protocol.WriteUint16(p, 0, 42)
+		p[2] = tc.mode
+		var output bytes.Buffer
+		s := &Session{Trace: log.New(&output, "", 0)}
+		s.tracePacket("C->S", 1, "game", protocol.MsgJoinRoom, p, false)
+		var row map[string]any
+		if err := json.Unmarshal(output.Bytes(), &row); err != nil {
+			t.Fatal(err)
+		}
+		content, _ := row["content"].(string)
+		if !strings.Contains(content, tc.want) || !strings.Contains(content, "房间=42") || len(row["hex"].(string)) != 28 {
+			t.Fatal(row)
+		}
+	}
+}
