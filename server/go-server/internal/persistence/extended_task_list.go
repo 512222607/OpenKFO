@@ -8,11 +8,11 @@ import (
 
 // A nil list means this server has no extended catalogue configured. An empty
 // non-nil list means it is configured but no tasks are currently available.
-func (s *Store) ExtendedTasks(uid uint64, hash string) ([]ExtendedTaskState, error) {
+func (s *TaskManager) ExtendedTasks(uid uint64, hash string) ([]ExtendedTaskState, error) {
 	if uid == 0 {
 		return nil, ErrDenied
 	}
-	tx, err := s.DB.Begin()
+	tx, err := s.store.DB.Begin()
 	if err != nil {
 		return nil, err
 	}

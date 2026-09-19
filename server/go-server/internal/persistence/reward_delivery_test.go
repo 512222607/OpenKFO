@@ -18,7 +18,7 @@ func TestRewardProgressFailureDoesNotMutate(t *testing.T) {
 			xp = 0
 			g = 1
 		}
-		if _, e := creditRewardProgress(p, balance, xp, g, RewardRules{}); e == nil {
+		if _, e := (RewardManager{}).GrantProgress(p, balance, xp, g, RewardRules{}); e == nil {
 			t.Fatal("overflow accepted")
 		}
 		if !bytes.Equal(p, before) {
@@ -31,7 +31,7 @@ func TestRewardProgressPreservesUnrelatedFields(t *testing.T) {
 	protocol.WriteUint32(p, ExperienceOffset, 10)
 	protocol.WriteUint32(p, ExperienceOffset+4, 0x7ffffffe)
 	before := bytes.Clone(p)
-	balance, e := creditRewardProgress(p, 50, 5, 7, RewardRules{})
+	balance, e := (RewardManager{}).GrantProgress(p, 50, 5, 7, RewardRules{})
 	if e != nil || balance != 57 || protocol.ReadUint32(p, ExperienceOffset) != 15 || protocol.ReadUint32(p, ExperienceOffset+4) != 0x7fffffff {
 		t.Fatal(balance, e)
 	}

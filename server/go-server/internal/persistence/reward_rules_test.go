@@ -27,32 +27,32 @@ func TestRewardRulesPersistence(t *testing.T) {
 		t.Fatal(err)
 	}
 	initial := RewardRules{WinGold: 20, WinExperience: 10, LossGold: 10, LossExperience: 5, DrawGold: 10, DrawExperience: 5}
-	if err = store.SeedBattleRewards(initial); err != nil {
+	if err = store.RewardManager().SeedBattleRewards(initial); err != nil {
 		t.Fatal(err)
 	}
-	first, err := store.BattleRewards(RewardRules{})
+	first, err := store.RewardManager().BattleRewards(RewardRules{})
 	if err != nil || !reflect.DeepEqual(first.Rules, initial.Normalized()) || first.Revision != 1 {
 		t.Fatalf("seed: %+v %v", first, err)
 	}
 	next := initial
 	next.WinGold = 0
 	next.LossExperience = 7
-	saved, err := store.SaveBattleRewards(first.Revision, next)
+	saved, err := store.RewardManager().SaveBattleRewards(first.Revision, next)
 	if err != nil || saved.Revision != 2 {
 		t.Fatal(saved, err)
 	}
-	if _, err = store.SaveBattleRewards(first.Revision, initial); err == nil {
+	if _, err = store.RewardManager().SaveBattleRewards(first.Revision, initial); err == nil {
 		t.Fatal("stale writer overwrote rules")
 	}
 	invalid := next
 	invalid.DrawGold = 1000001
-	if _, err = store.SaveBattleRewards(saved.Revision, invalid); err == nil {
+	if _, err = store.RewardManager().SaveBattleRewards(saved.Revision, invalid); err == nil {
 		t.Fatal("out-of-range award accepted")
 	}
-	if err = store.SeedBattleRewards(initial); err != nil {
+	if err = store.RewardManager().SeedBattleRewards(initial); err != nil {
 		t.Fatal(err)
 	}
-	current, err := store.BattleRewards(initial)
+	current, err := store.RewardManager().BattleRewards(initial)
 	if err != nil || !reflect.DeepEqual(current.Rules, next.Normalized()) || current.Revision != 2 {
 		t.Fatal("restart or stale write reverted GM changes", current, err)
 	}

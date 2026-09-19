@@ -20,6 +20,30 @@ go build -o kungfu-admin.exe ./cmd/admin
 
 `kungfu-server` 提供游戏服务；`kungfu-admin` 是 GM 远程调用的管理程序，不是另一个常驻游戏服务。原生构建生成当前系统和架构的程序，Windows EXE 不能直接在 Linux 上运行。
 
+### Windows 本地可视化服务器
+
+Go 保持纯服务器。先在上述源码目录构建服务：
+
+```sh
+go build -o ../../dist/local-server/kungfu-server.exe ./cmd/server
+```
+
+窗口使用 .NET C#，在仓库根目录构建：
+
+```sh
+dotnet publish toosl/local-server-monitor/LocalServerMonitor.csproj -c Release -o dist/local-server
+```
+
+双击同目录 `功夫小子本地服务器.exe`，点击启动；新版本地登录器启动按钮也会优先打开此窗口。保留本地目录的 `settings.private.json`、`config.json`、`certificates` 和引用的 SSH 配置/密钥，不要提交或分发私有凭据。
+
+- 列表展示时间、玩家、账号、收发方向、协议中文名称和字节数，可按账号、UID、协议号或名称筛选。
+- 选中记录，下方「中文详情」显示已确认的字段；「原始数据」显示完整 JSON 和十六进制。未确认的字段不推测含义。
+- 「待发送」表示进入发送队列，与实际发送成功的记录区分。
+- 「隐藏心跳」「清空显示」只改变窗口显示。窗口保留最近 5000 条 / 32 MB，完整日志保留在同目录 `logs`，认证敏感字段仍脱敏。
+- 关闭窗口会停止由它启动的本地服务器；接入此前已运行的服务器时不停止它。启动失败会留在窗口，原始错误也写入 `monitor-startup.log`。
+
+Go 本地与线上使用同一日志格式，窗口只读取本地文件，不新增公网日志端口。Linux/macOS 服务运行方式不变。详情见[窗口说明](../../toosl/local-server-monitor/README.md)。
+
 ## 准备数据库与配置
 
 1. 在 MySQL 创建数据库及有权访问该库的用户。本地 GM 测试库名称使用 `openkfo_debug_` 前缀，例如 `openkfo_debug_local`。

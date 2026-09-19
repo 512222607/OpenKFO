@@ -6,7 +6,7 @@ import (
 )
 
 // Native warehouse 8B3919/8B3924 selects slot 37 for type 30 before 2080.
-var Slots = map[byte][]uint16{12: {4}, 13: {3}, 14: {7}, 15: {2}, 16: {6}, 17: {5}, 18: {4}, 20: {10}, 21: {11}, 25: {8, 9}, 30: {37, 38}, 64: {27, 28}}
+var Slots = map[byte][]uint16{12: {4}, 13: {3}, 14: {7}, 15: {2}, 16: {6}, 17: {5}, 18: {4}, 20: {10}, 21: {11}, protocol.ItemWeapon: {protocol.SlotPrimaryWeapon, protocol.SlotSecondaryWeapon}, protocol.ItemTalisman: {protocol.SlotPrimaryTalisman, protocol.SlotSecondaryTalisman}, protocol.ItemConsumable: {protocol.SlotPrimaryConsumable, protocol.SlotSecondaryConsumable}}
 
 // Current native 660CE0 default-slot switch. Only include types whose explicit
 // equipment paths are already supported here; suits and consumables differ.
@@ -28,24 +28,24 @@ func defaultEquipmentSlot(kind byte) uint16 {
 		return 10
 	case 21:
 		return 11
-	case 25:
-		return 8
+	case protocol.ItemWeapon:
+		return protocol.SlotPrimaryWeapon
 	}
 	return 0
 }
 
-func (store *Store) Equip(uid uint64, instance uint32, slot uint16) ([]byte, error) {
-	return store.equip(uid, instance, slot, false)
+func (m *EquipmentManager) Equip(uid uint64, instance uint32, slot uint16) ([]byte, error) {
+	return m.store.EquipmentManager().equip(uid, instance, slot, false)
 }
 
 // EquipDefault resolves the warehouse's zero slot inside the ownership transaction.
 // Zero still means unequip for Equip callers (2300).
-func (store *Store) EquipDefault(uid uint64, instance uint32, slot uint16) ([]byte, error) {
-	return store.equip(uid, instance, slot, true)
+func (m *EquipmentManager) EquipDefault(uid uint64, instance uint32, slot uint16) ([]byte, error) {
+	return m.store.EquipmentManager().equip(uid, instance, slot, true)
 }
 
-func (store *Store) equip(uid uint64, instance uint32, slot uint16, automatic bool) ([]byte, error) {
-	transaction, err := store.DB.Begin()
+func (m *EquipmentManager) equip(uid uint64, instance uint32, slot uint16, automatic bool) ([]byte, error) {
+	transaction, err := m.store.DB.Begin()
 	if err != nil {
 		return nil, err
 	}
@@ -58,22 +58,22 @@ func (store *Store) equip(uid uint64, instance uint32, slot uint16, automatic bo
 		return nil, err
 	}
 	var record []byte
-	if err = transaction.QueryRow(`SELECT record FROM inventory WHERE uid=? AND instance=?`, uid, instance).Scan(&record); err != nil || len(record) != 68 {
+	if err = transaction.QueryRow(`SELECT record FROM inventory WHERE uid=? AND instance=?`, uid, instance).Scan(&record); err != nil || len(record) != protocol.InventoryRecordSize {
 		return nil, ErrDenied
 	}
-	if (automatic || slot != 0) && !usableItem(record) {
+	if (automatic || slot != protocol.SlotUnequipped) && !usableItem(record) {
 		return nil, ErrDenied
 	}
-	if automatic && slot == 0 {
+	if automatic && slot == protocol.SlotUnequipped {
 		slot = defaultEquipmentSlot(record[4])
-		if slot == 0 {
+		if slot == protocol.SlotUnequipped {
 			return nil, ErrDenied
 		}
 	}
-	if slot == 0 && protocol.ReadUint16(record, 17) == 0 {
+	if slot == protocol.SlotUnequipped && protocol.ReadUint16(record, 17) == 0 {
 		return nil, nil
 	}
-	if slot != 0 {
+	if slot != protocol.SlotUnequipped {
 		allowed := false
 		for _, allowedSlot := range Slots[record[4]] {
 			allowed = allowed || allowedSlot == slot
@@ -96,7 +96,7 @@ func (store *Store) equip(uid uint64, instance uint32, slot uint16, automatic bo
 				rows.Close()
 				return nil, err
 			}
-			if len(change.record) == 68 && protocol.ReadUint16(change.record, 17) == slot {
+			if len(change.record) == protocol.InventoryRecordSize && protocol.ReadUint16(change.record, 17) == slot {
 				protocol.WriteUint16(change.record, 17, 0)
 				edits = append(edits, change)
 			}

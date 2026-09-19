@@ -35,8 +35,9 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('关卡开关 · 本地测试服'), findsOneWidget);
-    await tester.enterText(find.byType(TextField), '8110');
-    await tester.tap(find.text('加入关闭列表'));
+    await tester.tap(find.byType(DropdownButton<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('关闭').last);
     await tester.pump();
     await tester.tap(find.text('保存关卡开关'));
     await tester.pumpAndSettle();
@@ -48,6 +49,8 @@ void main() {
         {'map_id': 8110, 'name': 'Map', 'title_level': 3},
       ],
       'disabled_maps': [104, 8110],
+      'force_open_all': false,
+      'force_open_maps': [],
     });
     expect(find.textContaining('已保存到 本地测试服'), findsOneWidget);
   });

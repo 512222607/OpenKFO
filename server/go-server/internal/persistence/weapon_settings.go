@@ -35,10 +35,10 @@ func (a WeaponSettings) Validate() error {
 	}
 	return nil
 }
-func (s *Store) WeaponSettings() (WeaponSettings, error) {
+func (s *ItemManager) WeaponSettings() (WeaponSettings, error) {
 	a := WeaponSettings{}
 	var data []byte
-	err := s.DB.QueryRow("SELECT revision,rules FROM weapon_rules WHERE id=1").Scan(&a.Revision, &data)
+	err := s.store.DB.QueryRow("SELECT revision,rules FROM weapon_rules WHERE id=1").Scan(&a.Revision, &data)
 	if err == sql.ErrNoRows {
 		return a, nil
 	}
@@ -51,7 +51,7 @@ func (s *Store) WeaponSettings() (WeaponSettings, error) {
 	return a, a.Validate()
 }
 
-func (s *Store) SeedWeaponSettings(rules WeaponRules) error {
+func (s *ItemManager) SeedWeaponSettings(rules WeaponRules) error {
 	if err := (WeaponSettings{Rules: rules}).Validate(); err != nil {
 		return err
 	}
@@ -59,10 +59,10 @@ func (s *Store) SeedWeaponSettings(rules WeaponRules) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.DB.Exec("INSERT IGNORE INTO weapon_rules(id,revision,rules) VALUES(1,1,?)", data)
+	_, err = s.store.DB.Exec("INSERT IGNORE INTO weapon_rules(id,revision,rules) VALUES(1,1,?)", data)
 	return err
 }
-func (s *Store) SaveWeaponSettings(a WeaponSettings) (WeaponSettings, error) {
+func (s *ItemManager) SaveWeaponSettings(a WeaponSettings) (WeaponSettings, error) {
 	if err := a.Validate(); err != nil {
 		return WeaponSettings{}, err
 	}
@@ -73,7 +73,7 @@ func (s *Store) SaveWeaponSettings(a WeaponSettings) (WeaponSettings, error) {
 	if err != nil {
 		return WeaponSettings{}, err
 	}
-	tx, err := s.DB.Begin()
+	tx, err := s.store.DB.Begin()
 	if err != nil {
 		return WeaponSettings{}, err
 	}

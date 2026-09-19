@@ -40,6 +40,8 @@ type Channel struct {
 }
 
 type Session struct {
+	StageViewRequested   bool
+	StageViewDigest      [32]byte
 	TitleOffer           byte              // Server-announced title; retained after claim to bind retries.
 	ExtendedTaskNotified map[uint16]string // Client hash + cycle, scoped to this login.
 	TalismanPending      map[uint32]pendingTalisman
@@ -159,7 +161,7 @@ func (hub *Hub) profileReady(session *Session) error {
 	if !session.TablesReady || channel == nil || channel.Phase != "bootstrap" {
 		return nil
 	}
-	account, err := hub.Store.Snapshot(session.UID)
+	account, err := hub.Store.RoleManager().Snapshot(session.UID)
 	if err != nil {
 		return err
 	}
@@ -169,12 +171,12 @@ func (hub *Hub) profileReady(session *Session) error {
 			return fmt.Errorf("character creation choices are not configured")
 		}
 		channel.Phase = "character_create"
-		session.send(channel.ID, protocol.Message{ID: 1125, Payload: options})
+		session.send(channel.ID, protocol.Message{ID: protocol.MsgCharacterOptions, Payload: options})
 		return nil
 	}
 	channel.Phase = "profile_sent"
 	session.rememberInventory(account.Inventory)
-	session.send(channel.ID, protocol.Message{ID: 1151, Payload: append(account.Profile, account.InventoryBytes()...)})
+	session.send(channel.ID, protocol.Message{ID: protocol.MsgCharacterCreated, Payload: append(account.Profile, account.InventoryBytes()...)})
 	return nil
 }
 
@@ -305,17 +307,17 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		}
 		return nil
 	}
-	if message.ID == 1010 || message.ID == 2010 {
+	if message.ID == protocol.MsgGameLogin || message.ID == protocol.MsgEnterLobby {
 		if channel.Phase != "connected" || len(payload) != 96 || protocol.ReadUint64(payload, 0) != session.UID || protocol.ReadUint32(payload, 49) != 594 {
 			return protocol.ErrFrame
 		}
-		if message.ID == 1010 {
+		if message.ID == protocol.MsgGameLogin {
 			if time.Now().After(session.GrantUntil) || session.BootstrapChannel != 0 || session.GameChannel != 0 {
 				return persistence.ErrDenied
 			}
 			session.BootstrapChannel = channel.ID
 			channel.Phase = "bootstrap"
-			account, err := hub.Store.Snapshot(session.UID)
+			account, err := hub.Store.RoleManager().Snapshot(session.UID)
 			if err != nil {
 				return err
 			}
@@ -327,13 +329,13 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 			session.VIPKind = account.VIPKind()
 			session.VIPShopPercent = 0
 			if session.VIPKind >= 2 {
-				session.VIPShopPercent, err = hub.Store.VIPShopPercent(session.UID)
+				session.VIPShopPercent, err = hub.Store.ShopManager().VIPShopPercent(session.UID)
 				if err != nil {
 					return err
 				}
 			}
 			for i := range replies {
-				if replies[i].ID == 1020 {
+				if replies[i].ID == protocol.MsgLoginCore {
 					protocol.WriteUint32(replies[i].Payload, 33, session.VIPKind)
 				}
 			}
@@ -390,7 +392,7 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		}
 		return nil
 	}
-	if message.ID == 1157 {
+	if message.ID == protocol.MsgPeerHeartbeat {
 		if len(payload) != 0 {
 			return protocol.ErrFrame
 		}
@@ -406,7 +408,7 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 	if channel.ID != session.GameChannel {
 		return nil
 	}
-	if message.ID == 2060 {
+	if message.ID == protocol.MsgLogout {
 		if len(payload) != 0 {
 			return protocol.ErrFrame
 		}
@@ -416,6 +418,8 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		hub.leave(session, false)
 		session.GameChannel, session.BootstrapChannel = 0, 0
 		session.LobbyID = 0
+		session.StageViewRequested = false
+		session.StageViewDigest = [32]byte{}
 		session.Bound = false
 		session.UDPRelayed = 0
 		session.ConsumeIntents, session.Inventory = nil, nil
@@ -431,7 +435,7 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		log.Printf("native_channel_left uid=%d channel=%d protocol=2070", session.UID, channel.ID)
 		return nil
 	}
-	if message.ID == 1156 {
+	if message.ID == protocol.MsgPeerBind {
 		if len(payload) != 12 || session.P2P == 0 || protocol.ReadUint64(payload, 0) != session.UID || protocol.ReadUint32(payload, 8) != session.P2P {
 			return protocol.ErrFrame
 		}
@@ -439,10 +443,10 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		session.Bound = true
 		return nil
 	}
-	if message.ID == 4201 || (message.ID == 8071 && len(payload) >= 4 && (protocol.ReadUint32(payload, 0) == 8291 || protocol.ReadUint32(payload, 0) == 8292)) {
+	if message.ID == 4201 || (message.ID == protocol.MsgBattleEvent && len(payload) >= 4 && (protocol.ReadUint32(payload, 0) == 8291 || protocol.ReadUint32(payload, 0) == 8292)) {
 		return hub.useTalisman(session, channel, message)
 	}
-	if message.ID == 4200 || (message.ID == 8071 && len(payload) >= 4 && protocol.ReadUint32(payload, 0) == 8289) {
+	if message.ID == 4200 || (message.ID == protocol.MsgBattleEvent && len(payload) >= 4 && protocol.ReadUint32(payload, 0) == 8289) {
 		return hub.consume(session, channel, message)
 	}
 	if handled, err := hub.roomMessage(session, channel, message); handled {
@@ -461,7 +465,7 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 	switch message.ID {
 	case 21370:
 		return hub.stageSelection(session, payload)
-	case 4126:
+	case protocol.MsgClaimTitleReward:
 		return hub.claimTitleReward(session, payload)
 	case 6000, 6050, 6080:
 		return hub.tasks(session, message)
@@ -490,14 +494,14 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		session.WeaponRevision = revision
 	case 21412:
 		return hub.upgradeWeapon(session, channel, payload)
-	case 2250:
+	case protocol.MsgPlayerListRequest:
 		return hub.playerDirectory(session, payload)
 	case 2420:
 		if len(payload) != 8 {
 			return protocol.ErrFrame
 		}
 		target := protocol.ReadUint64(payload, 0)
-		account, err := hub.Store.Snapshot(target)
+		account, err := hub.Store.RoleManager().Snapshot(target)
 		if err != nil {
 			session.sendGame(notice("未找到该玩家的资料。"))
 			return nil
@@ -513,7 +517,7 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 			return protocol.ErrFrame
 		}
 		target := protocol.ReadUint64(payload, 0)
-		account, err := hub.Store.Snapshot(target)
+		account, err := hub.Store.RoleManager().Snapshot(target)
 		if err != nil {
 			session.sendGame(notice("未找到该玩家的武器资料。"))
 			return nil
@@ -548,7 +552,7 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		if err != nil {
 			return err
 		}
-		oldName, err := hub.Store.Rename(session.UID, nickname)
+		oldName, err := hub.Store.RoleManager().Rename(session.UID, nickname)
 		if err != nil {
 			rejected := make([]byte, 54)
 			protocol.WriteUint32(rejected, 0, 130)
@@ -598,7 +602,7 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		if message.ID == 1500 && len(payload) != 9 {
 			return protocol.ErrFrame
 		}
-		offers, err := hub.Store.Offers(category, variant)
+		offers, err := hub.Store.ShopManager().Offers(category, variant)
 		if err != nil {
 			return err
 		}
@@ -630,7 +634,7 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 			return nil
 		}
 		operationID := fmt.Sprintf("%s:%d:%d", session.Namespace, channel.ID, channel.Sequence)
-		result, err := hub.Store.Gift(session.UID, operationID, payload)
+		result, err := hub.Store.MailManager().Gift(session.UID, operationID, payload)
 		if err != nil {
 			// Unknown native 9110 codes index a client string table directly.
 			// Use the established notice path rather than inventing an error code.
@@ -663,7 +667,7 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 			return nil
 		}
 		operationID := fmt.Sprintf("%s:%d:%d", session.Namespace, channel.ID, channel.Sequence)
-		balance, item, catalog, err := hub.Store.Purchase(session.UID, operationID, payload)
+		balance, item, catalog, err := hub.Store.ShopManager().Purchase(session.UID, operationID, payload)
 		if err != nil {
 			session.sendGame(protocol.Message{ID: 9060, Payload: []byte{130, 0}})
 			log.Printf("purchase_rejected uid=%d", session.UID)
@@ -675,7 +679,7 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		}
 		session.sendGame(protocol.Message{ID: balanceMessage, Payload: protocol.Uint32Bytes(balance)})
 		if len(item) == 68 {
-			session.sendGame(protocol.Message{ID: 2160, Payload: item})
+			session.sendGame(protocol.Message{ID: protocol.MsgItemAdded, Payload: item})
 			if session.Inventory == nil {
 				session.Inventory = map[uint32][]byte{}
 			}
@@ -683,29 +687,29 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		}
 		session.sendGame(protocol.Message{ID: 9050, Payload: catalog})
 		log.Printf("purchase uid=%d instance=%d", session.UID, protocol.ReadUint32(item, 0))
-	case 2080, 2300:
-		if (message.ID == 2080 && len(payload) != 16) || (message.ID == 2300 && len(payload) != 4) {
+	case protocol.MsgEquipItem, protocol.MsgUnequipItem:
+		if (message.ID == protocol.MsgEquipItem && len(payload) != 16) || (message.ID == protocol.MsgUnequipItem && len(payload) != 4) {
 			return protocol.ErrFrame
 		}
 		if session.Room != nil && session.Room.Members[session.UID].Ready {
 			return nil
 		}
 		slot := uint32(0)
-		if message.ID == 2080 {
+		if message.ID == protocol.MsgEquipItem {
 			slot = protocol.ReadUint32(payload, 4)
 			if slot > 65535 {
-				session.sendGame(protocol.Message{ID: 2100, Payload: []byte{38, 0}})
+				session.sendGame(protocol.Message{ID: protocol.MsgEquipError, Payload: []byte{38, 0}})
 				return nil
 			}
 		}
-		equip := hub.Store.Equip
-		if message.ID == 2080 {
-			equip = hub.Store.EquipDefault
+		equip := hub.Store.EquipmentManager().Equip
+		if message.ID == protocol.MsgEquipItem {
+			equip = hub.Store.EquipmentManager().EquipDefault
 		}
 		changed, err := equip(session.UID, protocol.ReadUint32(payload, 0), uint16(slot))
 		if err != nil {
-			if message.ID == 2080 {
-				session.sendGame(protocol.Message{ID: 2100, Payload: []byte{38, 0}})
+			if message.ID == protocol.MsgEquipItem {
+				session.sendGame(protocol.Message{ID: protocol.MsgEquipError, Payload: []byte{38, 0}})
 			} else {
 				session.sendGame(notice("卸下失败，请检查道具及栏位。"))
 			}
@@ -714,21 +718,21 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		if changed == nil {
 			return nil
 		}
-		account, err := hub.Store.Snapshot(session.UID)
+		account, err := hub.Store.RoleManager().Snapshot(session.UID)
 		if err != nil {
 			return err
 		}
 		prefix := bytes.Clone(payload)
-		if message.ID == 2080 {
+		if message.ID == protocol.MsgEquipItem {
 			protocol.WriteUint32(prefix, 4, uint32(protocol.ReadUint16(changed, 17)))
 		}
 		ack := protocol.Message{ID: message.ID + 10, Payload: append(prefix, changed...)}
-		if message.ID == 2300 {
+		if message.ID == protocol.MsgUnequipItem {
 			session.sendGame(ack)
 		}
-		session.sendGame(protocol.Message{ID: 1120, Payload: account.InventoryBytes()})
+		session.sendGame(protocol.Message{ID: protocol.MsgInventoryList, Payload: account.InventoryBytes()})
 		session.rememberInventory(account.Inventory)
-		if message.ID == 2080 {
+		if message.ID == protocol.MsgEquipItem {
 			session.sendGame(ack)
 		}
 		hub.equipmentChanged(session)
@@ -736,7 +740,7 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		if len(payload) != 0 {
 			return protocol.ErrFrame
 		}
-		account, err := hub.Store.Snapshot(session.UID)
+		account, err := hub.Store.RoleManager().Snapshot(session.UID)
 		if err != nil {
 			return err
 		}
@@ -766,7 +770,7 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 			// training status. This UID is a read target, not an auth identity.
 			target = protocol.ReadUint64(payload, 0)
 		}
-		minutes, active, err := hub.Store.Training(target, message.ID == 21002)
+		minutes, active, err := hub.Store.TrainingManager().Training(target, message.ID == 21002)
 		if err != nil {
 			if message.ID == 21000 && err == sql.ErrNoRows {
 				session.sendGame(notice("未找到该玩家的训练资料。"))
@@ -774,11 +778,11 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 			}
 			return err
 		}
-		rank, err := hub.Store.TrainingRank(target)
+		rank, err := hub.Store.TrainingManager().TrainingRank(target)
 		if err != nil {
 			return err
 		}
-		rules, err := hub.Store.TrainingSettings()
+		rules, err := hub.Store.TrainingManager().TrainingSettings()
 		if err != nil {
 			return err
 		}

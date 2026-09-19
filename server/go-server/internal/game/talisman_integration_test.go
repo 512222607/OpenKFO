@@ -57,7 +57,7 @@ func TestTalismanRepairProtocolLocalDatabase(t *testing.T) {
 	}()
 	h := NewHub(store, Config{TalismanRepairs: []persistence.TalismanRepairRule{{Item: 303002, Material: 603001, Quantity: 3, Capacity: 10000}}})
 	rules := persistence.TalismanRules{Enabled: true, Repairs: h.Config.TalismanRepairs, Uses: []persistence.TalismanUseRule{{Item: 303002, ActiveCost: 4000, PassiveCost: 1000}}}
-	if err = store.SeedTalismanSettings(rules); err != nil {
+	if err = store.ItemManager().SeedTalismanSettings(rules); err != nil {
 		t.Fatal(err)
 	}
 
@@ -99,15 +99,15 @@ func TestTalismanRepairProtocolLocalDatabase(t *testing.T) {
 	}
 	send(4204, p)
 	roomOutputs(t, s, 20150)
-	if _, err = store.RepairTalismanConfigured(uid, "stale", 1, rules.Repairs[0], 1); err == nil {
+	if _, err = store.ItemManager().RepairTalismanConfigured(uid, "stale", 1, rules.Repairs[0], 1); err == nil {
 		t.Fatal("stale transactional quote accepted")
 	}
 	badRule := rules.Repairs[0]
 	badRule.Quantity = 1
-	if _, err = store.RepairTalismanConfigured(uid, "tampered", 1, badRule, 2); err == nil {
+	if _, err = store.ItemManager().RepairTalismanConfigured(uid, "tampered", 1, badRule, 2); err == nil {
 		t.Fatal("altered price accepted")
 	}
-	before, e := store.Snapshot(uid)
+	before, e := store.RoleManager().Snapshot(uid)
 	if e != nil || len(before.Inventory) != 2 || protocol.ReadUint16(before.Inventory[0], 23) != 5 || protocol.ReadUint16(before.Inventory[1], 23) != 3 {
 		t.Fatal("rejected quote changed inventory", e)
 	}
@@ -124,7 +124,7 @@ func TestTalismanRepairProtocolLocalDatabase(t *testing.T) {
 	s.game().Sequence++
 	send(4204, p)
 	roomOutputs(t, s, 20150)
-	state, e := store.Snapshot(uid)
+	state, e := store.RoleManager().Snapshot(uid)
 	if e != nil || len(state.Inventory) != 1 || protocol.ReadUint16(state.Inventory[0], 23) != 10000 {
 		t.Fatal("repair was not atomic", e)
 	}
@@ -133,7 +133,7 @@ func TestTalismanRepairProtocolLocalDatabase(t *testing.T) {
 		t.Fatal("duplicate receipt", e)
 	}
 	// Continue through real Hub battle routing with a receiver in the same room.
-	if _, e = store.EquipDefault(uid, 1, 37); e != nil {
+	if _, e = store.EquipmentManager().EquipDefault(uid, 1, 37); e != nil {
 		t.Fatal(e)
 	}
 	_, _, peer, outsider := combatFixture()
@@ -199,7 +199,7 @@ func TestTalismanRepairProtocolLocalDatabase(t *testing.T) {
 		t.Fatal("wrong insufficient notification")
 	}
 	roomOutputs(t, peer)
-	state, e = store.Snapshot(uid)
+	state, e = store.RoleManager().Snapshot(uid)
 	if e != nil || protocol.ReadUint16(state.Inventory[0], 23) != 1000 {
 		t.Fatal("battle debit", e)
 	}

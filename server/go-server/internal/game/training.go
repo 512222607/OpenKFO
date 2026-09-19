@@ -42,21 +42,31 @@ func (h *Hub) claimTraining(s *Session, ch *Channel, payload []byte) error {
 	if len(payload) != 0 {
 		return protocol.ErrFrame
 	}
-	settings, err := h.Store.BattleRewards(h.Config.Settlement)
+	settings, err := h.Store.RewardManager().BattleRewards(h.Config.Settlement)
 	if err != nil {
 		return err
 	}
 	operation := fmt.Sprintf("%s:%d:%d", s.Namespace, ch.ID, ch.Sequence)
-	r, err := h.Store.ClaimTraining(s.UID, operation, settings.Rules)
+	r, err := h.Store.TrainingManager().ClaimTraining(s.UID, operation, settings.Rules)
 	if err != nil {
 		s.sendGame(notice("名侠奖励未领取，请确认奖励已开放且训练已满一小时。"))
 		return nil
 	}
-	rank, err := h.Store.TrainingRank(s.UID)
+	for _, item := range r.Items {
+		s.sendGame(protocol.Message{ID: protocol.MsgItemAdded, Payload: bytes.Clone(item)})
+		if s.Inventory == nil {
+			s.Inventory = map[uint32][]byte{}
+		}
+		s.Inventory[protocol.ReadUint32(item, 0)] = bytes.Clone(item)
+	}
+	rank, err := h.Store.TrainingManager().TrainingRank(s.UID)
 	if err != nil {
 		return err
 	}
 	s.sendGame(protocol.Message{ID: 4300, Payload: bytes.Clone(r.Profile[persistence.ExperienceOffset : persistence.ExperienceOffset+8])})
+	if err := h.rewardBalances(s, settings.Rules.LevelGifts); err != nil {
+		return err
+	}
 	// 21007 refreshes training and causes native 21002 for the next cycle.
 	// It does not replace role-level synchronization after AdvanceLevel.
 	status := make([]byte, 56)

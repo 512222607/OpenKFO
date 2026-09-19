@@ -35,7 +35,7 @@ func TestTalismanTLS(t *testing.T) {
 	if _, err = store.DB.Exec("CREATE TEMPORARY TABLE talisman_rules(id TINYINT PRIMARY KEY,revision BIGINT UNSIGNED NOT NULL,rules MEDIUMBLOB NOT NULL) ENGINE=InnoDB"); err != nil {
 		t.Fatal(err)
 	}
-	if err = store.SeedTalismanSettings(persistence.TalismanRules{Enabled: true, Uses: []persistence.TalismanUseRule{{Item: 303002, ActiveCost: 200, PassiveCost: 100}}}); err != nil {
+	if err = store.ItemManager().SeedTalismanSettings(persistence.TalismanRules{Enabled: true, Uses: []persistence.TalismanUseRule{{Item: 303002, ActiveCost: 200, PassiveCost: 100}}}); err != nil {
 		t.Fatal(err)
 	}
 	accounts := make([]persistence.Account, 2)
@@ -240,7 +240,7 @@ func TestTalismanTLS(t *testing.T) {
 	if len(drain(r)) != 0 {
 		t.Fatal("insufficient quota relayed")
 	}
-	a, e := store.Snapshot(uid)
+	a, e := store.RoleManager().Snapshot(uid)
 	if e != nil {
 		t.Fatal(e)
 	}

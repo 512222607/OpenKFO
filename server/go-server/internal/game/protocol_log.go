@@ -54,7 +54,7 @@ func (s *Session) traceFrame(direction string, frame tunnel.Frame) {
 			flags, body, err := protocol.ReadLogin(bytes.NewReader(frame.Data))
 			if err == nil {
 				id := uint32(protocol.ReadUint16(body, 0))
-				s.tracePacket(direction, frame.Channel, "sdk", id, body[2:], flags == 1 || id == 1002)
+				s.tracePacket(direction, frame.Channel, "sdk", id, body[2:], flags == 1 || id == protocol.MsgSDKLoginResponse)
 			}
 			return
 		}

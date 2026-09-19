@@ -33,7 +33,7 @@ func TestTrainingSettingsLocalDatabase(t *testing.T) {
 		}
 	}
 	s := &Store{DB: db}
-	a, err := s.TrainingSettings()
+	a, err := s.TrainingManager().TrainingSettings()
 	if err != nil || a.Revision != 0 || a.Rules.Enabled {
 		t.Fatal(a, err)
 	}
@@ -41,35 +41,35 @@ func TestTrainingSettingsLocalDatabase(t *testing.T) {
 	for i := uint32(0); i <= 8; i++ {
 		a.Rules.Levels = append(a.Rules.Levels, TrainingRule{Level: i, XPPerHour: 100, XPCap: 1000})
 	}
-	saved, err := s.SaveTrainingSettings(a)
+	saved, err := s.TrainingManager().SaveTrainingSettings(a)
 	if err != nil || saved.Revision != 1 {
 		t.Fatal(saved, err)
 	}
-	if _, err = s.SaveTrainingSettings(a); err == nil {
+	if _, err = s.TrainingManager().SaveTrainingSettings(a); err == nil {
 		t.Fatal("stale save accepted")
 	}
 	if _, err = db.Exec(`INSERT INTO training_rules_audit VALUES(2,'{}','{}')`); err != nil {
 		t.Fatal(err)
 	}
 	saved.Rules.Enabled = false
-	if _, err = s.SaveTrainingSettings(saved); err == nil {
+	if _, err = s.TrainingManager().SaveTrainingSettings(saved); err == nil {
 		t.Fatal("audit failure accepted")
 	}
-	restored, err := s.TrainingSettings()
+	restored, err := s.TrainingManager().TrainingSettings()
 	if err != nil || restored.Revision != 1 || !restored.Rules.Enabled {
 		t.Fatal(restored, err)
 	}
 	if _, err = db.Exec(`DELETE FROM training_rules_audit WHERE revision=2`); err != nil {
 		t.Fatal(err)
 	}
-	saved, err = s.SaveTrainingSettings(saved)
+	saved, err = s.TrainingManager().SaveTrainingSettings(saved)
 	if err != nil || saved.Rules.Enabled || len(saved.Rules.Levels) != 9 {
 		t.Fatal(saved, err)
 	}
 	if _, err = db.Exec(`UPDATE training_rules SET rules='{"enabled":true,"levels":[]}'`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.TrainingSettings(); err == nil {
+	if _, err = s.TrainingManager().TrainingSettings(); err == nil {
 		t.Fatal("corrupt enabled rules accepted")
 	}
 }

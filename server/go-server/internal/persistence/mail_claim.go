@@ -7,11 +7,11 @@ import (
 
 // ClaimMailItem grants one server-stored item. Currency/experience attachments
 // need their own verified rules; never derive an award from the preview packet.
-func (s *Store) ClaimMailItem(uid uint64, key uint32) ([]byte, error) {
+func (s *MailManager) ClaimMailItem(uid uint64, key uint32) ([]byte, error) {
 	if uid == 0 || key == 0 {
 		return nil, ErrDenied
 	}
-	tx, err := s.DB.Begin()
+	tx, err := s.store.DB.Begin()
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +54,7 @@ func (s *Store) ClaimMailItem(uid uint64, key uint32) ([]byte, error) {
 	if deleted || claimed || len(item) != 68 || days > 3650 || protocol.ReadUint16(item, 17) != 0 {
 		return nil, ErrDenied
 	}
-	item, err = deliverInventoryItem(tx, uid, item, days)
+	item, err = (InventoryManager{}).AddItem(tx, uid, item, days)
 	if err != nil {
 		return nil, err
 	}

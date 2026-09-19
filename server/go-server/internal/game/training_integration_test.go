@@ -34,7 +34,7 @@ func TestTrainingClaimProtocolLocalDatabase(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	exec(`CREATE TEMPORARY TABLE accounts(uid BIGINT PRIMARY KEY,profile BLOB NOT NULL) ENGINE=InnoDB`)
+	exec(`CREATE TEMPORARY TABLE accounts(uid BIGINT PRIMARY KEY,profile BLOB NOT NULL,gold INT NOT NULL DEFAULT 0,tickets INT NOT NULL DEFAULT 0) ENGINE=InnoDB`)
 	exec(`CREATE TEMPORARY TABLE training_ranks(uid BIGINT PRIMARY KEY,training_rank INT NOT NULL) ENGINE=InnoDB`)
 	exec(`CREATE TEMPORARY TABLE training(uid BIGINT PRIMARY KEY,started BIGINT NULL) ENGINE=InnoDB`)
 	exec(`CREATE TEMPORARY TABLE training_rules(id INT PRIMARY KEY,revision BIGINT NOT NULL,rules BLOB NOT NULL) ENGINE=InnoDB`)
@@ -53,7 +53,7 @@ func TestTrainingClaimProtocolLocalDatabase(t *testing.T) {
 	saveRules()
 	profile := make([]byte, 360)
 	protocol.WriteUint16(profile, persistence.LevelOffset, 1)
-	exec(`INSERT INTO accounts VALUES(1,?),(2,?)`, profile, profile)
+	exec(`INSERT INTO accounts(uid,profile) VALUES(1,?),(2,?)`, profile, profile)
 	now := time.Now().Unix()
 	exec(`INSERT INTO training VALUES(1,?),(2,?)`, now-7200, now-60)
 	exec(`CREATE TEMPORARY TABLE battle_reward_rules(id INT PRIMARY KEY,revision BIGINT NOT NULL,rules BLOB NOT NULL) ENGINE=InnoDB`)

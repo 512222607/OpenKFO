@@ -7,8 +7,8 @@ import (
 
 // Mailbox holds server-generated wire snapshots, never client-submitted blobs.
 // Delivery and attachment claims are deliberately separate transactions from viewing.
-func (s *Store) Mailbox(uid uint64) ([]byte, error) {
-	rows, err := s.DB.Query(`SELECT id,list_record,is_read FROM mailbox WHERE uid=? AND deleted=FALSE ORDER BY id DESC LIMIT 2049`, uid)
+func (s *MailManager) Mailbox(uid uint64) ([]byte, error) {
+	rows, err := s.store.DB.Query(`SELECT id,list_record,is_read FROM mailbox WHERE uid=? AND deleted=FALSE ORDER BY id DESC LIMIT 2049`, uid)
 	if err != nil {
 		return nil, err
 	}
@@ -35,11 +35,11 @@ func (s *Store) Mailbox(uid uint64) ([]byte, error) {
 	return out, rows.Err()
 }
 
-func (s *Store) ReadMail(uid uint64, id uint32) ([]byte, error) {
+func (s *MailManager) ReadMail(uid uint64, id uint32) ([]byte, error) {
 	if uid == 0 || id == 0 {
 		return nil, ErrDenied
 	}
-	tx, err := s.DB.Begin()
+	tx, err := s.store.DB.Begin()
 	if err != nil {
 		return nil, err
 	}
@@ -62,11 +62,11 @@ func (s *Store) ReadMail(uid uint64, id uint32) ([]byte, error) {
 
 // Preserve the row and any claim receipt. A repeated delete by the same owner
 // succeeds; another account cannot discover or delete the target mail.
-func (s *Store) DeleteMail(uid uint64, id uint32) error {
+func (s *MailManager) DeleteMail(uid uint64, id uint32) error {
 	if uid == 0 || id == 0 {
 		return ErrDenied
 	}
-	tx, err := s.DB.Begin()
+	tx, err := s.store.DB.Begin()
 	if err != nil {
 		return err
 	}

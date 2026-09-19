@@ -57,11 +57,11 @@ func TestExtendedTaskTransitionsLocalDatabase(t *testing.T) {
 	save(1)
 	s := &Store{DB: db}
 	hash := strings.Repeat("a", 64)
-	list, e := s.ExtendedTasks(1, hash)
+	list, e := s.TaskManager().ExtendedTasks(1, hash)
 	if e != nil || len(list) != 2 || list[0].State != 1 || list[1].State != 1 {
 		t.Fatal("initial list", list, e)
 	}
-	r, changed, e := s.ExtendedTaskTransition(1, hash, 6052, 3002)
+	r, changed, e := s.TaskManager().ExtendedTaskTransition(1, hash, 6052, 3002)
 	if e != nil || !changed || r.State != 2 || r.Cycle != "" || r.Snapshot.Rule.Gold != 500 {
 		t.Fatal(r, changed, e)
 	}
@@ -72,11 +72,11 @@ func TestExtendedTaskTransitionsLocalDatabase(t *testing.T) {
 	}
 	rules.Extended.Tasks[0].Gold = 900
 	save(2)
-	r, changed, e = s.ExtendedTaskTransition(1, hash, 6052, 3002)
+	r, changed, e = s.TaskManager().ExtendedTaskTransition(1, hash, 6052, 3002)
 	if e != nil || changed || r.Counts[0] != 1 || r.Snapshot.Rule.Gold != 500 || r.Revision != 1 {
 		t.Fatal("repeated accept reset snapshot", r, changed, e)
 	}
-	list, e = s.ExtendedTasks(1, hash)
+	list, e = s.TaskManager().ExtendedTasks(1, hash)
 	if e != nil || len(list) != 2 || list[0].Counts[0] != 1 || list[0].Snapshot.Rule.Gold != 500 {
 		t.Fatal("list lost snapshot", list, e)
 	}
@@ -86,38 +86,38 @@ func TestExtendedTaskTransitionsLocalDatabase(t *testing.T) {
 		action uint32
 		key    uint16
 	}{{1, strings.Repeat("b", 64), 6052, 3002}, {1, hash, 6051, 3002}, {1, hash, 6312, 3002}, {3, hash, 6052, 3002}, {1, hash, 6052, 3999}} {
-		if _, _, e = s.ExtendedTaskTransition(c.uid, c.hash, c.action, c.key); e == nil {
+		if _, _, e = s.TaskManager().ExtendedTaskTransition(c.uid, c.hash, c.action, c.key); e == nil {
 			t.Fatal("invalid action accepted", c)
 		}
 	}
-	r, changed, e = s.ExtendedTaskTransition(2, hash, 6052, 3002)
+	r, changed, e = s.TaskManager().ExtendedTaskTransition(2, hash, 6052, 3002)
 	if e != nil || !changed || r.Counts[0] != 0 || r.Snapshot.Rule.Gold != 900 {
 		t.Fatal("cross account state", r, e)
 	}
-	r, changed, e = s.ExtendedTaskTransition(1, hash, 6082, 3002)
+	r, changed, e = s.TaskManager().ExtendedTaskTransition(1, hash, 6082, 3002)
 	if e != nil || !changed || r.State != 1 || r.Counts[0] != 0 {
 		t.Fatal(r, e)
 	}
-	if _, changed, e = s.ExtendedTaskTransition(1, hash, 6082, 3002); e != nil || changed {
+	if _, changed, e = s.TaskManager().ExtendedTaskTransition(1, hash, 6082, 3002); e != nil || changed {
 		t.Fatal("repeat cancel changed", e)
 	}
-	if _, _, e = s.ExtendedTaskTransition(1, hash, 6052, 3002); e != nil {
+	if _, _, e = s.TaskManager().ExtendedTaskTransition(1, hash, 6052, 3002); e != nil {
 		t.Fatal(e)
 	}
 	if _, e = db.Exec("UPDATE extended_task_progress SET state=4 WHERE uid=1 AND task_key=3002"); e != nil {
 		t.Fatal(e)
 	}
-	if _, _, e = s.ExtendedTaskTransition(1, hash, 6082, 3002); e == nil {
+	if _, _, e = s.TaskManager().ExtendedTaskTransition(1, hash, 6082, 3002); e == nil {
 		t.Fatal("cancelled completed task")
 	}
-	r, changed, e = s.ExtendedTaskTransition(1, hash, 6051, 2001)
+	r, changed, e = s.TaskManager().ExtendedTaskTransition(1, hash, 6051, 2001)
 	if e != nil || !changed || len(r.Cycle) != 10 {
 		t.Fatal(r, e)
 	}
 	if _, e = db.Exec("UPDATE extended_task_progress SET cycle='1999-01-01',state=3 WHERE uid=1 AND task_key=2001"); e != nil {
 		t.Fatal(e)
 	}
-	r, changed, e = s.ExtendedTaskTransition(1, hash, 6051, 2001)
+	r, changed, e = s.TaskManager().ExtendedTaskTransition(1, hash, 6051, 2001)
 	if e != nil || !changed || r.State != 2 || r.Cycle == "1999-01-01" {
 		t.Fatal("daily cycle not isolated", r, e)
 	}
@@ -128,29 +128,29 @@ func TestExtendedTaskTransitionsLocalDatabase(t *testing.T) {
 	if _, e = db.Exec("UPDATE extended_task_progress SET state=3 WHERE uid=1 AND task_key=3002"); e != nil {
 		t.Fatal(e)
 	}
-	list, e = s.ExtendedTasks(1, hash)
+	list, e = s.TaskManager().ExtendedTasks(1, hash)
 	if e != nil || len(list) != 1 || list[0].Key != 2001 || list[0].Cycle == "1999-01-01" {
 		t.Fatal("claimed/new cycle list", list, e)
 	}
-	list, e = s.ExtendedTasks(2, hash)
+	list, e = s.TaskManager().ExtendedTasks(2, hash)
 	if e != nil || len(list) != 2 || list[0].State != 2 || list[1].State != 1 {
 		t.Fatal("list account isolation", list, e)
 	}
 	rules.Extended.Tasks[1].Enabled = false
 	save(3)
-	if _, _, e = s.ExtendedTaskTransition(1, hash, 6051, 2001); e == nil {
+	if _, _, e = s.TaskManager().ExtendedTaskTransition(1, hash, 6051, 2001); e == nil {
 		t.Fatal("disabled accepted")
 	}
-	list, e = s.ExtendedTasks(1, hash)
+	list, e = s.TaskManager().ExtendedTasks(1, hash)
 	if e != nil || list == nil || len(list) != 0 {
 		t.Fatal("configured empty list", list, e)
 	}
-	if _, e = s.ExtendedTasks(1, strings.Repeat("b", 64)); e == nil {
+	if _, e = s.TaskManager().ExtendedTasks(1, strings.Repeat("b", 64)); e == nil {
 		t.Fatal("mismatched list allowed")
 	}
 	rules.Extended = nil
 	save(4)
-	if list, e = s.ExtendedTasks(1, hash); e != nil || list != nil {
+	if list, e = s.TaskManager().ExtendedTasks(1, hash); e != nil || list != nil {
 		t.Fatal("unconfigured list", list, e)
 	}
 }

@@ -26,6 +26,9 @@ func TestTitleRewardLocalDatabase(t *testing.T) {
 	defer db.Close()
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
+	if _, e := db.Exec("CREATE TEMPORARY TABLE item_definitions(definition_key INT PRIMARY KEY,revision BIGINT,record BLOB,days INT) ENGINE=InnoDB"); e != nil {
+		t.Fatal(e)
+	}
 	exec := func(q string, args ...any) {
 		t.Helper()
 		if _, e := db.Exec(q, args...); e != nil {
@@ -54,23 +57,24 @@ func TestTitleRewardLocalDatabase(t *testing.T) {
 		protocol.WriteUint32(item, 13, 24)
 		exec("INSERT INTO offers VALUES(?,?,?,TRUE)", key, catalog, item)
 		exec("INSERT INTO offer_lifetimes VALUES(?,1)", key)
+		exec(seedDefinitionsSQL)
 	}
 	s := &Store{DB: db}
 	for _, choices := range [][]uint32{nil, {0}, {7, 7}, {1, 2, 3, 4, 5, 6, 7, 8}} {
-		if e := s.GrantTitleChoices(1, 1, choices); e == nil {
+		if e := s.TitleManager().GrantTitleChoices(1, 1, choices); e == nil {
 			t.Fatal("bad choices accepted", choices)
 		}
 	}
-	if err = s.GrantTitleChoices(1, 1, []uint32{7, 8}); err != nil {
+	if err = s.TitleManager().GrantTitleChoices(1, 1, []uint32{7, 8}); err != nil {
 		t.Fatal(err)
 	}
-	if err = s.GrantTitleChoices(1, 1, []uint32{7, 8}); err != nil {
+	if err = s.TitleManager().GrantTitleChoices(1, 1, []uint32{7, 8}); err != nil {
 		t.Fatal("grant retry", err)
 	}
-	if err = s.GrantTitleChoices(1, 1, []uint32{8}); err == nil {
+	if err = s.TitleManager().GrantTitleChoices(1, 1, []uint32{8}); err == nil {
 		t.Fatal("changed grant accepted")
 	}
-	if err = s.GrantTitleChoices(1, 2, []uint32{8}); err == nil {
+	if err = s.TitleManager().GrantTitleChoices(1, 2, []uint32{8}); err == nil {
 		t.Fatal("overlapping offers accepted")
 	}
 	for _, r := range []struct {
@@ -78,13 +82,13 @@ func TestTitleRewardLocalDatabase(t *testing.T) {
 		level byte
 		key   uint32
 	}{{2, 1, 7}, {1, 2, 7}, {1, 1, 9}} {
-		if _, e := s.ClaimTitleReward(r.uid, r.level, r.key); e == nil {
+		if _, e := s.TitleManager().ClaimTitleReward(r.uid, r.level, r.key); e == nil {
 			t.Fatal("unauthorized reward", r)
 		}
 	}
 	// Fail late in the item transaction and prove no item/claim is committed.
 	exec("INSERT INTO inventory_expirations VALUES(1,1048576,1)")
-	if _, err = s.ClaimTitleReward(1, 1, 7); err == nil {
+	if _, err = s.TitleManager().ClaimTitleReward(1, 1, 7); err == nil {
 		t.Fatal("expiry failure ignored")
 	}
 	var count int
@@ -95,26 +99,26 @@ func TestTitleRewardLocalDatabase(t *testing.T) {
 		t.Fatal("claim rollback", count, err)
 	}
 	exec("DELETE FROM inventory_expirations WHERE uid=1")
-	item, err := s.ClaimTitleReward(1, 1, 7)
+	item, err := s.TitleManager().ClaimTitleReward(1, 1, 7)
 	if err != nil || len(item) != 68 {
 		t.Fatal(item, err)
 	}
-	again, err := s.ClaimTitleReward(1, 1, 7)
+	again, err := s.TitleManager().ClaimTitleReward(1, 1, 7)
 	if err != nil || !bytes.Equal(item, again) {
 		t.Fatal("retry", err)
 	}
-	if _, err = s.ClaimTitleReward(1, 1, 8); err == nil {
+	if _, err = s.TitleManager().ClaimTitleReward(1, 1, 8); err == nil {
 		t.Fatal("second choice awarded")
 	}
 	exec("DELETE FROM inventory WHERE uid=1")
-	again, err = s.ClaimTitleReward(1, 1, 7)
+	again, err = s.TitleManager().ClaimTitleReward(1, 1, 7)
 	if err != nil || len(again) != 0 {
 		t.Fatal("consumed item resurrected", err)
 	}
-	if err = s.GrantTitleChoices(1, 2, []uint32{8}); err != nil {
+	if err = s.TitleManager().GrantTitleChoices(1, 2, []uint32{8}); err != nil {
 		t.Fatal("next title", err)
 	}
-	again, err = s.ClaimTitleReward(1, 1, 7)
+	again, err = s.TitleManager().ClaimTitleReward(1, 1, 7)
 	if err != nil || len(again) != 0 {
 		t.Fatal("old retry consumed new title", err)
 	}

@@ -7,11 +7,11 @@ import (
 	"kungfu.local/server/internal/protocol"
 )
 
-func (store *Store) Purchase(uid uint64, operationID string, request []byte) (uint32, []byte, []byte, error) {
+func (m *ShopManager) Purchase(uid uint64, operationID string, request []byte) (uint32, []byte, []byte, error) {
 	if len(request) != 169 || len(operationID) == 0 || len(operationID) > 128 {
 		return 0, nil, nil, ErrDenied
 	}
-	transaction, err := store.DB.Begin()
+	transaction, err := m.store.DB.Begin()
 	if err != nil {
 		return 0, nil, nil, err
 	}
@@ -93,7 +93,7 @@ func (store *Store) Purchase(uid uint64, operationID string, request []byte) (ui
 	if _, err = transaction.Exec(`UPDATE accounts SET `+column+`=? WHERE uid=?`, balance, uid); err != nil {
 		return 0, nil, nil, err
 	}
-	item, err = deliverInventoryItem(transaction, uid, item, lifetime)
+	item, err = (InventoryManager{}).AddItem(transaction, uid, item, lifetime)
 	if err != nil {
 		return 0, nil, nil, err
 	}
@@ -101,4 +101,31 @@ func (store *Store) Purchase(uid uint64, operationID string, request []byte) (ui
 		return 0, nil, nil, err
 	}
 	return balance, item, catalog, transaction.Commit()
+}
+
+func (m *ShopManager) Offers(category, variant int) ([]Offer, error) {
+	query := `SELECT catalog_key,category,variant,record,grant_record FROM offers WHERE enabled=TRUE`
+	args := []any{}
+	if category >= 0 {
+		query += ` AND category=? AND variant=?`
+		args = append(args, category, variant)
+	}
+	query += ` ORDER BY catalog_key LIMIT 4000`
+	rows, err := m.store.DB.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var offers []Offer
+	for rows.Next() {
+		var offer Offer
+		if err = rows.Scan(&offer.Key, &offer.Category, &offer.Variant, &offer.Record, &offer.Grant); err != nil {
+			return nil, err
+		}
+		if len(offer.Record) != 108 || len(offer.Grant) != 68 {
+			return nil, ErrDenied
+		}
+		offers = append(offers, offer)
+	}
+	return offers, rows.Err()
 }

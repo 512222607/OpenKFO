@@ -35,8 +35,8 @@ void main() {
                 {
                   'name': '站立攻击1',
                   'nodes': [
-                    {'keys': 'C'},
-                    {'keys': 'C'},
+                    {'keys': 'C', 'state': '1'},
+                    {'keys': 'CC', 'state': '2'},
                   ],
                 },
               ],
@@ -44,6 +44,7 @@ void main() {
                 5,
                 (i) => {
                   'stage': i + 1,
+                  'state': '${i + 1}',
                   'action': '${2001130 + i}',
                   'property_ids': ['8081$i'],
                   'hits': [
@@ -72,7 +73,11 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: WeaponConfigPage(api: api)));
     await tester.pumpAndSettle();
     expect(find.text('武器配置'), findsOneWidget);
-    expect(find.text('C → C'), findsOneWidget);
+    expect(find.text('CC'), findsOneWidget);
+    await tester.tap(find.text('CC'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('第 1 段 · C'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('填入示例：第一下中毒，第二下燃烧'));
     await tester.pumpAndSettle();
     final durations = find.widgetWithText(TextFormField, '持续周期（原生值）');

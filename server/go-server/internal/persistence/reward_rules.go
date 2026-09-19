@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"kungfu.local/server/internal/protocol"
 )
 
 type LevelReward struct {
@@ -18,6 +19,8 @@ type LevelReward struct {
 }
 
 type RewardRules struct {
+	Tutorial       *RewardBundle `json:"tutorial_reward,omitempty"`
+	LevelGifts     []LevelGift   `json:"level_gifts"`
 	Drops          []DropRule    `json:"drops,omitempty"`
 	GrowthEnabled  bool          `json:"growth_enabled"`
 	Levels         []LevelReward `json:"levels,omitempty"`
@@ -34,10 +37,10 @@ type RewardSettings struct {
 	Rules    RewardRules `json:"rules"`
 }
 
-func (store *Store) BattleRewards(fallback RewardRules) (RewardSettings, error) {
+func (m *RewardManager) BattleRewards(fallback RewardRules) (RewardSettings, error) {
 	result := RewardSettings{Rules: fallback}
 	var data []byte
-	err := store.DB.QueryRow("SELECT revision,rules FROM battle_reward_rules WHERE id=1").Scan(&result.Revision, &data)
+	err := m.store.DB.QueryRow("SELECT revision,rules FROM battle_reward_rules WHERE id=1").Scan(&result.Revision, &data)
 	if err == sql.ErrNoRows {
 		result.Rules = result.Rules.Normalized()
 		return result, result.Rules.Validate()
@@ -53,7 +56,7 @@ func (store *Store) BattleRewards(fallback RewardRules) (RewardSettings, error) 
 	return result, err
 }
 
-func (store *Store) SeedBattleRewards(rules RewardRules) error {
+func (m *RewardManager) SeedBattleRewards(rules RewardRules) error {
 	rules = rules.Normalized()
 	if err := rules.Validate(); err != nil {
 		return err
@@ -62,19 +65,59 @@ func (store *Store) SeedBattleRewards(rules RewardRules) error {
 	if err != nil {
 		return err
 	}
-	_, err = store.DB.Exec("INSERT IGNORE INTO battle_reward_rules(id,revision,rules) VALUES(1,1,?)", data)
+	_, err = m.store.DB.Exec("INSERT IGNORE INTO battle_reward_rules(id,revision,rules) VALUES(1,1,?)", data)
 	return err
 }
 
-func (store *Store) SaveBattleRewards(revision uint64, rules RewardRules) (RewardSettings, error) {
+func (m *RewardManager) SaveBattleRewards(revision uint64, rules RewardRules) (RewardSettings, error) {
+	// Older GM clients omit this field; omission must not erase existing gifts.
+	if rules.LevelGifts == nil || rules.Tutorial == nil {
+		old, err := m.BattleRewards(RewardRules{})
+		if err != nil {
+			return RewardSettings{}, err
+		}
+		if rules.LevelGifts == nil {
+			rules.LevelGifts = old.Rules.LevelGifts
+		}
+		if rules.Tutorial == nil {
+			rules.Tutorial = old.Rules.Tutorial
+		}
+	}
+
 	rules = rules.Normalized()
 	if err := rules.Validate(); err != nil {
 		return RewardSettings{}, err
 	}
 	for _, drop := range rules.Drops {
 		var record []byte
-		if err := store.DB.QueryRow("SELECT grant_record FROM offers WHERE catalog_key=?", drop.CatalogKey).Scan(&record); err != nil || !validDropItem(record) {
+		if err := m.store.DB.QueryRow("SELECT record FROM item_definitions WHERE definition_key=?", drop.CatalogKey).Scan(&record); err != nil || !validDropItem(record) {
 			return RewardSettings{}, fmt.Errorf("掉落商品 %d 不存在或不是有效的未装备武器", drop.CatalogKey)
+		}
+	}
+	if rules.Tutorial != nil {
+		if err := m.validateBundleItems(*rules.Tutorial); err != nil {
+			return RewardSettings{}, err
+		}
+		weapons := map[uint32]bool{}
+		for _, key := range rules.Tutorial.Items {
+			var record []byte
+			if err := m.store.DB.QueryRow("SELECT record FROM item_definitions WHERE definition_key=?", key).Scan(&record); err != nil {
+				return RewardSettings{}, err
+			}
+			if len(record) != protocol.InventoryRecordSize {
+				return RewardSettings{}, ErrDenied
+			}
+			if record[4] == protocol.ItemWeapon {
+				if weapons[key] || len(weapons) == 7 {
+					return RewardSettings{}, fmt.Errorf("新手奖励最多配置7件不重复的武器，玩家任选一件")
+				}
+				weapons[key] = true
+			}
+		}
+	}
+	for _, g := range rules.LevelGifts {
+		if err := m.validateBundleItems(RewardBundle{Items: g.Items, Gold: g.Gold, Tickets: g.Tickets}); err != nil {
+			return RewardSettings{}, err
 		}
 	}
 	data, err := json.Marshal(rules)
@@ -83,9 +126,9 @@ func (store *Store) SaveBattleRewards(revision uint64, rules RewardRules) (Rewar
 	}
 	var result sql.Result
 	if revision == 0 {
-		result, err = store.DB.Exec("INSERT IGNORE INTO battle_reward_rules(id,revision,rules) VALUES(1,1,?)", data)
+		result, err = m.store.DB.Exec("INSERT IGNORE INTO battle_reward_rules(id,revision,rules) VALUES(1,1,?)", data)
 	} else {
-		result, err = store.DB.Exec("UPDATE battle_reward_rules SET rules=?,revision=revision+1 WHERE id=1 AND revision=?", data, revision)
+		result, err = m.store.DB.Exec("UPDATE battle_reward_rules SET rules=?,revision=revision+1 WHERE id=1 AND revision=?", data, revision)
 	}
 	if err != nil {
 		return RewardSettings{}, err
@@ -110,6 +153,14 @@ func (r RewardRules) Normalized() RewardRules {
 	return r
 }
 func (r RewardRules) Validate() error {
+	if r.Tutorial != nil {
+		if err := r.Tutorial.Validate(); err != nil {
+			return err
+		}
+	}
+	if err := validateLevelGifts(r.LevelGifts); err != nil {
+		return err
+	}
 	if err := validateDrops(r.Drops); err != nil {
 		return err
 	}

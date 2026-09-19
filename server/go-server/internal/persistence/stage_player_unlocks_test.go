@@ -95,4 +95,10 @@ func TestStagePlayerUnlocksLocalDatabase(t *testing.T) {
 	if e != nil || len(old.Maps) != 0 {
 		t.Fatal("cross-version grant", old, e)
 	}
+	forced, _ := json.Marshal(StageAccess{ClientHash: hash, RequirementsEnabled: true, ForceOpenAll: true, PVEMaps: []uint32{8110}, Requirements: []StageTitleRequirement{{MapID: 8110, Name: "stage", TitleLevel: 20, UnlockRequired: &required}}})
+	exec("UPDATE stage_access SET revision=2,rules=? WHERE id=1", forced)
+	view, e = s.StagePlayerView(1, hash)
+	if e != nil || view.RuleRevision != 2 || len(view.ForcedMaps) != 1 || view.ForcedMaps[0] != 8110 || len(view.Maps) != 1 {
+		t.Fatal("force policy not in same snapshot", view, e)
+	}
 }

@@ -20,20 +20,20 @@ func (r TalismanRepairRule) Valid() bool {
 	return r.Item != 0 && r.Material != 0 && r.Quantity != 0 && r.Capacity != 0
 }
 
-func (s *Store) RepairTalisman(uid uint64, operation string, instance uint32, rule TalismanRepairRule) ([]byte, error) {
-	return s.repairTalisman(uid, operation, instance, rule, nil)
+func (s *ItemManager) RepairTalisman(uid uint64, operation string, instance uint32, rule TalismanRepairRule) ([]byte, error) {
+	return s.store.ItemManager().repairTalisman(uid, operation, instance, rule, nil)
 }
-func (s *Store) RepairTalismanConfigured(uid uint64, operation string, instance uint32, rule TalismanRepairRule, revision uint64) ([]byte, error) {
+func (s *ItemManager) RepairTalismanConfigured(uid uint64, operation string, instance uint32, rule TalismanRepairRule, revision uint64) ([]byte, error) {
 	if revision == 0 {
 		return nil, ErrDenied
 	}
-	return s.repairTalisman(uid, operation, instance, rule, &revision)
+	return s.store.ItemManager().repairTalisman(uid, operation, instance, rule, &revision)
 }
-func (s *Store) repairTalisman(uid uint64, operation string, instance uint32, rule TalismanRepairRule, revision *uint64) ([]byte, error) {
+func (s *ItemManager) repairTalisman(uid uint64, operation string, instance uint32, rule TalismanRepairRule, revision *uint64) ([]byte, error) {
 	if uid == 0 || instance == 0 || operation == "" || len(operation) > 128 || !rule.Valid() {
 		return nil, ErrDenied
 	}
-	tx, err := s.DB.Begin()
+	tx, err := s.store.DB.Begin()
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +55,7 @@ func (s *Store) repairTalisman(uid uint64, operation string, instance uint32, ru
 	if err = tx.QueryRow(`SELECT record FROM inventory WHERE uid=? AND instance=? FOR UPDATE`, uid, instance).Scan(&item); err != nil {
 		return nil, err
 	}
-	if len(item) != 68 || item[4] != 30 || protocol.ReadUint32(item, 0) != instance || protocol.ReadUint32(item, 5) != rule.Item {
+	if len(item) != 68 || item[4] != protocol.ItemTalisman || protocol.ReadUint32(item, 0) != instance || protocol.ReadUint32(item, 5) != rule.Item {
 		return nil, ErrDenied
 	}
 	// Return current state on retry; never refill again after intervening use.

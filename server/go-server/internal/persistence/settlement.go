@@ -18,13 +18,13 @@ func ProfileLevel(profile []byte) uint16 {
 	if level < 1 {
 		return 1
 	}
-	if level > 150 {
-		return 150
+	if level > MaxRoleLevel {
+		return MaxRoleLevel
 	}
 	return level
 }
 func AdvanceLevel(level uint16, experience uint64, rules RewardRules) (uint16, uint32) {
-	for level < 150 {
+	for level < MaxRoleLevel {
 		cost := rules.AtLevel(level).NextExperience
 		if cost == 0 || experience < uint64(cost) {
 			break
@@ -55,7 +55,7 @@ type BattleReward struct {
 
 // Commit the entire room once. The persisted response makes retries independent
 // of subsequent reward configuration changes or process restarts.
-func (store *Store) SettleBattle(serial uint32, reports []byte, rewards []BattleReward, growth ...RewardRules) ([]BattleReward, error) {
+func (m *BattleManager) SettleBattle(serial uint32, reports []byte, rewards []BattleReward, growth ...RewardRules) ([]BattleReward, error) {
 	if serial == 0 || len(rewards) == 0 || len(rewards) > 8 {
 		return nil, ErrDenied
 	}
@@ -65,7 +65,7 @@ func (store *Store) SettleBattle(serial uint32, reports []byte, rewards []Battle
 		}
 	}
 	sort.Slice(rewards, func(i, j int) bool { return rewards[i].UID < rewards[j].UID })
-	tx, err := store.DB.Begin()
+	tx, err := m.store.DB.Begin()
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +139,9 @@ func (store *Store) SettleBattle(serial uint32, reports []byte, rewards []Battle
 		if r.Outcome == "unconfirmed" {
 			rules.GrowthEnabled = false
 		}
-		r.GoldBalance, err = creditRewardProgress(r.Profile, gold, r.Experience, r.Gold, rules)
+		var gifts [][]byte
+		r.GoldBalance, gifts, err = (RewardManager{}).GrantProgressItems(tx, r.UID, r.Profile, gold, r.Experience, r.Gold, rules)
+		r.Items = append(r.Items, gifts...)
 		if err != nil {
 			return nil, err
 		}
@@ -158,4 +160,24 @@ func (store *Store) SettleBattle(serial uint32, reports []byte, rewards []Battle
 		return nil, err
 	}
 	return rewards, tx.Commit()
+}
+
+func (m *BattleManager) NextBattle() (uint32, error) {
+	transaction, err := m.store.DB.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer transaction.Rollback()
+	var serial uint64
+	if err = transaction.QueryRow(`SELECT value FROM counters WHERE name='battle' FOR UPDATE`).Scan(&serial); err != nil {
+		return 0, err
+	}
+	if serial >= 0xffffffff {
+		return 0, ErrDenied
+	}
+	serial++
+	if _, err = transaction.Exec(`UPDATE counters SET value=? WHERE name='battle'`, serial); err != nil {
+		return 0, err
+	}
+	return uint32(serial), transaction.Commit()
 }

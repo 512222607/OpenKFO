@@ -44,14 +44,14 @@ func TestInventoryGrantAtomicityLocalDatabase(t *testing.T) {
 		if e = tx.QueryRow("SELECT uid FROM accounts WHERE uid=1 FOR UPDATE").Scan(&uid); e != nil {
 			t.Fatal(e)
 		}
-		first, e := deliverInventoryItem(tx, uid, template, 7)
+		first, e := (InventoryManager{}).AddItem(tx, uid, template, 7)
 		if e != nil {
 			tx.Rollback()
 			t.Fatal(e)
 		}
 		second := []byte(nil)
 		if commit {
-			second, e = deliverInventoryItem(tx, uid, template, 0)
+			second, e = (InventoryManager{}).AddItem(tx, uid, template, 0)
 			if e != nil {
 				tx.Rollback()
 				t.Fatal(e)
@@ -61,7 +61,7 @@ func TestInventoryGrantAtomicityLocalDatabase(t *testing.T) {
 			}
 			e = tx.Commit()
 		} else {
-			if _, err := deliverInventoryItem(tx, uid, template[:5], 0); err == nil {
+			if _, err := (InventoryManager{}).AddItem(tx, uid, template[:5], 0); err == nil {
 				t.Fatal("invalid second grant accepted")
 			}
 			e = tx.Rollback()

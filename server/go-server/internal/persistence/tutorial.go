@@ -3,11 +3,11 @@ package persistence
 // CompleteTutorial promotes only the native novice title. The title byte is
 // the client's persisted introduction gate (8A10B0/924010); never downgrade it.
 // Called only after the game hub validates the authenticated tutorial room.
-func (s *Store) CompleteTutorial(uid uint64) (byte, error) {
+func (s *TitleManager) CompleteTutorial(uid uint64) (byte, error) {
 	if uid == 0 {
 		return 0, ErrDenied
 	}
-	tx, err := s.DB.Begin()
+	tx, err := s.store.DB.Begin()
 	if err != nil {
 		return 0, err
 	}

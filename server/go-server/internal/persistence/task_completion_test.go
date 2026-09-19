@@ -27,6 +27,9 @@ func TestTaskCompletionLocalDatabase(t *testing.T) {
 	defer db.Close()
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
+	if _, e := db.Exec("CREATE TEMPORARY TABLE item_definitions(definition_key INT PRIMARY KEY,revision BIGINT,record BLOB,days INT) ENGINE=InnoDB"); e != nil {
+		t.Fatal(e)
+	}
 
 	for _, q := range []string{
 		`CREATE TEMPORARY TABLE accounts(uid BIGINT PRIMARY KEY,profile BLOB NOT NULL,gold INT UNSIGNED NOT NULL) ENGINE=InnoDB`,
@@ -61,6 +64,9 @@ func TestTaskCompletionLocalDatabase(t *testing.T) {
 	if _, err = db.Exec("INSERT INTO offer_lifetimes VALUES(7,1)"); err != nil {
 		t.Fatal(err)
 	}
+	if _, err = db.Exec(seedDefinitionsSQL); err != nil {
+		t.Fatal(err)
+	}
 	rule := TaskRule{ID: 1001, Enabled: true, Matches: 10, Counters: make([]uint32, 29), Experience: 100, Gold: 20, RewardCatalog: 7}
 	rules := TaskRules{Enabled: true, Tasks: []TaskRule{rule}}
 	data, _ := json.Marshal(rules)
@@ -68,10 +74,10 @@ func TestTaskCompletionLocalDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	store := &Store{DB: db}
-	if _, err = store.Tasks(1, 6050, 1001); err != nil {
+	if _, err = store.TaskManager().Tasks(1, 6050, 1001); err != nil {
 		t.Fatal(err)
 	}
-	reward, err := store.CompleteTasks(1, (RewardRules{}).Normalized())
+	reward, err := store.TaskManager().CompleteTasks(1, (RewardRules{}).Normalized())
 	if err != nil || len(reward.Keys) != 0 {
 		t.Fatal("early completion", reward, err)
 	}
@@ -90,7 +96,7 @@ func TestTaskCompletionLocalDatabase(t *testing.T) {
 	if _, err = db.Exec("INSERT INTO task_rewards VALUES(1,1001,0,0,0)"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = store.CompleteTasks(1, (RewardRules{}).Normalized()); err == nil {
+	if _, err = store.TaskManager().CompleteTasks(1, (RewardRules{}).Normalized()); err == nil {
 		t.Fatal("receipt conflict ignored")
 	}
 	var state int
@@ -114,13 +120,8 @@ func TestTaskCompletionLocalDatabase(t *testing.T) {
 	if _, err = db.Exec("UPDATE offers SET enabled=FALSE WHERE catalog_key=7"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = store.CompleteTasks(1, (RewardRules{}).Normalized()); err == nil {
-		t.Fatal("disabled reward offer granted")
-	}
-	if _, err = db.Exec("UPDATE offers SET enabled=TRUE WHERE catalog_key=7"); err != nil {
-		t.Fatal(err)
-	}
-	reward, err = store.CompleteTasks(1, (RewardRules{}).Normalized())
+	// Shop visibility must not control an earned task reward.
+	reward, err = store.TaskManager().CompleteTasks(1, (RewardRules{}).Normalized())
 	if err != nil || len(reward.Keys) != 1 || reward.Keys[0] != 1001 || reward.Experience != 100 || reward.GoldBalance != 70 || len(reward.Items) != 1 || protocol.ReadUint32(reward.Items[0], 5) != 250001 {
 		t.Fatal(reward, err)
 	}
@@ -128,7 +129,7 @@ func TestTaskCompletionLocalDatabase(t *testing.T) {
 	if err = db.QueryRow("SELECT expires_at FROM inventory_expirations WHERE uid=1").Scan(&deadline); err != nil || deadline < time.Now().Unix()+86390 || deadline > time.Now().Unix()+86410 {
 		t.Fatal("reward expiry", deadline, err)
 	}
-	reward, err = store.CompleteTasks(1, (RewardRules{}).Normalized())
+	reward, err = store.TaskManager().CompleteTasks(1, (RewardRules{}).Normalized())
 	if err != nil || len(reward.Keys) != 0 || reward.GoldBalance != 70 || len(reward.Items) != 0 {
 		t.Fatal("duplicate award", reward, err)
 	}
@@ -139,7 +140,7 @@ func TestTaskCompletionLocalDatabase(t *testing.T) {
 	if err = db.QueryRow("SELECT gold FROM accounts WHERE uid=2").Scan(&gold); err != nil || gold != 50 {
 		t.Fatal("peer modified", err)
 	}
-	if _, err = store.CompleteTasks(99, (RewardRules{}).Normalized()); err == nil {
+	if _, err = store.TaskManager().CompleteTasks(99, (RewardRules{}).Normalized()); err == nil {
 		t.Fatal("unknown account accepted")
 	}
 }

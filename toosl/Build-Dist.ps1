@@ -25,6 +25,8 @@ try {
     if ($LASTEXITCODE) { throw 'Login component build failed' }
     & dotnet publish client/launcher-online/OnlineLauncher.csproj -c Release -o "$dist/launcher"
     if ($LASTEXITCODE) { throw 'Launcher build failed' }
+    & dotnet publish toosl/local-server-monitor/LocalServerMonitor.csproj -c Release -o "$dist/local-server-monitor"
+    if ($LASTEXITCODE) { throw 'Local server monitor build failed' }
 
     # Flutter/MSBuild cannot reliably read this project's Chinese workspace path.
     $stage = Join-Path ([System.IO.Path]::GetTempPath()) ('openkfo-build-' + [guid]::NewGuid().ToString('N'))

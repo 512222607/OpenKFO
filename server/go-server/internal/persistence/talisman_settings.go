@@ -42,10 +42,10 @@ func (a TalismanSettings) Validate() error {
 	}
 	return nil
 }
-func (s *Store) TalismanSettings() (TalismanSettings, error) {
+func (s *ItemManager) TalismanSettings() (TalismanSettings, error) {
 	a := TalismanSettings{}
 	var data []byte
-	err := s.DB.QueryRow("SELECT revision,rules FROM talisman_rules WHERE id=1").Scan(&a.Revision, &data)
+	err := s.store.DB.QueryRow("SELECT revision,rules FROM talisman_rules WHERE id=1").Scan(&a.Revision, &data)
 	if err == sql.ErrNoRows {
 		return a, nil
 	}
@@ -58,7 +58,7 @@ func (s *Store) TalismanSettings() (TalismanSettings, error) {
 	return a, a.Validate()
 }
 
-func (s *Store) SeedTalismanSettings(rules TalismanRules) error {
+func (s *ItemManager) SeedTalismanSettings(rules TalismanRules) error {
 	if err := (TalismanSettings{Rules: rules}).Validate(); err != nil {
 		return err
 	}
@@ -66,10 +66,10 @@ func (s *Store) SeedTalismanSettings(rules TalismanRules) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.DB.Exec("INSERT IGNORE INTO talisman_rules(id,revision,rules) VALUES(1,1,?)", data)
+	_, err = s.store.DB.Exec("INSERT IGNORE INTO talisman_rules(id,revision,rules) VALUES(1,1,?)", data)
 	return err
 }
-func (s *Store) SaveTalismanSettings(a TalismanSettings) (TalismanSettings, error) {
+func (s *ItemManager) SaveTalismanSettings(a TalismanSettings) (TalismanSettings, error) {
 	if err := a.Validate(); err != nil {
 		return TalismanSettings{}, err
 	}
@@ -83,7 +83,7 @@ func (s *Store) SaveTalismanSettings(a TalismanSettings) (TalismanSettings, erro
 	if err != nil {
 		return TalismanSettings{}, err
 	}
-	tx, err := s.DB.Begin()
+	tx, err := s.store.DB.Begin()
 	if err != nil {
 		return TalismanSettings{}, err
 	}

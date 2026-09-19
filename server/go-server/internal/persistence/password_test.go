@@ -46,7 +46,7 @@ func TestPasswordResetPreservesAccount(t *testing.T) {
 		store.DB.Exec("DELETE FROM inventory WHERE uid=?", uid)
 		store.DB.Exec("DELETE FROM accounts WHERE uid=?", uid)
 	}()
-	before, err := store.Snapshot(uid)
+	before, err := store.RoleManager().Snapshot(uid)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func TestPasswordResetPreservesAccount(t *testing.T) {
 	if _, err = store.Authenticate(name, legacy("123456")); err != nil {
 		t.Fatal(err)
 	}
-	after, err := store.Snapshot(uid)
+	after, err := store.RoleManager().Snapshot(uid)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -12,7 +12,7 @@ func (h *Hub) extendedTaskLists(s *Session) error {
 	if h.Config.ConfigHash == "" {
 		return nil
 	}
-	states, err := h.Store.ExtendedTasks(s.UID, h.Config.ConfigHash)
+	states, err := h.Store.TaskManager().ExtendedTasks(s.UID, h.Config.ConfigHash)
 	if err != nil {
 		return err
 	}
@@ -90,11 +90,11 @@ func (h *Hub) extendedTaskAction(s *Session, m protocol.Message) error {
 		return nil
 	}
 	if m.ID == 6311 || m.ID == 6312 {
-		growth, err := h.Store.BattleRewards(h.Config.Settlement)
+		growth, err := h.Store.RewardManager().BattleRewards(h.Config.Settlement)
 		if err != nil {
 			return err
 		}
-		award, err := h.Store.ClaimExtendedTask(s.UID, h.Config.ConfigHash, m.ID, r.Key, growth.Rules)
+		award, err := h.Store.TaskManager().ClaimExtendedTask(s.UID, h.Config.ConfigHash, m.ID, r.Key, growth.Rules)
 		if err != nil {
 			s.sendGame(notice("任务奖励未发放：请确认已完成、尚未领取且配置仍开放。"))
 			return nil
@@ -102,11 +102,14 @@ func (h *Hub) extendedTaskAction(s *Session, m protocol.Message) error {
 		s.sendGame(protocol.Message{ID: 4300, Payload: bytes.Clone(award.Profile[persistence.ExperienceOffset : persistence.ExperienceOffset+8])})
 		s.sendGame(protocol.Message{ID: 1240, Payload: protocol.Uint32Bytes(award.GoldBalance)})
 		for _, item := range award.Items {
-			s.sendGame(protocol.Message{ID: 2160, Payload: bytes.Clone(item)})
+			s.sendGame(protocol.Message{ID: protocol.MsgItemAdded, Payload: bytes.Clone(item)})
 			if s.Inventory == nil {
 				s.Inventory = map[uint32][]byte{}
 			}
 			s.Inventory[protocol.ReadUint32(item, 0)] = bytes.Clone(item)
+		}
+		if err := h.rewardBalances(s, growth.Rules.LevelGifts); err != nil {
+			return err
 		}
 		// Native 6301/6302 consumers update the daily/newbie state using
 		// WORD key + BYTE state; newbie state 3 removes the received entry.
@@ -116,7 +119,7 @@ func (h *Hub) extendedTaskAction(s *Session, m protocol.Message) error {
 		s.sendGame(protocol.Message{ID: m.ID - 10, Payload: p})
 		return nil
 	}
-	state, changed, err := h.Store.ExtendedTaskTransition(s.UID, h.Config.ConfigHash, m.ID, r.Key)
+	state, changed, err := h.Store.TaskManager().ExtendedTaskTransition(s.UID, h.Config.ConfigHash, m.ID, r.Key)
 	if err != nil {
 		s.sendGame(notice("每日/新手任务操作未完成，请检查任务配置、客户端版本和当前状态。"))
 		return nil

@@ -11,7 +11,7 @@ import (
 func (account Account) Consumable(instance uint32, slot uint16) ([]byte, error) {
 	var found []byte
 	for _, record := range account.Inventory {
-		if !usableItem(record) || record[4] != 64 {
+		if !usableItem(record) || record[4] != protocol.ItemConsumable {
 			continue
 		}
 		currentSlot := protocol.ReadUint16(record, 17)
@@ -31,11 +31,11 @@ func (account Account) Consumable(instance uint32, slot uint16) ([]byte, error) 
 	return found, nil
 }
 
-func (store *Store) Consume(uid uint64, battle, sequence, instance uint32, signature []byte, intent bool) (bool, error) {
+func (m *InventoryManager) Consume(uid uint64, battle, sequence, instance uint32, signature []byte, intent bool) (bool, error) {
 	if len(signature) != 40 {
 		return false, ErrDenied
 	}
-	transaction, err := store.DB.Begin()
+	transaction, err := m.store.DB.Begin()
 	if err != nil {
 		return false, err
 	}
@@ -66,7 +66,7 @@ func (store *Store) Consume(uid uint64, battle, sequence, instance uint32, signa
 	if err = transaction.QueryRow(`SELECT record FROM inventory WHERE uid=? AND instance=?`, uid, instance).Scan(&record); err != nil {
 		return false, err
 	}
-	if !usableItem(record) || record[4] != 64 {
+	if !usableItem(record) || record[4] != protocol.ItemConsumable {
 		return false, ErrDenied
 	}
 	slot := protocol.ReadUint16(record, 17)

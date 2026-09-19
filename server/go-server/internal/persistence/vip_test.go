@@ -203,7 +203,7 @@ func TestVIPGrantLocalDatabase(t *testing.T) {
 	if _, err = db.Exec("UPDATE inventory_expirations SET expires_at=? WHERE uid=1", time.Now().Unix()+120); err != nil {
 		t.Fatal(err)
 	}
-	account, err := st.Snapshot(1)
+	account, err := st.RoleManager().Snapshot(1)
 	if err != nil || len(account.Inventory) != 1 || protocol.ReadUint32(account.Inventory[0], 13) != 2 {
 		t.Fatal("snapshot did not use deadline", account.Inventory, err)
 	}

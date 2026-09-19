@@ -52,11 +52,11 @@ func vipShopPercentTx(tx *sql.Tx, uid uint64) (uint32, error) {
 
 // Display refresh is a separate snapshot. Purchase/Gift recalculate inside
 // their own transaction and reject stale submitted prices without charging.
-func (s *Store) VIPShopPercent(uid uint64) (uint32, error) {
+func (s *ShopManager) VIPShopPercent(uid uint64) (uint32, error) {
 	if uid == 0 {
 		return 0, ErrDenied
 	}
-	tx, err := s.DB.Begin()
+	tx, err := s.store.DB.Begin()
 	if err != nil {
 		return 0, err
 	}

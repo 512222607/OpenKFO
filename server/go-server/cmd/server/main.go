@@ -23,8 +23,6 @@ func main() {
 	cleanup, err := prepareLocalConsole()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Local server startup failed:", err)
-		fmt.Fprintln(os.Stderr, "Press Enter to close.")
-		fmt.Scanln()
 		return
 	}
 	defer cleanup()
@@ -90,7 +88,7 @@ func main() {
 		}
 		if err = input.Decode(&request); err == nil {
 			var before, after uint32
-			before, after, err = store.Wallet(request.UID, request.Mode, request.Amount, request.OperationID)
+			before, after, err = store.WalletManager().AdjustTickets(request.UID, request.Mode, request.Amount, request.OperationID)
 			if err == nil {
 				json.NewEncoder(os.Stdout).Encode(map[string]uint32{"before": before, "after": after})
 			}
@@ -99,7 +97,7 @@ func main() {
 		var request struct{ UID uint64 }
 		if err = input.Decode(&request); err == nil {
 			var account persistence.Account
-			account, err = store.Snapshot(request.UID)
+			account, err = store.RoleManager().Snapshot(request.UID)
 			if err == nil {
 				json.NewEncoder(os.Stdout).Encode(account)
 			}
@@ -128,16 +126,16 @@ func main() {
 		if err = config.ValidateTalismanRepairs(); err != nil {
 			log.Fatal(err)
 		}
-		if err = store.SeedBattleRewards(config.Settlement); err != nil {
+		if err = store.RewardManager().SeedBattleRewards(config.Settlement); err != nil {
 			log.Fatal(err)
 		}
 		if err = store.SeedHonourSettings(persistence.HonourRules(config.Honour)); err != nil {
 			log.Fatal(err)
 		}
-		if err = store.SeedTalismanSettings(persistence.TalismanRules{Enabled: len(config.TalismanUses)+len(config.TalismanRepairs) > 0, Uses: config.TalismanUses, Repairs: config.TalismanRepairs}); err != nil {
+		if err = store.ItemManager().SeedTalismanSettings(persistence.TalismanRules{Enabled: len(config.TalismanUses)+len(config.TalismanRepairs) > 0, Uses: config.TalismanUses, Repairs: config.TalismanRepairs}); err != nil {
 			log.Fatal(err)
 		}
-		if err = store.SeedWeaponSettings(persistence.WeaponRules{Enabled: config.WeaponUpgradeMode != "", Levels: config.WeaponLevels}); err != nil {
+		if err = store.ItemManager().SeedWeaponSettings(persistence.WeaponRules{Enabled: config.WeaponUpgradeMode != "", Levels: config.WeaponLevels}); err != nil {
 			log.Fatal(err)
 		}
 		certificate, certErr := tunnel.Certificate(*certificateDirectory)
@@ -152,6 +150,7 @@ func main() {
 		server := &http.Server{Addr: *address, Handler: gameServer.Handler(), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 90 * time.Second, MaxHeaderBytes: 8192}
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
+		watchLocalMonitor(stop)
 		if *tlsAddress != "" {
 			listener, listenErr := net.Listen("tcp", *tlsAddress)
 			if listenErr != nil {

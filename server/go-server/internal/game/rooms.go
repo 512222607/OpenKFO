@@ -66,21 +66,35 @@ func (hub *Hub) stageAccess() (persistence.StageAccess, error) {
 }
 
 func (hub *Hub) resolveWithAccess(request []byte, access persistence.StageAccess) ([]byte, error) {
-	return hub.resolveWithAllowed(request, access.Allows)
+	return hub.resolveWithPolicy(request, access.Allows, access)
 }
 
 func (hub *Hub) resolveWithAllowed(request []byte, allows func(uint32) bool) ([]byte, error) {
+	return hub.resolveWithPolicy(request, allows, persistence.StageAccess{})
+}
+func (hub *Hub) resolveWithPolicy(request []byte, allows func(uint32) bool, access persistence.StageAccess) ([]byte, error) {
 	if len(request) != 81 {
 		return nil, protocol.ErrFrame
 	}
 	if tutorialRequest(request) && allows(1201) {
 		return bytes.Clone(request), nil
 	}
-	mode, capacity := request[46], request[37]
-	if (mode > 3 && mode != 5) || (capacity != 2 && capacity != 4 && capacity != 6 && capacity != 8) {
+	mode, capacity := protocol.RoomTypeFromRequest(request), request[protocol.RoomCapacityOffset]
+	if (!mode.IsCompetitive() && mode != protocol.FreePractice) || (capacity != 2 && capacity != 4 && capacity != 6 && capacity != 8) {
 		return nil, protocol.ErrFrame
 	}
 	chosen, suggested := protocol.ReadUint32(request, 38), protocol.ReadUint32(request, 42)
+	// An explicit GM override admits the requested known map even if it was
+	// absent from the original pool. Mode/capacity validation remains above.
+	if access.ForceOpens(chosen) && allows(chosen) {
+		if access.ClientHash != hub.Config.ConfigHash || (suggested != 0 && suggested != 0xffffffff && suggested != chosen) {
+			return nil, protocol.ErrFrame
+		}
+		resolved := bytes.Clone(request)
+		protocol.WriteUint32(resolved, protocol.RoomSuggestedMapOffset, chosen)
+		return resolved, nil
+	}
+
 	pool := hub.Config.Pools[fmt.Sprintf("%d:%d", mode, capacity)]
 	group, isGroup := hub.Config.Groups[strconv.FormatUint(uint64(chosen), 10)]
 	contains := func(values []uint32, needle uint32) bool {
@@ -142,7 +156,7 @@ func (hub *Hub) install(room *Room, session *Session) error {
 		}
 		slot++
 	}
-	account, err := hub.Store.Snapshot(session.UID)
+	account, err := hub.Store.RoleManager().Snapshot(session.UID)
 	if err != nil {
 		return err
 	}
@@ -150,7 +164,7 @@ func (hub *Hub) install(room *Room, session *Session) error {
 	own := fighter(account, member, false)
 	var peers []roomPeer
 	for _, member := range room.Members {
-		account, err := hub.Store.Snapshot(member.Session.UID)
+		account, err := hub.Store.RoleManager().Snapshot(member.Session.UID)
 		if err != nil {
 			return err
 		}
@@ -179,11 +193,11 @@ func (hub *Hub) completeRoomJoin(room *Room, member *Member, own []byte, peers [
 		p := make([]byte, 83)
 		protocol.WriteUint16(p, 0, room.ID)
 		copy(p[2:], room.Request)
-		session.sendGame(protocol.Message{ID: 3020, Payload: p})
+		session.sendGame(protocol.Message{ID: protocol.MsgRoomCreated, Payload: p})
 		return
 	}
-	session.sendGame(protocol.Message{ID: 3100, Payload: roomEntryForMember(room, member, own)})
-	session.sendGame(protocol.Message{ID: 3160, Payload: protocol.Uint64Bytes(room.Owner)})
+	session.sendGame(protocol.Message{ID: protocol.MsgRoomEntered, Payload: roomEntryForMember(room, member, own)})
+	session.sendGame(protocol.Message{ID: protocol.MsgRoomOwner, Payload: protocol.Uint64Bytes(room.Owner)})
 	// 3105 consumes consecutive variable-length records, without a count prefix.
 	// Never send an empty roster: the native consumer reads the first record.
 	sort.Slice(peers, func(i, j int) bool { return peers[i].member.Slot < peers[j].member.Slot })
@@ -205,7 +219,7 @@ func (hub *Hub) clearRoomReady(room *Room) {
 	for uid, member := range room.Members {
 		if member.Ready {
 			member.Ready = false
-			hub.broadcast(room, protocol.Message{ID: 4070, Payload: protocol.Uint64Bytes(uid)}, 0)
+			hub.broadcast(room, protocol.Message{ID: protocol.MsgPlayerNotReady, Payload: protocol.Uint64Bytes(uid)}, 0)
 		}
 	}
 }
@@ -214,7 +228,7 @@ func (hub *Hub) leave(session *Session, acknowledge bool) {
 	room := session.Room
 	if room == nil {
 		if acknowledge {
-			session.sendGame(protocol.Message{ID: 3115})
+			session.sendGame(protocol.Message{ID: protocol.MsgRoomLeft})
 		}
 		return
 	}
@@ -229,7 +243,7 @@ func (hub *Hub) leave(session *Session, acknowledge bool) {
 		channel.Phase = "lobby"
 	}
 	if acknowledge {
-		session.sendGame(protocol.Message{ID: 3115})
+		session.sendGame(protocol.Message{ID: protocol.MsgRoomLeft})
 	}
 	if len(room.Members) == 0 {
 		if room.LoadTimer != nil {
@@ -239,7 +253,7 @@ func (hub *Hub) leave(session *Session, acknowledge bool) {
 		return
 	}
 	interrupted := room.Stage != "room"
-	hub.broadcast(room, protocol.Message{ID: 3130, Payload: protocol.Uint64Bytes(session.UID)}, 0)
+	hub.broadcast(room, protocol.Message{ID: protocol.MsgPlayerLeftRoom, Payload: protocol.Uint64Bytes(session.UID)}, 0)
 	if room.Owner == session.UID {
 		var first *Member
 		for _, member := range room.Members {
@@ -248,7 +262,7 @@ func (hub *Hub) leave(session *Session, acknowledge bool) {
 			}
 		}
 		room.Owner = first.Session.UID
-		hub.broadcast(room, protocol.Message{ID: 3160, Payload: protocol.Uint64Bytes(room.Owner)}, 0)
+		hub.broadcast(room, protocol.Message{ID: protocol.MsgRoomOwner, Payload: protocol.Uint64Bytes(room.Owner)}, 0)
 	}
 	if interrupted {
 		if err := hub.recoverRoom(room, "有玩家离开，本局中止，已返回房间。本次中止不发放奖励。"); err != nil {
@@ -262,7 +276,7 @@ func (hub *Hub) equipmentChanged(session *Session) {
 	if session.Room == nil {
 		return
 	}
-	account, err := hub.Store.Snapshot(session.UID)
+	account, err := hub.Store.RoleManager().Snapshot(session.UID)
 	if err != nil {
 		return
 	}
@@ -273,7 +287,7 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 	room := session.Room
 	uid := session.UID
 	switch message.ID {
-	case 2260:
+	case protocol.MsgRoomListRequest:
 		// A lobby refresh can be sent while 3070 is still awaiting 3100.
 		// Joining must not invalidate that read-only request once it is dequeued.
 		if (channel.Phase != "lobby" && channel.Phase != "room") || len(payload) != 3 {
@@ -283,7 +297,7 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		// The old adapter mistook the page for a mode and hid mode-0 rooms.
 		ids := []int{}
 		for id, room := range hub.Rooms {
-			if !tutorialRoom(room) && room.LobbyID == session.LobbyID && (payload[2] == 0x88 || payload[2] == room.Request[46]) {
+			if !tutorialRoom(room) && room.LobbyID == session.LobbyID && (payload[2] == 0x88 || protocol.RoomType(payload[2]) == room.Type()) {
 				ids = append(ids, int(id))
 			}
 		}
@@ -301,9 +315,9 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 			count++
 		}
 		protocol.WriteUint32(response, 4, uint32(count))
-		session.send(channel.ID, protocol.Message{ID: 2280, Payload: response})
+		session.send(channel.ID, protocol.Message{ID: protocol.MsgRoomList, Payload: response})
 		log.Printf("room_directory uid=%d page=%d option=%d mode=%d rooms=%d returned=%d", uid, page, payload[1], payload[2], len(hub.Rooms), count)
-	case 3010:
+	case protocol.MsgCreateRoom:
 		if room != nil && channel.Phase == "room" && room.Owner == uid {
 			resolved, err := hub.resolve(payload)
 			if err == nil && bytes.Equal(resolved, room.Request) {
@@ -313,9 +327,30 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		if channel.Phase != "lobby" || room != nil || (!session.Bound && !tutorialRequest(payload)) {
 			return true, protocol.ErrFrame
 		}
+		if tutorialRequest(payload) {
+			title, err := hub.Store.TitleManager().AccountTitle(uid)
+			if err != nil {
+				return true, err
+			}
+			if title >= 2 {
+				// A delayed native request may already be queued at completion.
+				// Repair its local gate, cancel the attempted guide transition,
+				// and never allocate another room or grant another reward.
+				announced, err := hub.announceTutorialReward(session)
+				if err != nil {
+					return true, err
+				}
+				if !announced {
+					syncTutorialTitle(session, title)
+				}
+				session.sendGame(protocol.Message{ID: protocol.MsgRoomLeft})
+				session.sendGame(notice("新手引导已经完成，无需重复训练。"))
+				return true, nil
+			}
+		}
 		resolvedRequest, err := hub.resolveForPlayers(payload, session)
 		if err != nil {
-			session.send(channel.ID, protocol.Message{ID: 3030, Payload: []byte{44, 0}})
+			session.send(channel.ID, protocol.Message{ID: protocol.MsgRoomCreateError, Payload: []byte{44, 0}})
 			return true, nil
 		}
 		id := uint16(1)
@@ -330,8 +365,8 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 			return true, err
 		}
 		hub.Rooms[id] = newRoom
-		log.Printf("room_created uid=%d room=%d mode=%d rooms=%d", uid, id, resolvedRequest[46], len(hub.Rooms))
-	case 3070:
+		log.Printf("room_created uid=%d room=%d mode=%d rooms=%d", uid, id, resolvedRequest[protocol.RoomTypeOffset], len(hub.Rooms))
+	case protocol.MsgJoinRoom:
 		if len(payload) != 14 {
 			return true, protocol.ErrFrame
 		}
@@ -386,14 +421,14 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		sort.Ints(ids)
 		for _, id := range ids {
 			target := hub.Rooms[uint16(id)]
-			if target.LobbyID == session.LobbyID && target.Stage == "room" && target.Request[21] == 0 && len(target.Members) < int(target.Request[37]) && allows(protocol.ReadUint32(target.Request, 38)) && (payload[0] == 0 || payload[0] == target.Request[46]) {
+			if target.LobbyID == session.LobbyID && target.Stage == "room" && target.Request[21] == 0 && len(target.Members) < int(target.Request[37]) && allows(protocol.ReadUint32(target.Request, 38)) && (payload[0] == 0 || protocol.RoomType(payload[0]) == target.Type()) {
 				return true, hub.install(target, session)
 			}
 		}
 		session.sendGame(notice("暂无可加入的房间，请创建房间或稍后重试。"))
-	case 4124:
+	case protocol.MsgTutorialComplete:
 		return true, hub.completeTutorial(session, channel, payload)
-	case 3110:
+	case protocol.MsgLeaveRoom:
 		if len(payload) != 0 {
 			return true, protocol.ErrFrame
 		}
@@ -407,7 +442,7 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		if len(payload) != 4 {
 			return true, protocol.ErrFrame
 		}
-	case 3550:
+	case protocol.MsgRoomAcknowledgement:
 		if len(payload) != 12 || protocol.ReadUint64(payload, 0) != uid {
 			return true, protocol.ErrFrame
 		}
@@ -418,7 +453,7 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 				// without 3110. Clear the icon for every peer and unlock ready.
 				var returned *persistence.Account
 				if channel.Phase == "settlement" {
-					a, err := hub.Store.Snapshot(uid)
+					a, err := hub.Store.RoleManager().Snapshot(uid)
 					if err != nil {
 						return true, err
 					}
@@ -491,7 +526,7 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		room.Request = resolved
 		hub.broadcast(room, protocol.Message{ID: 3220, Payload: roomSettings(resolved)}, 0)
 		hub.clearRoomReady(room)
-	case 4030, 4060:
+	case protocol.MsgReady, protocol.MsgCancelReady:
 		if len(payload) != 0 || room == nil {
 			return true, protocol.ErrFrame
 		}
@@ -510,17 +545,17 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		if !tutorialRoom(room) && time.Now().After(session.P2PUntil) {
 			return true, protocol.ErrFrame
 		}
-		if message.ID == 4060 {
+		if message.ID == protocol.MsgCancelReady {
 			hub.cancelSeatExchange(room)
 			member.Ready = false
-			hub.broadcast(room, protocol.Message{ID: 4070, Payload: protocol.Uint64Bytes(uid)}, 0)
+			hub.broadcast(room, protocol.Message{ID: protocol.MsgPlayerNotReady, Payload: protocol.Uint64Bytes(uid)}, 0)
 			return true, nil
 		}
-		if uid == room.Owner && room.Request[46] != 5 && !tutorialRoom(room) {
+		if uid == room.Owner && room.Type() != protocol.FreePractice && !tutorialRoom(room) {
 			if len(room.Members) < 2 {
 				return true, nil
 			}
-			if room.Request[46] == 1 || room.Request[46] == 3 {
+			if room.Type() == protocol.TeamSurvival || room.Type() == protocol.TeamDeathmatch {
 				teams := map[byte]bool{}
 				for _, member := range room.Members {
 					teams[member.Team] = true
@@ -544,7 +579,7 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		}
 		hub.cancelSeatExchange(room)
 		member.Ready = true
-		hub.broadcast(room, protocol.Message{ID: 4050, Payload: protocol.Uint64Bytes(uid)}, 0)
+		hub.broadcast(room, protocol.Message{ID: protocol.MsgPlayerReady, Payload: protocol.Uint64Bytes(uid)}, 0)
 		if uid == room.Owner {
 			for _, member := range room.Members {
 				if !member.Ready || (!tutorialRoom(room) && time.Now().After(member.Session.P2PUntil)) {
@@ -552,13 +587,13 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 				}
 			}
 			for uid, member := range room.Members {
-				account, err := hub.Store.Snapshot(uid)
+				account, err := hub.Store.RoleManager().Snapshot(uid)
 				if err != nil {
 					return true, err
 				}
 				member.BattleLevel = persistence.ProfileLevel(account.Profile)
 			}
-			serial, err := hub.Store.NextBattle()
+			serial, err := hub.Store.BattleManager().NextBattle()
 			if err != nil {
 				return true, err
 			}
@@ -576,10 +611,10 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 				member.Session.TalismanPending = nil
 				response := battleStartPayload(room)
 				member.Session.game().Phase = "loading"
-				member.Session.sendGame(protocol.Message{ID: 4080, Payload: response})
+				member.Session.sendGame(protocol.Message{ID: protocol.MsgBattleLoading, Payload: response})
 			}
 		}
-	case 4160:
+	case protocol.MsgResourceReady:
 		if len(payload) != 0 {
 			return true, protocol.ErrFrame
 		}
@@ -593,7 +628,7 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 			return true, nil
 		}
 		room.Members[uid].Loaded = true
-		hub.broadcast(room, protocol.Message{ID: 4170, Payload: protocol.Uint64Bytes(uid)}, 0)
+		hub.broadcast(room, protocol.Message{ID: protocol.MsgPlayerResourceReady, Payload: protocol.Uint64Bytes(uid)}, 0)
 		for _, member := range room.Members {
 			if !member.Loaded {
 				return true, nil
@@ -603,8 +638,8 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		for _, member := range room.Members {
 			member.Session.game().Phase = "wait_ready"
 		}
-		hub.broadcast(room, protocol.Message{ID: 4180}, 0)
-	case 8040:
+		hub.broadcast(room, protocol.Message{ID: protocol.MsgAllResourcesReady}, 0)
+	case protocol.MsgBattleInputReady:
 		if len(payload) != 14 || protocol.ReadUint64(payload, 2) != uid {
 			return true, protocol.ErrFrame
 		}
@@ -633,11 +668,11 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		}
 		response := append(protocol.Uint32Bytes(uint32(room.ID)), protocol.Uint32Bytes(uint32(room.ID))...)
 		response = append(response, protocol.Uint32Bytes(room.Serial)...)
-		hub.broadcast(room, protocol.Message{ID: 8070, Payload: response}, 0)
+		hub.broadcast(room, protocol.Message{ID: protocol.MsgBattleStarted, Payload: response}, 0)
 		// 8070 initializes the native clock baseline; 8090 opens its run gate.
 		// Without it, timed effects never reach their expiration deadline.
-		hub.broadcast(room, protocol.Message{ID: 8090, Payload: protocol.Uint32Bytes(1)}, 0)
-	case 8071:
+		hub.broadcast(room, protocol.Message{ID: protocol.MsgBattleClock, Payload: protocol.Uint32Bytes(1)}, 0)
+	case protocol.MsgBattleEvent:
 		return true, hub.battleMessage(session, channel, message)
 	default:
 		return false, nil

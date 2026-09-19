@@ -96,10 +96,10 @@ func (a TitleSettings) Validate() error {
 	return nil
 }
 
-func (s *Store) TitleSettings() (TitleSettings, error) {
+func (s *TitleManager) TitleSettings() (TitleSettings, error) {
 	a := TitleSettings{}
 	var data []byte
-	err := s.DB.QueryRow("SELECT revision,rules FROM title_rules WHERE id=1").Scan(&a.Revision, &data)
+	err := s.store.DB.QueryRow("SELECT revision,rules FROM title_rules WHERE id=1").Scan(&a.Revision, &data)
 	if err == sql.ErrNoRows {
 		return a, nil
 	}
@@ -111,7 +111,7 @@ func (s *Store) TitleSettings() (TitleSettings, error) {
 	}
 	return a, a.Validate()
 }
-func (s *Store) SaveTitleSettings(a TitleSettings) (TitleSettings, error) {
+func (s *TitleManager) SaveTitleSettings(a TitleSettings) (TitleSettings, error) {
 	if err := a.Validate(); err != nil {
 		return TitleSettings{}, err
 	}
@@ -122,7 +122,7 @@ func (s *Store) SaveTitleSettings(a TitleSettings) (TitleSettings, error) {
 	if err != nil {
 		return TitleSettings{}, err
 	}
-	tx, err := s.DB.Begin()
+	tx, err := s.store.DB.Begin()
 	if err != nil {
 		return TitleSettings{}, err
 	}

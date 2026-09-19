@@ -33,42 +33,42 @@ func TestTalismanSettingsLocalDatabase(t *testing.T) {
 		}
 	}
 	s := &Store{DB: db}
-	a, err := s.TalismanSettings()
+	a, err := s.ItemManager().TalismanSettings()
 	if err != nil || a.Revision != 0 || a.Rules.Enabled {
 		t.Fatal(a, err)
 	}
 	a.Rules.Enabled = true
 	a.Rules.Uses = []TalismanUseRule{{Item: 303002, ActiveCost: 100, PassiveCost: 1}}
 	a.Rules.Repairs = []TalismanRepairRule{{Item: 303002, Material: 603001, Quantity: 2, Capacity: 10000}}
-	saved, err := s.SaveTalismanSettings(a)
+	saved, err := s.ItemManager().SaveTalismanSettings(a)
 	if err != nil || saved.Revision != 1 {
 		t.Fatal(saved, err)
 	}
-	if _, err = s.SaveTalismanSettings(a); err == nil {
+	if _, err = s.ItemManager().SaveTalismanSettings(a); err == nil {
 		t.Fatal("stale save accepted")
 	}
 	if _, err = db.Exec(`INSERT INTO talisman_rules_audit VALUES(2,'{}','{}')`); err != nil {
 		t.Fatal(err)
 	}
 	saved.Rules.Enabled = false
-	if _, err = s.SaveTalismanSettings(saved); err == nil {
+	if _, err = s.ItemManager().SaveTalismanSettings(saved); err == nil {
 		t.Fatal("audit failure accepted")
 	}
-	restored, err := s.TalismanSettings()
+	restored, err := s.ItemManager().TalismanSettings()
 	if err != nil || restored.Revision != 1 || !restored.Rules.Enabled {
 		t.Fatal(restored, err)
 	}
 	if _, err = db.Exec(`DELETE FROM talisman_rules_audit WHERE revision=2`); err != nil {
 		t.Fatal(err)
 	}
-	saved, err = s.SaveTalismanSettings(saved)
+	saved, err = s.ItemManager().SaveTalismanSettings(saved)
 	if err != nil || saved.Rules.Enabled || len(saved.Rules.Uses) != 1 || len(saved.Rules.Repairs) != 1 {
 		t.Fatal(saved, err)
 	}
 	if _, err = db.Exec(`UPDATE talisman_rules SET rules='{"enabled":true,"uses":[],"repairs":[]}'`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.TalismanSettings(); err == nil {
+	if _, err = s.ItemManager().TalismanSettings(); err == nil {
 		t.Fatal("corrupt enabled rules accepted")
 	}
 }

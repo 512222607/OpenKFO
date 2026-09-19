@@ -13,6 +13,7 @@ type StagePlayerView struct {
 	RuleRevision, UnlockRevision uint64
 	Maps                         []uint32
 	Catalogue                    []uint32
+	ForcedMaps                   []uint32
 }
 
 // One repeatable-read snapshot prevents mixing an old catalogue with new
@@ -74,6 +75,9 @@ func (s *Store) StagePlayerView(uid uint64, clientHash string) (StagePlayerView,
 	for _, id := range access.PVEMaps {
 		if access.AllowsPlayer(id, profile[TitleLevelOffset], clientHash, allowed) {
 			out.Maps = append(out.Maps, id)
+			if access.ForceOpens(id) {
+				out.ForcedMaps = append(out.ForcedMaps, id)
+			}
 		}
 	}
 	out.Configured = true

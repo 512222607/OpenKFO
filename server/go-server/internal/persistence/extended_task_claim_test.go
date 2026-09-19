@@ -28,6 +28,9 @@ func TestExtendedTaskItemClaimLocalDatabase(t *testing.T) {
 	defer db.Close()
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
+	if _, e := db.Exec("CREATE TEMPORARY TABLE item_definitions(definition_key INT PRIMARY KEY,revision BIGINT,record BLOB,days INT) ENGINE=InnoDB"); e != nil {
+		t.Fatal(e)
+	}
 	exec := func(q string, args ...any) {
 		t.Helper()
 		if _, e := db.Exec(q, args...); e != nil {
@@ -60,7 +63,7 @@ func TestExtendedTaskItemClaimLocalDatabase(t *testing.T) {
 	save()
 	s := &Store{DB: db}
 	hash := rules.Extended.ClientHash
-	if _, _, err = s.ExtendedTaskTransition(1, hash, 6052, 3002); err != nil {
+	if _, _, err = s.TaskManager().ExtendedTaskTransition(1, hash, 6052, 3002); err != nil {
 		t.Fatal(err)
 	}
 	counts := make([]byte, 12)
@@ -79,7 +82,7 @@ func TestExtendedTaskItemClaimLocalDatabase(t *testing.T) {
 	exec("INSERT INTO offers VALUES(7,?,?,FALSE)", catalog, item)
 	exec("INSERT INTO offer_lifetimes VALUES(7,1)")
 	claim := func() (TaskAwards, error) {
-		return s.ClaimExtendedTask(1, hash, 6312, 3002, (RewardRules{}).Normalized())
+		return s.TaskManager().ClaimExtendedTask(1, hash, 6312, 3002, (RewardRules{}).Normalized())
 	}
 	unchanged := func() {
 		t.Helper()
@@ -97,10 +100,10 @@ func TestExtendedTaskItemClaimLocalDatabase(t *testing.T) {
 		}
 	}
 	if _, err = claim(); err == nil {
-		t.Fatal("disabled offer awarded")
+		t.Fatal("missing definition awarded")
 	}
 	unchanged()
-	exec("UPDATE offers SET enabled=TRUE")
+	exec(seedDefinitionsSQL) // Disabled shop item must still be grantable.
 	// Expiry insert fails AFTER inventory insert; the item must roll back.
 	exec("INSERT INTO inventory_expirations VALUES(1,1048576,1)")
 	if _, err = claim(); err == nil {

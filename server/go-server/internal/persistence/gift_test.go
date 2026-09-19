@@ -68,7 +68,7 @@ func TestGiftLocalDatabase(t *testing.T) {
 	errs := make(chan error, 2)
 	for i := 0; i < 2; i++ {
 		wg.Add(1)
-		go func() { defer wg.Done(); r, e := s.Gift(uid, "same", p); results <- r; errs <- e }()
+		go func() { defer wg.Done(); r, e := s.MailManager().Gift(uid, "same", p); results <- r; errs <- e }()
 	}
 	wg.Wait()
 	close(results)
@@ -88,7 +88,7 @@ func TestGiftLocalDatabase(t *testing.T) {
 	for _, mutate := range []func([]byte){func(p []byte) { protocol.WriteUint32(p, 157, 1) }, func(p []byte) { protocol.WriteUint64(p, 54, uid) }, func(p []byte) { copy(p[83:104], make([]byte, 21)); copy(p[83:], fmt.Sprintf("g%d", uid)) }, func(p []byte) { p[169] = 1 }, func(p []byte) { copy(p[170:], bytes.Repeat([]byte{'a'}, 201)) }} {
 		bad := bytes.Clone(p)
 		mutate(bad)
-		if _, e = s.Gift(uid, "bad", bad); e == nil {
+		if _, e = s.MailManager().Gift(uid, "bad", bad); e == nil {
 			t.Fatal("invalid gift accepted")
 		}
 	}
@@ -99,7 +99,7 @@ func TestGiftLocalDatabase(t *testing.T) {
 	if e = s.DB.QueryRow(`SELECT COUNT(*) FROM mailbox WHERE uid=?`, uid+1).Scan(&count); e != nil || count != 1 {
 		t.Fatal("duplicate delivery", e)
 	}
-	detail, e := s.ReadMail(uid+1, mail)
+	detail, e := s.MailManager().ReadMail(uid+1, mail)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -107,14 +107,14 @@ func TestGiftLocalDatabase(t *testing.T) {
 		t.Fatal("wrong gift catalog")
 	}
 	key := protocol.ReadUint32(detail, 8)
-	item, e := s.ClaimMailItem(uid+1, key)
+	item, e := s.MailManager().ClaimMailItem(uid+1, key)
 	if e != nil || len(item) != 68 || protocol.ReadUint32(item, 5) != protocol.ReadUint32(o.Grant, 5) {
 		t.Fatal("gift claim", e)
 	}
-	if e = s.DeleteMail(uid+1, mail); e != nil {
+	if e = s.MailManager().DeleteMail(uid+1, mail); e != nil {
 		t.Fatal(e)
 	}
-	if _, e = s.Gift(uid, "same", p); e != nil {
+	if _, e = s.MailManager().Gift(uid, "same", p); e != nil {
 		t.Fatal("retry after claim/delete", e)
 	}
 	if e = s.DB.QueryRow(`SELECT COUNT(*) FROM mailbox WHERE uid=?`, uid+1).Scan(&count); e != nil || count != 1 {

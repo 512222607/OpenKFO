@@ -35,27 +35,27 @@ func (hub *Hub) battleMessage(session *Session, channel *Channel, message protoc
 	actorOffset := 39
 	var floats []int
 	switch id {
-	case 8120:
+	case protocol.BattleEventMovement:
 		length, floats = 108, []int{51, 55, 59, 63, 67, 71, 87, 91}
-	case 8121:
+	case protocol.BattleEventHealth:
 		length, contextOffset, floats = 94, 86, []int{67, 72, 76, 80}
-	case 8122:
+	case protocol.BattleEventState:
 		length = 51
-	case 8127:
+	case protocol.BattleEventMana:
 		// AddMP (9DA2F0) sends delta +47 and resulting MP +51. Native
 		// 827D00 checks the +55 context and applies +51 via 9E4470.
 		length, contextOffset, floats = 63, 55, []int{47, 51}
 	case 8286:
 		length = 55
-	case 8126:
+	case protocol.BattleEventSkillEffect:
 		// 82B8D0 resolves source at 47 and target at 55 before applying
 		// the skill's effect list. There is no room trailer in this packet.
 		length, actorOffset = 71, 55
-	case 8140:
+	case protocol.BattleEventAction:
 		length, contextOffset, floats = 103, 95, []int{63, 67, 71}
-	case 8150:
+	case protocol.BattleEventBuff:
 		length, contextOffset, floats = 87, 79, []int{67}
-	case 8155:
+	case protocol.BattleEventScoreboard:
 		// Server authority policy: only the room owner may publish the whole
 		// scoreboard. Native local control flag is not an authentication grant.
 		if room.Owner != session.UID {
@@ -118,7 +118,7 @@ func (hub *Hub) battleMessage(session *Session, channel *Channel, message protoc
 		actor := protocol.ReadUint64(payload, actorOffset)
 		// Practice and tutorial NPCs are local objects, not authenticated players. Ignore
 		// their events without disconnecting an otherwise valid player session.
-		if room.Members[actor] == nil && (tutorialRoom(room) || (len(room.Request) > 46 && room.Request[46] == 5)) {
+		if room.Members[actor] == nil && (tutorialRoom(room) || (len(room.Request) > 46 && room.Type() == protocol.FreePractice)) {
 			return nil
 		}
 		if room.Members[actor] == nil {
@@ -134,7 +134,7 @@ func (hub *Hub) battleMessage(session *Session, channel *Channel, message protoc
 					cleanup = cleanup && protocol.ReadUint32(payload, offset) == 0
 				}
 			}
-			if attacker != 0 && room.Members[attacker] == nil && (tutorialRoom(room) || (len(room.Request) > 46 && room.Request[46] == 5)) {
+			if attacker != 0 && room.Members[attacker] == nil && (tutorialRoom(room) || (len(room.Request) > 46 && room.Type() == protocol.FreePractice)) {
 				return nil
 			}
 			if (attacker != 0 && room.Members[attacker] == nil) || (!cleanup && actor != session.UID && attacker != session.UID) {

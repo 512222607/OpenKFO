@@ -1,7 +1,9 @@
 package game
 
 import (
+	"crypto/sha256"
 	"fmt"
+	"kungfu.local/server/internal/persistence"
 	"kungfu.local/server/internal/protocol"
 )
 
@@ -19,6 +21,12 @@ func (h *Hub) stageSelection(s *Session, payload []byte) error {
 		s.sendGame(notice("尚未配置当前客户端的PVE地图目录。"))
 		return nil
 	}
+	return h.sendStageSelection(s, view, true)
+}
+
+// All policies come from one DB snapshot. A second policy read could mix an
+// old player's projection with a new force-open setting.
+func (h *Hub) sendStageSelection(s *Session, view persistence.StagePlayerView, explicit bool) error {
 	supported := map[uint32]bool{}
 	// Match resolveWithAllowed's implemented modes/capacities, not arbitrary
 	// pool keys. This must not implicitly open unimplemented PVE game logic.
@@ -29,9 +37,13 @@ func (h *Hub) stageSelection(s *Session, payload []byte) error {
 			}
 		}
 	}
+	forced := map[uint32]bool{}
+	for _, id := range view.ForcedMaps {
+		forced[id] = true
+	}
 	ids := []uint32{}
 	for _, id := range view.Maps {
-		if supported[id] {
+		if supported[id] || forced[id] {
 			ids = append(ids, id)
 		}
 	}
@@ -53,7 +65,24 @@ func (h *Hub) stageSelection(s *Session, payload []byte) error {
 	if err != nil {
 		return err
 	}
+	digest := sha256.Sum256(append(append([]byte(nil), recordPayload...), p...))
+	if !explicit && s.StageViewRequested && s.StageViewDigest == digest {
+		return nil
+	}
 	s.sendGame(protocol.Message{ID: 21372, Payload: recordPayload})
 	s.sendGame(protocol.Message{ID: 21373, Payload: p})
+	s.StageViewRequested = true
+	s.StageViewDigest = digest
 	return nil
+}
+
+func (h *Hub) refreshStageSelection(s *Session) error {
+	if !s.StageViewRequested {
+		return nil
+	}
+	view, err := h.Store.StagePlayerView(s.UID, h.Config.ConfigHash)
+	if err != nil {
+		return err
+	}
+	return h.sendStageSelection(s, view, false)
 }

@@ -55,10 +55,10 @@ func TestExpiryOwnershipAndEquipmentLocalDatabase(t *testing.T) {
 	if _, err = s.DB.Exec("INSERT INTO inventory_expirations(uid,instance,expires_at) VALUES(?,?,?),(?,?,?)", uid, 1, time.Now().Unix()-1, uid, 2, time.Now().Unix()+3600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.EquipDefault(uid, 1, 0); err != ErrDenied {
+	if _, err = s.EquipmentManager().EquipDefault(uid, 1, 0); err != ErrDenied {
 		t.Fatalf("expired weapon equipped: %v", err)
 	}
-	first, err := s.Snapshot(uid)
+	first, err := s.RoleManager().Snapshot(uid)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,14 +68,14 @@ func TestExpiryOwnershipAndEquipmentLocalDatabase(t *testing.T) {
 	if !bytes.Equal(first.Inventory[1], a.Inventory[1]) || !bytes.Equal(first.Inventory[2], a.Inventory[2]) {
 		t.Fatal("future/permanent items changed")
 	}
-	second, err := s.Snapshot(uid)
+	second, err := s.RoleManager().Snapshot(uid)
 	if err != nil || !bytes.Equal(first.InventoryBytes(), second.InventoryBytes()) {
 		t.Fatal("expiry not idempotent", err)
 	}
-	if _, err = s.EquipDefault(uid, 2, 0); err != nil {
+	if _, err = s.EquipmentManager().EquipDefault(uid, 2, 0); err != nil {
 		t.Fatal("future item denied", err)
 	}
-	if _, err = s.EquipDefault(uid, 3, 0); err != nil {
+	if _, err = s.EquipmentManager().EquipDefault(uid, 3, 0); err != nil {
 		t.Fatal("permanent item denied", err)
 	}
 	id := fmt.Sprintf("expiry-test-%d", uid)

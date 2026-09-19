@@ -37,7 +37,7 @@ func (h *Hub) useTalisman(s *Session, ch *Channel, m protocol.Message) error {
 	if member == nil || member.Session != s {
 		return protocol.ErrFrame
 	}
-	if m.ID == 8071 {
+	if m.ID == protocol.MsgBattleEvent {
 		e, err := protocol.ParseTalismanEvent(m.Payload)
 		if err != nil || !e.Match(s.UID, uint32(room.ID), room.Serial) {
 			return protocol.ErrFrame
@@ -49,13 +49,13 @@ func (h *Hub) useTalisman(s *Session, ch *Channel, m protocol.Message) error {
 		if !settings.Rules.Enabled || settings.Validate() != nil {
 			return nil
 		}
-		a, err := h.Store.Snapshot(s.UID)
+		a, err := h.Store.RoleManager().Snapshot(s.UID)
 		if err != nil {
 			return err
 		}
 		var item []byte
 		for _, r := range a.Inventory {
-			if len(r) == 68 && r[4] == 30 && protocol.ReadUint16(r, 17) == e.Slot {
+			if len(r) == 68 && r[4] == protocol.ItemTalisman && protocol.ReadUint16(r, 17) == e.Slot {
 				if item != nil {
 					return protocol.ErrFrame
 				}
@@ -119,7 +119,7 @@ func (h *Hub) useTalisman(s *Session, ch *Channel, m protocol.Message) error {
 		sequence = 0
 	}
 	operation := fmt.Sprintf("%s:%d:%d:%d:%d:%d", s.Namespace, room.ID, room.Serial, p.event.Kind, instance, sequence)
-	item, applied, err := h.Store.UseTalisman(s.UID, operation, p.use)
+	item, applied, err := h.Store.ItemManager().UseTalisman(s.UID, operation, p.use)
 	if err == persistence.ErrTalismanQuota {
 		out := make([]byte, 8)
 		protocol.WriteUint32(out, 0, instance)

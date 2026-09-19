@@ -12,8 +12,8 @@ import (
 // hold the account row lock and record their durable entitlement in the SAME
 // transaction. It does not commit or notify the client. Do not pass wire data.
 // Separate instances remain separate; this refactor does not change stacking.
-func deliverInventoryItem(tx *sql.Tx, uid uint64, template []byte, days uint32) ([]byte, error) {
-	if uid == 0 || len(template) != 68 || protocol.ReadUint16(template, 17) != 0 || days > 3650 {
+func (m InventoryManager) AddItem(tx *sql.Tx, uid uint64, template []byte, days uint32) ([]byte, error) {
+	if uid == 0 || len(template) != protocol.InventoryRecordSize || protocol.ReadUint16(template, 17) != 0 || days > 3650 {
 		return nil, ErrDenied
 	}
 	var next uint64

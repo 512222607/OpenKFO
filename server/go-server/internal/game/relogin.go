@@ -70,6 +70,8 @@ func (hub *Hub) resetNativeSession(s *Session, sdk uint32) {
 	s.GameChannel, s.BootstrapChannel = 0, 0
 	s.LobbyID = 0
 	s.TitleOffer = 0
+	s.StageViewRequested = false
+	s.StageViewDigest = [32]byte{}
 	s.ExtendedTaskNotified = nil
 	s.WeaponRevision = 0
 	s.TalismanQuote = nil

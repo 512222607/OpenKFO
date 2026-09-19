@@ -9,17 +9,17 @@ import (
 // Tasks uses only the authenticated UID. Client prefixes and completion claims
 // are never used to select an account or supply the progress baseline.
 // action=0 lists; 6050 accepts; 6080 cancels. Completion is a separate transaction.
-func (s *Store) Tasks(uid uint64, action uint32, key uint16) ([]protocol.TaskProgress, error) {
-	rows, _, err := s.TaskTransition(uid, action, key)
+func (s *TaskManager) Tasks(uid uint64, action uint32, key uint16) ([]protocol.TaskProgress, error) {
+	rows, _, err := s.store.TaskManager().TaskTransition(uid, action, key)
 	return rows, err
 }
 
-func (s *Store) TaskTransition(uid uint64, action uint32, key uint16) ([]protocol.TaskProgress, bool, error) {
+func (s *TaskManager) TaskTransition(uid uint64, action uint32, key uint16) ([]protocol.TaskProgress, bool, error) {
 	changed := false
 	if uid == 0 || (action != 0 && action != 6050 && action != 6080) || (action != 0 && key == 0) {
 		return nil, false, ErrDenied
 	}
-	tx, err := s.DB.Begin()
+	tx, err := s.store.DB.Begin()
 	if err != nil {
 		return nil, false, err
 	}

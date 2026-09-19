@@ -70,7 +70,7 @@ func TestGrowthSettlementMySQL(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.DB.Exec("DELETE FROM accounts WHERE uid=?", uid)
-	serial, err := store.NextBattle()
+	serial, err := store.BattleManager().NextBattle()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,18 +81,18 @@ func TestGrowthSettlementMySQL(t *testing.T) {
 		rules.Levels[i].NextExperience = 100
 	}
 	awards := []BattleReward{{UID: uid, Outcome: "win", Gold: 7, Experience: 220}}
-	got, err := store.SettleBattle(serial, []byte("{}"), awards, rules)
+	got, err := store.BattleManager().SettleBattle(serial, []byte("{}"), awards, rules)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if ProfileLevel(got[0].Profile) != 4 || protocol.ReadUint32(got[0].Profile, ExperienceOffset) != 10 || got[0].GoldBalance != 7 {
 		t.Fatalf("growth incorrect: %+v", got)
 	}
-	again, err := store.SettleBattle(serial, []byte("{}"), []BattleReward{{UID: uid, Outcome: "win", Gold: 999, Experience: 999}}, rules)
+	again, err := store.BattleManager().SettleBattle(serial, []byte("{}"), []BattleReward{{UID: uid, Outcome: "win", Gold: 999, Experience: 999}}, rules)
 	if err != nil || !reflect.DeepEqual(got, again) {
 		t.Fatal("duplicate settlement changed reward", err)
 	}
-	current, err := store.Snapshot(uid)
+	current, err := store.RoleManager().Snapshot(uid)
 	if err != nil || current.Gold != 7 || ProfileLevel(current.Profile) != 4 {
 		t.Fatal("growth not persisted atomically", err)
 	}

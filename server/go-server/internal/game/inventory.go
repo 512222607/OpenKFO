@@ -90,7 +90,7 @@ func (h *Hub) refreshVIPShop(s *Session) error {
 	rate := uint32(0)
 	if s.VIPKind >= 2 {
 		var err error
-		rate, err = h.Store.VIPShopPercent(s.UID)
+		rate, err = h.Store.ShopManager().VIPShopPercent(s.UID)
 		if err != nil {
 			return err
 		}
@@ -118,7 +118,7 @@ func (s *Session) syncVIPIdentity(records [][]byte) {
 func weaponCollection(account persistence.Account) protocol.Message {
 	ids := map[uint32]bool{}
 	for _, r := range account.Inventory {
-		if len(r) == 68 && r[4] == 25 && protocol.ReadUint32(r, 19) != 0xffffffff {
+		if len(r) == 68 && r[4] == protocol.ItemWeapon && protocol.ReadUint32(r, 19) != 0xffffffff {
 			ids[protocol.ReadUint32(r, 5)] = true
 		}
 	}

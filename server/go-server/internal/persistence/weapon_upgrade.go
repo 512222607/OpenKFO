@@ -19,20 +19,20 @@ type WeaponUpgradeResult struct {
 	Success bool
 }
 
-func (s *Store) UpgradeWeapon(uid uint64, operation string, instance uint32, rules []WeaponUpgradeRule) (result WeaponUpgradeResult, err error) {
-	return s.upgradeWeapon(uid, operation, instance, rules, nil)
+func (s *ItemManager) UpgradeWeapon(uid uint64, operation string, instance uint32, rules []WeaponUpgradeRule) (result WeaponUpgradeResult, err error) {
+	return s.store.ItemManager().upgradeWeapon(uid, operation, instance, rules, nil)
 }
 
 // The revision is bound to the table sent to this authenticated session.
 // Check it under the same transaction lock as charging; never trust client prices.
-func (s *Store) UpgradeWeaponConfigured(uid uint64, operation string, instance uint32, revision uint64) (WeaponUpgradeResult, error) {
+func (s *ItemManager) UpgradeWeaponConfigured(uid uint64, operation string, instance uint32, revision uint64) (WeaponUpgradeResult, error) {
 	if revision == 0 {
 		return WeaponUpgradeResult{}, ErrDenied
 	}
-	return s.upgradeWeapon(uid, operation, instance, nil, &revision)
+	return s.store.ItemManager().upgradeWeapon(uid, operation, instance, nil, &revision)
 }
 
-func (s *Store) upgradeWeapon(uid uint64, operation string, instance uint32, rules []WeaponUpgradeRule, revision *uint64) (result WeaponUpgradeResult, err error) {
+func (s *ItemManager) upgradeWeapon(uid uint64, operation string, instance uint32, rules []WeaponUpgradeRule, revision *uint64) (result WeaponUpgradeResult, err error) {
 	if len(operation) == 0 || len(operation) > 128 || instance == 0 || (revision == nil && (len(rules) < 2 || len(rules) > 256)) {
 		return result, ErrDenied
 	}
@@ -41,7 +41,7 @@ func (s *Store) upgradeWeapon(uid uint64, operation string, instance uint32, rul
 			return result, ErrDenied
 		}
 	}
-	tx, err := s.DB.Begin()
+	tx, err := s.store.DB.Begin()
 	if err != nil {
 		return result, err
 	}
@@ -84,7 +84,7 @@ func (s *Store) upgradeWeapon(uid uint64, operation string, instance uint32, rul
 	if replay {
 		return result, tx.Commit()
 	}
-	if !usableItem(result.Item) || result.Item[4] != 25 {
+	if !usableItem(result.Item) || result.Item[4] != protocol.ItemWeapon {
 		return result, ErrDenied
 	}
 	var expired bool

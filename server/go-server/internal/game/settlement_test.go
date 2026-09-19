@@ -140,12 +140,12 @@ func TestSettlementMySQLLifecycle(t *testing.T) {
 		t.Fatal("isolated database required")
 	}
 	hub := NewHub(store, Config{Settlement: SettlementRewards{WinGold: 5, LossGold: 2, WinExperience: 10, LossExperience: 5}})
-	settings, err := store.BattleRewards(hub.Config.Settlement)
+	settings, err := store.RewardManager().BattleRewards(hub.Config.Settlement)
 	if err != nil {
 		t.Fatal(err)
 	}
 	rules := settings.Rules.AtLevel(1)
-	serial, err := store.NextBattle()
+	serial, err := store.BattleManager().NextBattle()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,8 +166,15 @@ func TestSettlementMySQLLifecycle(t *testing.T) {
 		if err = store.Create(a); err != nil {
 			t.Fatal(err)
 		}
-		defer store.DB.Exec("DELETE FROM accounts WHERE uid=?", uid)
+		defer func(id uint64) {
+			store.DB.Exec("DELETE FROM inventory WHERE uid=?", id)
+			store.DB.Exec("DELETE FROM accounts WHERE uid=?", id)
+		}(uid)
 		s := &Session{UID: uid, Room: room, Bound: true, GameChannel: 1, Channels: map[uint32]*Channel{1: {ID: 1, Kind: "game", Phase: "battle"}}, Output: make(chan tunnel.Frame, 64), Done: make(chan struct{})}
+		s.Inventory = map[uint32][]byte{}
+		for _, item := range a.Inventory {
+			s.Inventory[protocol.ReadUint32(item, 0)] = bytes.Clone(item)
+		}
 		room.Members[uid] = &Member{Session: s, Slot: byte(i), Spawn: byte(i), Team: byte(i), Ready: true}
 		players = append(players, s)
 	}
@@ -201,11 +208,11 @@ func TestSettlementMySQLLifecycle(t *testing.T) {
 		roomOutputs(t, p)
 	}
 	// A persistence retry after a process restart also cannot grant twice.
-	if _, err = store.SettleBattle(serial, nil, []persistence.BattleReward{{UID: players[0].UID, Gold: 999}}); err != nil {
+	if _, err = store.BattleManager().SettleBattle(serial, nil, []persistence.BattleReward{{UID: players[0].UID, Gold: 999}}); err != nil {
 		t.Fatal(err)
 	}
 	for i, p := range players {
-		a, err := store.Snapshot(p.UID)
+		a, err := store.RoleManager().Snapshot(p.UID)
 		if err != nil {
 			t.Fatal(err)
 		}

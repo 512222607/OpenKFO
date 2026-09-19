@@ -11,11 +11,11 @@ const TitleLevelOffset = 123
 
 // Only one pending offer may exist for an authenticated account. An empty
 // result means no offer; corrupt or ambiguous stored data must never be sent.
-func (s *Store) PendingTitleReward(uid uint64) (byte, []uint32, error) {
+func (s *TitleManager) PendingTitleReward(uid uint64) (byte, []uint32, error) {
 	if uid == 0 {
 		return 0, nil, ErrDenied
 	}
-	rows, err := s.DB.Query("SELECT title_level,choices FROM title_rewards WHERE uid=? AND claimed_key IS NULL ORDER BY title_level LIMIT 2", uid)
+	rows, err := s.store.DB.Query("SELECT title_level,choices FROM title_rewards WHERE uid=? AND claimed_key IS NULL ORDER BY title_level LIMIT 2", uid)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -46,8 +46,8 @@ func (s *Store) PendingTitleReward(uid uint64) (byte, []uint32, error) {
 
 // Called only by a trusted award policy/admin, never by the 4126 request.
 // One outstanding choice avoids ambiguities in the native claim (no title ID).
-func (s *Store) GrantTitleChoices(uid uint64, level byte, choices []uint32) error {
-	tx, err := s.DB.Begin()
+func (s *TitleManager) GrantTitleChoices(uid uint64, level byte, choices []uint32) error {
+	tx, err := s.store.DB.Begin()
 	if err != nil {
 		return err
 	}
@@ -100,15 +100,10 @@ func grantTitleChoices(tx *sql.Tx, uid uint64, level byte, choices []uint32) err
 	if pending {
 		return ErrDenied
 	}
-	// Check that each choice names an available server catalogue item. Actual
-	// record/lifetime validation also runs atomically at claim time.
+	// Choices refer to independent reward definitions, including unsold items.
 	for _, key := range choices {
-		var enabled bool
-		if err = tx.QueryRow("SELECT enabled FROM offers WHERE catalog_key=? FOR UPDATE", key).Scan(&enabled); err != nil {
+		if _, err = readDefinition(tx, key); err != nil {
 			return err
-		}
-		if !enabled {
-			return ErrDenied
 		}
 	}
 	profile[TitleLevelOffset] = level
@@ -123,11 +118,11 @@ func grantTitleChoices(tx *sql.Tx, uid uint64, level byte, choices []uint32) err
 
 // announcedLevel is bound by the server to the offer sent to this session.
 // 4126 contains only a catalogue key and cannot authorize a title or account.
-func (s *Store) ClaimTitleReward(uid uint64, announcedLevel byte, key uint32) ([]byte, error) {
+func (s *TitleManager) ClaimTitleReward(uid uint64, announcedLevel byte, key uint32) ([]byte, error) {
 	if uid == 0 || announcedLevel == 0 || key == 0 {
 		return nil, ErrDenied
 	}
-	tx, err := s.DB.Begin()
+	tx, err := s.store.DB.Begin()
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +173,7 @@ func (s *Store) ClaimTitleReward(uid uint64, announcedLevel byte, key uint32) ([
 	if !allowed {
 		return nil, ErrDenied
 	}
-	item, err := awardCatalogItem(tx, uid, key)
+	item, err := (RewardManager{}).GrantItem(tx, uid, key)
 	if err != nil {
 		return nil, err
 	}

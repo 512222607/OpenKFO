@@ -139,4 +139,41 @@ func TestStageGateLocalDatabase(t *testing.T) {
 	if _, e = h.resolveForPlayers(p, host); e == nil {
 		t.Fatal("disabled map bypassed")
 	}
+	// Native 3010 from localtest1 at 23:13:32: newly created title 0 must
+	// enter its compulsory tutorial even though mapmgr labels the map title 1.
+	a.Disabled = nil
+	a.RequirementsEnabled = true
+	a.Requirements = []persistence.StageTitleRequirement{{MapID: protocol.TutorialMapID, Name: "训练山", TitleLevel: 1, UnlockRequired: &required}}
+	save()
+	exec("UPDATE accounts SET profile=? WHERE uid=?", make([]byte, 360), newcomer.UID)
+	guide := make([]byte, protocol.RoomRequestSize)
+	guide[protocol.RoomCapacityOffset] = 1
+	guide[protocol.RoomTypeOffset] = byte(protocol.NewPlayerGuide)
+	protocol.WriteUint32(guide, protocol.RoomMapOffset, protocol.TutorialMapID)
+	protocol.WriteUint32(guide, protocol.RoomSuggestedMapOffset, protocol.TutorialMapID)
+	if _, e = h.resolveForPlayers(guide, newcomer); e != nil {
+		t.Fatal("title-zero tutorial rejected", e)
+	}
+	newcomer.Room = &Room{Request: guide}
+	allows, e := h.stageGate(newcomer)
+	if e != nil || !allows(protocol.TutorialMapID) {
+		t.Fatal("tutorial start still gated", e)
+	}
+	newcomer.Room = nil
+	allows, e = h.stageGate(newcomer)
+	if e != nil || allows(protocol.TutorialMapID) {
+		t.Fatal("ordinary request bypassed progression", e)
+	}
+	a.Disabled = []uint32{protocol.TutorialMapID}
+	save()
+	if _, e = h.resolveForPlayers(guide, newcomer); e == nil {
+		t.Fatal("closed tutorial admitted")
+	}
+	a.Disabled = nil
+	a.ClientHash = strings.Repeat("b", 64)
+	save()
+	if _, e = h.resolveForPlayers(guide, newcomer); e == nil {
+		t.Fatal("wrong-version tutorial admitted")
+	}
+
 }

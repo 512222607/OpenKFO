@@ -10,9 +10,11 @@ import (
 	"strings"
 )
 
-// StageAccess only restricts maps already supported by the server's pools.
-// It cannot enable an unsupported game mode or fabricate player unlocks.
+// StageAccess controls concrete maps from the verified client catalogue.
+// Explicit opens bypass progression gates, not game-mode implementation checks.
 type StageAccess struct {
+	ForceOpenAll        bool                    `json:"force_open_all"`
+	ForceOpenMaps       []uint32                `json:"force_open_maps"`
 	Revision            uint64                  `json:"revision"`
 	Disabled            []uint32                `json:"disabled_maps"`
 	RequirementsEnabled bool                    `json:"requirements_enabled"`
@@ -37,7 +39,7 @@ func (a StageAccess) AllowsPlayer(id uint32, title byte, hash string, grants map
 	if !a.AllowsTitle(id, title, hash) {
 		return false
 	}
-	if !a.RequirementsEnabled {
+	if a.ForceOpens(id) || !a.RequirementsEnabled {
 		return true
 	}
 	for _, r := range a.Requirements {
@@ -48,7 +50,46 @@ func (a StageAccess) AllowsPlayer(id uint32, title byte, hash string, grants map
 	return false
 }
 
+func (a StageAccess) ForceOpens(id uint32) bool {
+	known := false
+	for _, r := range a.Requirements {
+		if r.MapID == id {
+			known = true
+			break
+		}
+	}
+	if !known || !a.Allows(id) {
+		return false
+	}
+	if a.ForceOpenAll {
+		return true
+	}
+	for _, v := range a.ForceOpenMaps {
+		if v == id {
+			return true
+		}
+	}
+	return false
+}
 func (a StageAccess) Validate() error {
+	if (a.ForceOpenAll || len(a.ForceOpenMaps) > 0) && len(a.Requirements) == 0 {
+		return fmt.Errorf("强制开放前请读取客户端地图目录")
+	}
+	selected := map[uint32]bool{}
+	for _, id := range a.ForceOpenMaps {
+		found := false
+		for _, r := range a.Requirements {
+			if r.MapID == id {
+				found = true
+				break
+			}
+		}
+		if !found || selected[id] {
+			return fmt.Errorf("强制开放地图须在目录中且不重复")
+		}
+		selected[id] = true
+	}
+
 	if a.RequirementsEnabled || len(a.Requirements) > 0 || a.ClientHash != "" || len(a.PVEMaps) > 0 {
 		hash, err := hex.DecodeString(a.ClientHash)
 		if err != nil || len(hash) != 32 || strings.ToLower(a.ClientHash) != a.ClientHash || len(a.Requirements) == 0 || len(a.Requirements) > 4096 {
@@ -89,6 +130,9 @@ func (a StageAccess) AllowsTitle(id uint32, title byte, clientHash string) bool 
 	if !a.Allows(id) {
 		return false
 	}
+	if a.ForceOpens(id) {
+		return clientHash != "" && a.ClientHash == clientHash
+	}
 	if !a.RequirementsEnabled {
 		return true
 	}
@@ -103,12 +147,12 @@ func (a StageAccess) AllowsTitle(id uint32, title byte, clientHash string) bool 
 	return false
 }
 
-func (s *Store) AccountTitle(uid uint64) (byte, error) {
+func (s *TitleManager) AccountTitle(uid uint64) (byte, error) {
 	if uid == 0 {
 		return 0, ErrDenied
 	}
 	var profile []byte
-	if err := s.DB.QueryRow("SELECT profile FROM accounts WHERE uid=?", uid).Scan(&profile); err != nil {
+	if err := s.store.DB.QueryRow("SELECT profile FROM accounts WHERE uid=?", uid).Scan(&profile); err != nil {
 		return 0, err
 	}
 	if len(profile) != 360 {

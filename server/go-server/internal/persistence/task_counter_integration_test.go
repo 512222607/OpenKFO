@@ -57,13 +57,13 @@ func TestTaskCountersSettlementLocalDatabase(t *testing.T) {
 	}
 	hash := rules.Extended.ClientHash
 	for _, uid := range []uint64{1, 2} {
-		if _, _, err = store.ExtendedTaskTransition(uid, hash, 6052, 3002); err != nil {
+		if _, _, err = store.TaskManager().ExtendedTaskTransition(uid, hash, 6052, 3002); err != nil {
 			t.Fatal(err)
 		}
 	}
 	checkTask := func(uid uint64, count uint32, state byte) {
 		t.Helper()
-		list, e := store.ExtendedTasks(uid, hash)
+		list, e := store.TaskManager().ExtendedTasks(uid, hash)
 		if e != nil || len(list) != 1 || list[0].Counts[0] != count || list[0].State != state {
 			t.Fatalf("task uid=%d count=%d state=%d: %+v %v", uid, count, state, list, e)
 		}
@@ -71,7 +71,7 @@ func TestTaskCountersSettlementLocalDatabase(t *testing.T) {
 	mode := byte(0)
 	run := func(serial uint32, outcome string) []BattleReward {
 		t.Helper()
-		r, e := store.SettleBattle(serial, []byte{}, []BattleReward{{TaskClientHash: hash, UID: 1, Outcome: outcome, BattleMode: &mode}, {TaskClientHash: hash, UID: 2, Outcome: "loss", BattleMode: &mode}})
+		r, e := store.BattleManager().SettleBattle(serial, []byte{}, []BattleReward{{TaskClientHash: hash, UID: 1, Outcome: outcome, BattleMode: &mode}, {TaskClientHash: hash, UID: 2, Outcome: "loss", BattleMode: &mode}})
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -84,7 +84,7 @@ func TestTaskCountersSettlementLocalDatabase(t *testing.T) {
 	run(1, "win")
 	checkTask(1, 1, 2)
 	checkTask(2, 1, 2)
-	if _, err = store.ClaimExtendedTask(1, hash, 6312, 3002, (RewardRules{}).Normalized()); err == nil {
+	if _, err = store.TaskManager().ClaimExtendedTask(1, hash, 6312, 3002, (RewardRules{}).Normalized()); err == nil {
 		t.Fatal("unfinished task claimed")
 	}
 	var saved []byte
@@ -110,14 +110,14 @@ func TestTaskCountersSettlementLocalDatabase(t *testing.T) {
 		t.Fatal("team deathmatch draw mismatch")
 	}
 	// A later account failure must roll back the first account's counter too.
-	if _, err = store.SettleBattle(5, []byte{}, []BattleReward{{UID: 1, Outcome: "win", BattleMode: &mode}, {UID: 99, Outcome: "loss", BattleMode: &mode}}); err == nil {
+	if _, err = store.BattleManager().SettleBattle(5, []byte{}, []BattleReward{{UID: 1, Outcome: "win", BattleMode: &mode}, {UID: 99, Outcome: "loss", BattleMode: &mode}}); err == nil {
 		t.Fatal("missing account accepted")
 	}
 	if err = db.QueryRow("SELECT profile FROM accounts WHERE uid=1").Scan(&saved); err != nil || protocol.ReadUint32(saved, 157) != 1 || protocol.ReadUint32(saved, 161) != 0 {
 		t.Fatal("failed settlement changed counters", err)
 	}
 	// Fail after participant one's task update, not just during pre-locking.
-	if _, err = store.SettleBattle(5, nil, []BattleReward{{TaskClientHash: hash, UID: 1, Outcome: "win", BattleMode: &mode}, {TaskClientHash: hash, UID: 2, Outcome: "loss", BattleMode: &mode, Gold: 0xffffffff}}); err == nil {
+	if _, err = store.BattleManager().SettleBattle(5, nil, []BattleReward{{TaskClientHash: hash, UID: 1, Outcome: "win", BattleMode: &mode}, {TaskClientHash: hash, UID: 2, Outcome: "loss", BattleMode: &mode, Gold: 0xffffffff}}); err == nil {
 		t.Fatal("invalid later reward accepted")
 	}
 	checkTask(1, 2, 2)
@@ -134,32 +134,32 @@ func TestTaskCountersSettlementLocalDatabase(t *testing.T) {
 	}{
 		{1, strings.Repeat("b", 64), 6312, 3002}, {1, hash, 6311, 3002}, {99, hash, 6312, 3002}, {1, hash, 6312, 3999},
 	} {
-		if _, err = store.ClaimExtendedTask(request.uid, request.hash, request.action, request.key, (RewardRules{}).Normalized()); err == nil {
+		if _, err = store.TaskManager().ClaimExtendedTask(request.uid, request.hash, request.action, request.key, (RewardRules{}).Normalized()); err == nil {
 			t.Fatal("invalid claim accepted", request)
 		}
 	}
 	if _, err = db.Exec("UPDATE accounts SET gold=4294967295 WHERE uid=1"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = store.ClaimExtendedTask(1, hash, 6312, 3002, (RewardRules{}).Normalized()); err == nil {
+	if _, err = store.TaskManager().ClaimExtendedTask(1, hash, 6312, 3002, (RewardRules{}).Normalized()); err == nil {
 		t.Fatal("overflow accepted")
 	}
 	checkTask(1, 3, 4)
 	if _, err = db.Exec("UPDATE accounts SET gold=0 WHERE uid=1"); err != nil {
 		t.Fatal(err)
 	}
-	award, err := store.ClaimExtendedTask(1, hash, 6312, 3002, (RewardRules{}).Normalized())
+	award, err := store.TaskManager().ClaimExtendedTask(1, hash, 6312, 3002, (RewardRules{}).Normalized())
 	if err != nil || award.GoldBalance != 500 || protocol.ReadUint32(award.Profile, ExperienceOffset) != 50 {
 		t.Fatal("claim", award, err)
 	}
-	if _, err = store.ClaimExtendedTask(1, hash, 6312, 3002, (RewardRules{}).Normalized()); err == nil {
+	if _, err = store.TaskManager().ClaimExtendedTask(1, hash, 6312, 3002, (RewardRules{}).Normalized()); err == nil {
 		t.Fatal("duplicate claim accepted")
 	}
 	var balance uint32
 	if err = db.QueryRow("SELECT profile,gold FROM accounts WHERE uid=1").Scan(&saved, &balance); err != nil || balance != 500 || protocol.ReadUint32(saved, ExperienceOffset) != 50 {
 		t.Fatal("replay changed rewards", err)
 	}
-	list, err := store.ExtendedTasks(1, hash)
+	list, err := store.TaskManager().ExtendedTasks(1, hash)
 	if err != nil || len(list) != 0 {
 		t.Fatal("claimed newbie remains", list, err)
 	}

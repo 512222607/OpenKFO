@@ -90,7 +90,7 @@ func TestPurchaseExpiryLocalDatabase(t *testing.T) {
 	protocol.WriteUint32(p, 145, o.Key)
 	protocol.WriteUint32(p, 157, 77)
 	before := time.Now().Unix()
-	balance, item, _, err := s.Purchase(uid, "first", p)
+	balance, item, _, err := s.ShopManager().Purchase(uid, "first", p)
 	if err != nil || balance != 923 {
 		t.Fatalf("purchase: balance=%d err=%v", balance, err)
 	}
@@ -106,7 +106,7 @@ func TestPurchaseExpiryLocalDatabase(t *testing.T) {
 	days = 3
 	o.ServerExpiryDays = &days
 	save("change")
-	balance, retry, _, err := s.Purchase(uid, "first", p)
+	balance, retry, _, err := s.ShopManager().Purchase(uid, "first", p)
 	if err != nil || balance != 923 || protocol.ReadUint32(retry, 0) != instance {
 		t.Fatal("purchase replay changed result", err)
 	}
@@ -116,7 +116,7 @@ func TestPurchaseExpiryLocalDatabase(t *testing.T) {
 	}
 	days = 0
 	save("permanent")
-	_, permanent, _, err := s.Purchase(uid, "second", p)
+	_, permanent, _, err := s.ShopManager().Purchase(uid, "second", p)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestPurchaseExpiryLocalDatabase(t *testing.T) {
 		t.Fatal("permanent purchase has deadline", err)
 	}
 	protocol.WriteUint32(p, 157, 1)
-	if _, _, _, err = s.Purchase(uid, "tampered", p); err != ErrDenied {
+	if _, _, _, err = s.ShopManager().Purchase(uid, "tampered", p); err != ErrDenied {
 		t.Fatal("price tampering accepted", err)
 	}
 	if err = s.DB.QueryRow(`SELECT COUNT(*) FROM purchases WHERE uid=?`, uid).Scan(&count); err != nil || count != 2 {

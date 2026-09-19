@@ -47,6 +47,9 @@ func (c snapshotConn) QueryContext(_ context.Context, q string, args []driver.Na
 		}
 		return &snapshotRows{[]string{"started"}, []driver.Value{time.Now().Unix() - uid*60}}, nil
 	}
+	if q == "SELECT profile FROM accounts WHERE uid=?" {
+		return &snapshotRows{[]string{"profile"}, []driver.Value{make([]byte, 360)}}, nil
+	}
 	if strings.HasPrefix(q, "SELECT account,nickname,profile,gold,tickets") {
 		profile := make([]byte, 360)
 		profile[122], profile[124] = 1, 1

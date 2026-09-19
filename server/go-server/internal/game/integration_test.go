@@ -52,7 +52,7 @@ func TestMySQLTransactionsAndTwoPlayers(t *testing.T) {
 	if _, err = store.Authenticate(first.Account, string(bytes.Repeat([]byte{'0'}, 64))); err == nil {
 		t.Fatal("wrong password admitted")
 	}
-	if _, err = store.Equip(second.UID, 1048577, 8); err == nil {
+	if _, err = store.EquipmentManager().Equip(second.UID, 1048577, 8); err == nil {
 		t.Fatal("invalid equipment kind admitted")
 	}
 	catalog := make([]byte, 108)
@@ -79,10 +79,10 @@ func TestMySQLTransactionsAndTwoPlayers(t *testing.T) {
 	protocol.WriteUint32(request, 157, 10)
 	forged := bytes.Clone(request)
 	protocol.WriteUint32(forged, 157, 1)
-	if _, _, _, err = store.Purchase(uid, "forged", forged); err == nil {
+	if _, _, _, err = store.ShopManager().Purchase(uid, "forged", forged); err == nil {
 		t.Fatal("forged price admitted")
 	}
-	if _, _, _, err = store.Purchase(second.UID, "spoof", request); err == nil {
+	if _, _, _, err = store.ShopManager().Purchase(second.UID, "spoof", request); err == nil {
 		t.Fatal("other account purchase admitted")
 	}
 	var accepted atomic.Int32
@@ -92,7 +92,7 @@ func TestMySQLTransactionsAndTwoPlayers(t *testing.T) {
 		go func() {
 			defer workers.Done()
 			operation := hex.EncodeToString(protocol.Uint32Bytes(uint32(index)))
-			if _, _, _, err := store.Purchase(uid, operation, request); err == nil {
+			if _, _, _, err := store.ShopManager().Purchase(uid, operation, request); err == nil {
 				accepted.Add(1)
 			}
 		}()
@@ -101,24 +101,24 @@ func TestMySQLTransactionsAndTwoPlayers(t *testing.T) {
 	if accepted.Load() != 10 {
 		t.Fatalf("expected exactly 10 debits, got %d", accepted.Load())
 	}
-	snapshot, err := store.Snapshot(uid)
+	snapshot, err := store.RoleManager().Snapshot(uid)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if snapshot.Tickets != 0 || len(snapshot.Inventory) != 17 {
 		t.Fatal("debit and grant were not atomic")
 	}
-	peerSnapshot, _ := store.Snapshot(second.UID)
+	peerSnapshot, _ := store.RoleManager().Snapshot(second.UID)
 	if peerSnapshot.Tickets != 50 || len(peerSnapshot.Inventory) != 7 {
 		t.Fatal("account isolation failed")
 	}
-	if _, _, err = store.Wallet(uid, "gift", 30, "wallet-"+first.Account); err != nil {
+	if _, _, err = store.WalletManager().AdjustTickets(uid, "gift", 30, "wallet-"+first.Account); err != nil {
 		t.Fatal(err)
 	}
-	if _, after, err := store.Wallet(uid, "gift", 30, "wallet-"+first.Account); err != nil || after != 30 {
+	if _, after, err := store.WalletManager().AdjustTickets(uid, "gift", 30, "wallet-"+first.Account); err != nil || after != 30 {
 		t.Fatal("wallet retry applied twice")
 	}
-	if _, _, err = store.Wallet(uid, "gift", 31, "wallet-"+first.Account); err == nil {
+	if _, _, err = store.WalletManager().AdjustTickets(uid, "gift", 31, "wallet-"+first.Account); err == nil {
 		t.Fatal("conflicting wallet retry admitted")
 	}
 	consumable := make([]byte, 68)
@@ -130,34 +130,34 @@ func TestMySQLTransactionsAndTwoPlayers(t *testing.T) {
 		t.Fatal(err)
 	}
 	signature := bytes.Repeat([]byte{1}, 40)
-	if applied, consumeErr := store.Consume(uid, 5, 1, 2000000, signature, true); consumeErr != nil || !applied {
+	if applied, consumeErr := store.InventoryManager().Consume(uid, 5, 1, 2000000, signature, true); consumeErr != nil || !applied {
 		t.Fatal("first consumption not applied", consumeErr)
 	}
-	if applied, consumeErr := store.Consume(uid, 5, 1, 2000000, signature, false); consumeErr != nil || applied {
+	if applied, consumeErr := store.InventoryManager().Consume(uid, 5, 1, 2000000, signature, false); consumeErr != nil || applied {
 		t.Fatal("consumption retry not idempotent", consumeErr)
 	}
-	if _, err = store.Consume(uid, 5, 2, 2000000, signature, false); err == nil {
+	if _, err = store.InventoryManager().Consume(uid, 5, 2, 2000000, signature, false); err == nil {
 		t.Fatal("uncorrelated consumption admitted")
 	}
-	consumed, _ := store.Snapshot(uid)
+	consumed, _ := store.RoleManager().Snapshot(uid)
 	remaining, err := consumed.Consumable(2000000, 0)
 	if err != nil || protocol.ReadUint16(remaining, 23) != 1 {
 		t.Fatal("consumption billed more than once")
 	}
-	if _, err = store.Equip(uid, 2000000, 0); err != nil {
+	if _, err = store.EquipmentManager().Equip(uid, 2000000, 0); err != nil {
 		t.Fatal(err)
 	}
-	if changed, err := store.Equip(uid, 2000000, 0); err != nil || changed != nil {
+	if changed, err := store.EquipmentManager().Equip(uid, 2000000, 0); err != nil || changed != nil {
 		t.Fatal("duplicate unequip must not repeat native teardown")
 	}
-	if _, err = store.Rename(uid, "TestRename"); err != nil {
+	if _, err = store.RoleManager().Rename(uid, "TestRename"); err != nil {
 		t.Fatal(err)
 	}
 	directory, own, err := store.Rankings(uid, 0)
 	if err != nil || len(directory)%27 != 0 || len(own) != 5 {
 		t.Fatal("ranking layout mismatch")
 	}
-	if _, err = store.Rename(uid, first.Nickname); err != nil {
+	if _, err = store.RoleManager().Rename(uid, first.Nickname); err != nil {
 		t.Fatal(err)
 	}
 	hub := NewHub(store, Config{Pools: map[string][]uint32{"0:2": {804}}})
@@ -248,7 +248,7 @@ func TestMySQLTransactionsAndTwoPlayers(t *testing.T) {
 	}
 	// A committed item use reaches the other native player once; a retry
 	// updates the inventory receipt but must not repeat the remote effect.
-	if _, err = store.Equip(uid, 2000000, 27); err != nil {
+	if _, err = store.EquipmentManager().Equip(uid, 2000000, 27); err != nil {
 		t.Fatal(err)
 	}
 	send(owner, 4200, protocol.Uint32Bytes(2000000))
@@ -272,7 +272,7 @@ func TestMySQLTransactionsAndTwoPlayers(t *testing.T) {
 		t.Fatal("item retry replayed remote effect")
 	}
 	<-owner.Output
-	consumed, err = store.Snapshot(uid)
+	consumed, err = store.RoleManager().Snapshot(uid)
 	if err != nil {
 		t.Fatal(err)
 	}

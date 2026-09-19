@@ -10,16 +10,18 @@ func (h *Hub) tasks(s *Session, m protocol.Message) error {
 	var action uint32
 	var key uint16
 	var awards persistence.TaskAwards
+	var gifts []persistence.LevelGift
 	if m.ID == 6000 {
 		if len(m.Payload) != 4 {
 			s.sendGame(notice("任务查询格式不正确。"))
 			return nil
 		}
-		growth, err := h.Store.BattleRewards(h.Config.Settlement)
+		growth, err := h.Store.RewardManager().BattleRewards(h.Config.Settlement)
 		if err != nil {
 			return err
 		}
-		awards, err = h.Store.CompleteTasks(s.UID, growth.Rules)
+		gifts = growth.Rules.LevelGifts
+		awards, err = h.Store.TaskManager().CompleteTasks(s.UID, growth.Rules)
 		if err != nil {
 			s.sendGame(notice("任务完成检查未成功，未确认发奖，请稍后刷新。"))
 			return nil
@@ -32,7 +34,7 @@ func (h *Hub) tasks(s *Session, m protocol.Message) error {
 		}
 		action, key = m.ID, r.Key
 	}
-	rows, changed, err := h.Store.TaskTransition(s.UID, action, key)
+	rows, changed, err := h.Store.TaskManager().TaskTransition(s.UID, action, key)
 	if err != nil {
 		s.sendGame(notice("任务操作未完成，请检查任务是否开放及前置条件。"))
 		return nil
@@ -60,12 +62,15 @@ func (h *Hub) tasks(s *Session, m protocol.Message) error {
 		// committed award may have lost its response when transport closed.
 		s.sendGame(protocol.Message{ID: 4300, Payload: bytes.Clone(awards.Profile[persistence.ExperienceOffset : persistence.ExperienceOffset+8])})
 		s.sendGame(protocol.Message{ID: 1240, Payload: protocol.Uint32Bytes(awards.GoldBalance)})
+		if err := h.rewardBalances(s, gifts); err != nil {
+			return err
+		}
 		// Native clears the list before sending 6000. Do not append another
 		// full list after an action: its 6020 handler does not deduplicate.
 		s.sendGame(protocol.Message{ID: 6020, Payload: p})
 		if len(awards.Keys) > 0 {
 			for _, item := range awards.Items {
-				s.sendGame(protocol.Message{ID: 2160, Payload: bytes.Clone(item)})
+				s.sendGame(protocol.Message{ID: protocol.MsgItemAdded, Payload: bytes.Clone(item)})
 				if s.Inventory == nil {
 					s.Inventory = map[uint32][]byte{}
 				}

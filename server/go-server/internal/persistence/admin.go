@@ -19,6 +19,7 @@ type AdminOffer struct {
 	Enabled bool `json:"enabled"`
 }
 type AdminRequest struct {
+	Definition       *ItemDefinition     `json:"definition,omitempty"`
 	StageUnlocks     *StagePlayerUnlocks `json:"stage_unlocks,omitempty"`
 	WeaponSettings   *WeaponSettings     `json:"weapon_settings,omitempty"`
 	VIPShopSettings  *VIPShopSettings    `json:"vip_shop_settings,omitempty"`
@@ -69,20 +70,27 @@ func (store *Store) adminOffers() ([]AdminOffer, error) {
 }
 func (store *Store) Admin(request AdminRequest) (any, error) {
 	switch request.Operation {
+	case "definitions_get":
+		return store.ItemManager().Definitions()
+	case "definition_save":
+		if request.Definition == nil {
+			return nil, ErrDenied
+		}
+		return store.ItemManager().SaveDefinition(*request.Definition)
 	case "titles_get":
-		return store.TitleSettings()
+		return store.TitleManager().TitleSettings()
 	case "titles_save":
 		if request.Titles == nil {
 			return nil, ErrDenied
 		}
-		return store.SaveTitleSettings(*request.Titles)
+		return store.TitleManager().SaveTitleSettings(*request.Titles)
 	case "tasks_get":
-		return store.TaskSettings()
+		return store.TaskManager().TaskSettings()
 	case "tasks_save":
 		if request.Tasks == nil {
 			return nil, ErrDenied
 		}
-		return store.SaveTaskSettings(*request.Tasks)
+		return store.TaskManager().SaveTaskSettings(*request.Tasks)
 	case "vip_get":
 		if request.UID == 0 {
 			return nil, ErrDenied
@@ -93,33 +101,33 @@ func (store *Store) Admin(request AdminRequest) (any, error) {
 		}
 		return store.VIPMembership(uid)
 	case "training_get":
-		return store.TrainingSettings()
+		return store.TrainingManager().TrainingSettings()
 	case "weapon_settings_get":
-		return store.WeaponSettings()
+		return store.ItemManager().WeaponSettings()
 	case "vip_shop_settings_get":
-		return store.VIPShopSettings()
+		return store.ShopManager().VIPShopSettings()
 	case "vip_shop_settings_save":
 		if request.VIPShopSettings == nil {
 			return nil, ErrDenied
 		}
-		return store.SaveVIPShopSettings(*request.VIPShopSettings)
+		return store.ShopManager().SaveVIPShopSettings(*request.VIPShopSettings)
 	case "weapon_settings_save":
 		if request.WeaponSettings == nil {
 			return nil, ErrDenied
 		}
-		return store.SaveWeaponSettings(*request.WeaponSettings)
+		return store.ItemManager().SaveWeaponSettings(*request.WeaponSettings)
 	case "talisman_settings_get":
-		return store.TalismanSettings()
+		return store.ItemManager().TalismanSettings()
 	case "talisman_settings_save":
 		if request.TalismanSettings == nil {
 			return nil, ErrDenied
 		}
-		return store.SaveTalismanSettings(*request.TalismanSettings)
+		return store.ItemManager().SaveTalismanSettings(*request.TalismanSettings)
 	case "training_save":
 		if request.Training == nil {
 			return nil, ErrDenied
 		}
-		return store.SaveTrainingSettings(*request.Training)
+		return store.TrainingManager().SaveTrainingSettings(*request.Training)
 	case "honour_get":
 		settings, err := store.HonourSettings(HonourRules{})
 		if err == nil && settings.Revision == 0 {
@@ -134,7 +142,7 @@ func (store *Store) Admin(request AdminRequest) (any, error) {
 	case "stages_get":
 		return store.StageAccess()
 	case "stage_unlocks_get":
-		if _, err := store.AccountTitle(request.UID); err != nil {
+		if _, err := store.TitleManager().AccountTitle(request.UID); err != nil {
 			return nil, err
 		}
 		access, err := store.StageAccess()
@@ -153,12 +161,12 @@ func (store *Store) Admin(request AdminRequest) (any, error) {
 		}
 		return store.SaveStageAccess(*request.StageAccess)
 	case "rewards_get":
-		return store.BattleRewards(RewardRules{})
+		return store.RewardManager().BattleRewards(RewardRules{})
 	case "rewards_save":
 		if request.Rewards == nil || len(request.Rewards.Levels) != 150 {
 			return nil, fmt.Errorf("需要完整的 150 级奖励表，请使用新版 GM管理器")
 		}
-		return store.SaveBattleRewards(request.RewardRevision, *request.Rewards)
+		return store.RewardManager().SaveBattleRewards(request.RewardRevision, *request.Rewards)
 	case "accounts", "wallet_accounts":
 		rows, err := store.DB.Query(`SELECT a.uid,a.account,a.nickname,a.gold,a.tickets,(SELECT COUNT(*) FROM inventory i WHERE i.uid=a.uid) FROM accounts a ORDER BY a.uid`)
 		if err != nil {
@@ -177,7 +185,7 @@ func (store *Store) Admin(request AdminRequest) (any, error) {
 		}
 		return result, rows.Err()
 	case "inventory":
-		account, err := store.Snapshot(request.UID)
+		account, err := store.RoleManager().Snapshot(request.UID)
 		if err != nil {
 			return nil, err
 		}
@@ -208,7 +216,7 @@ func (store *Store) Admin(request AdminRequest) (any, error) {
 	case "shop_catalog":
 		return store.adminOffers()
 	case "wallet_update":
-		before, after, err := store.Wallet(request.UID, request.Mode, request.Amount, request.ID)
+		before, after, err := store.WalletManager().AdjustTickets(request.UID, request.Mode, request.Amount, request.ID)
 		return map[string]any{"before": before, "after": after, "backup": "线上 wallet_operations 审计记录：" + request.ID, "message": fmt.Sprintf("线上点券：%d → %d；重新登录游戏刷新", before, after)}, err
 	case "grant", "shop_save", "shop_batch", "shop_prices", "inventory_expiry", "vip_grant":
 	default:
@@ -357,7 +365,7 @@ func (store *Store) Admin(request AdminRequest) (any, error) {
 				return nil, ErrDenied
 			}
 			seen[key] = true
-			stackable := template[4] == 64 || template[4] == 71 || template[4] == 74
+			stackable := template[4] == protocol.ItemConsumable || template[4] == 71 || template[4] == 74
 			count := protocol.ReadUint16(template, 23)
 			if stackable && (count == 0 || count > 999) {
 				return nil, ErrDenied
@@ -517,6 +525,9 @@ func (store *Store) Admin(request AdminRequest) (any, error) {
 						return nil, err
 					}
 					result["expiry_policy_saved"] = true
+				}
+				if _, err = tx.Exec(`INSERT IGNORE INTO item_definitions(definition_key,revision,record,days) SELECT o.catalog_key,1,o.grant_record,COALESCE(l.days,0) FROM offers o LEFT JOIN offer_lifetimes l ON l.catalog_key=o.catalog_key WHERE o.catalog_key=?`, offer.Key); err != nil {
+					return nil, err
 				}
 				changed++
 			}

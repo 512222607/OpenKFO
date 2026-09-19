@@ -52,7 +52,7 @@ func TestHonourSettlementLocalDatabase(t *testing.T) {
 	}
 	var serials []uint32
 	allocate := func() uint32 {
-		id, e := s.NextBattle()
+		id, e := s.BattleManager().NextBattle()
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -68,10 +68,10 @@ func TestHonourSettlementLocalDatabase(t *testing.T) {
 	}()
 	awards := []BattleReward{{UID: uid, Outcome: "win", Gold: 7, HonourPeriod: period, HonourPoints: 10}, {UID: uid + 1, Outcome: "loss", HonourPeriod: period, HonourPoints: 2}}
 	serial := allocate()
-	if _, err = s.SettleBattle(serial, []byte("{}"), awards); err != nil {
+	if _, err = s.BattleManager().SettleBattle(serial, []byte("{}"), awards); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.SettleBattle(serial, []byte("{}"), awards); err != nil {
+	if _, err = s.BattleManager().SettleBattle(serial, []byte("{}"), awards); err != nil {
 		t.Fatal(err)
 	}
 	a, err := s.Honour(uid, period)
@@ -92,14 +92,14 @@ func TestHonourSettlementLocalDatabase(t *testing.T) {
 	if _, err = s.Honour(uid+2, period); err != sql.ErrNoRows {
 		t.Fatal("identity leaked", err)
 	}
-	if _, err = s.SettleBattle(allocate(), []byte("{}"), []BattleReward{{UID: uid, Outcome: "draw", HonourPeriod: period + 1, HonourPoints: 3}}); err != nil {
+	if _, err = s.BattleManager().SettleBattle(allocate(), []byte("{}"), []BattleReward{{UID: uid, Outcome: "draw", HonourPeriod: period + 1, HonourPoints: 3}}); err != nil {
 		t.Fatal(err)
 	}
 	old, err := s.Honour(uid, period)
 	if err != nil || old != a {
 		t.Fatal("previous period changed")
 	}
-	if _, err = s.SettleBattle(allocate(), []byte("{}"), []BattleReward{{UID: uid, Outcome: "unconfirmed", Gold: 99, HonourPeriod: period, HonourPoints: 99}}); err == nil {
+	if _, err = s.BattleManager().SettleBattle(allocate(), []byte("{}"), []BattleReward{{UID: uid, Outcome: "unconfirmed", Gold: 99, HonourPeriod: period, HonourPoints: 99}}); err == nil {
 		t.Fatal("unconfirmed counted")
 	}
 	var gold uint32
@@ -110,7 +110,7 @@ func TestHonourSettlementLocalDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := 0; i < 2; i++ {
-		if _, err = s.SettleBattle(allocate(), []byte("{}"), []BattleReward{{UID: uid, Outcome: "win", HonourPeriod: period, HonourPoints: 10}}); err != nil {
+		if _, err = s.BattleManager().SettleBattle(allocate(), []byte("{}"), []BattleReward{{UID: uid, Outcome: "win", HonourPeriod: period, HonourPoints: 10}}); err != nil {
 			t.Fatal(err)
 		}
 	}

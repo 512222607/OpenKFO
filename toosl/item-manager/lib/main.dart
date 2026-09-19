@@ -477,255 +477,258 @@ class _ManagerState extends State<Manager> {
       body: SafeArea(
         child: Row(
           children: [
-            Container(
+            SizedBox(
               width: 196,
-              color: ink,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(22, 28, 16, 5),
-                    child: Text(
-                      '功夫小子',
-                      style: TextStyle(
-                        fontSize: 25,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
+              child: Material(
+                color: ink,
+                child: ListView(
+                  key: const ValueKey("gm-sidebar-scroll"),
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(22, 28, 16, 5),
+                      child: Text(
+                        '功夫小子',
+                        style: TextStyle(
+                          fontSize: 25,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(23, 0, 16, 27),
-                    child: Text(
-                      'GM管理器',
-                      style: TextStyle(color: Color(0xFF9AB1C1)),
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(23, 0, 16, 27),
+                      child: Text(
+                        'GM管理器',
+                        style: TextStyle(color: Color(0xFF9AB1C1)),
+                      ),
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: DropdownButtonFormField<String>(
-                      initialValue: environment,
-                      decoration: const InputDecoration(labelText: '管理环境'),
-                      items: [
-                        if (!widget.onlineOnly)
-                          const DropdownMenuItem(
-                            value: 'local',
-                            child: Text('本地测试服'),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: DropdownButtonFormField<String>(
+                        initialValue: environment,
+                        decoration: const InputDecoration(labelText: '管理环境'),
+                        items: [
+                          if (!widget.onlineOnly)
+                            const DropdownMenuItem(
+                              value: 'local',
+                              child: Text('本地测试服'),
+                            ),
+                          DropdownMenuItem(
+                            value: 'online',
+                            child: Text('线上服务器'),
                           ),
-                        DropdownMenuItem(value: 'online', child: Text('线上服务器')),
-                      ],
-                      onChanged: busy || loading
-                          ? null
-                          : (v) {
-                              if (v != null) switchEnvironment(v);
-                            },
+                        ],
+                        onChanged: busy || loading
+                            ? null
+                            : (v) {
+                                if (v != null) switchEnvironment(v);
+                              },
+                      ),
                     ),
-                  ),
-                  Material(
-                    color: Colors.transparent,
-                    child: ListTile(
+                    Material(
+                      color: Colors.transparent,
+                      child: ListTile(
+                        textColor: Colors.white,
+                        iconColor: Colors.white,
+                        leading: const Icon(Icons.emoji_events),
+                        title: const Text('战斗奖励'),
+                        onTap: busy
+                            ? null
+                            : () => Navigator.push(
+                                context,
+                                MaterialPageRoute<void>(
+                                  builder: (_) => RewardConfigPage(
+                                    api: api,
+                                    environmentApi: widget.onlineOnly
+                                        ? null
+                                        : widget.api,
+                                    textCsv: widget.onlineOnly,
+                                    environment: environmentLabel,
+                                  ),
+                                ),
+                              ),
+                      ),
+                    ),
+                    ListTile(
                       textColor: Colors.white,
                       iconColor: Colors.white,
-                      leading: const Icon(Icons.emoji_events),
-                      title: const Text('战斗奖励'),
+                      leading: const Icon(Icons.school),
+                      title: const Text('任务配置'),
                       onTap: busy
                           ? null
                           : () => Navigator.push(
                               context,
                               MaterialPageRoute<void>(
-                                builder: (_) => RewardConfigPage(
+                                builder: (_) => TaskConfigPage(
                                   api: api,
-                                  environmentApi: widget.onlineOnly
-                                      ? null
-                                      : widget.api,
-                                  textCsv: widget.onlineOnly,
+                                  environment: environmentLabel,
+                                  canReadClient: !widget.onlineOnly,
+                                ),
+                              ),
+                            ),
+                    ),
+                    ListTile(
+                      textColor: Colors.white,
+                      iconColor: Colors.white,
+                      leading: const Icon(Icons.workspace_premium),
+                      title: const Text('称号规则'),
+                      onTap: busy
+                          ? null
+                          : () => Navigator.push(
+                              context,
+                              MaterialPageRoute<void>(
+                                builder: (_) => TitleConfigPage(
+                                  api: api,
+                                  environment: environmentLabel,
+                                  canReadClient: !widget.onlineOnly,
+                                ),
+                              ),
+                            ),
+                    ),
+                    ListTile(
+                      textColor: Colors.white,
+                      iconColor: Colors.white,
+                      leading: const Icon(Icons.school),
+                      title: const Text('武器升级'),
+                      onTap: busy
+                          ? null
+                          : () => Navigator.push(
+                              context,
+                              MaterialPageRoute<void>(
+                                builder: (_) => WeaponLevelsConfigPage(
+                                  api: api,
                                   environment: environmentLabel,
                                 ),
                               ),
                             ),
                     ),
-                  ),
-                  ListTile(
-                    textColor: Colors.white,
-                    iconColor: Colors.white,
-                    leading: const Icon(Icons.school),
-                    title: const Text('任务配置'),
-                    onTap: busy
-                        ? null
-                        : () => Navigator.push(
-                            context,
-                            MaterialPageRoute<void>(
-                              builder: (_) => TaskConfigPage(
-                                api: api,
-                                environment: environmentLabel,
-                                canReadClient: !widget.onlineOnly,
+                    ListTile(
+                      textColor: Colors.white,
+                      iconColor: Colors.white,
+                      leading: const Icon(Icons.school),
+                      title: const Text('宠物／法宝'),
+                      onTap: busy
+                          ? null
+                          : () => Navigator.push(
+                              context,
+                              MaterialPageRoute<void>(
+                                builder: (_) => TalismanConfigPage(
+                                  api: api,
+                                  environment: environmentLabel,
+                                ),
                               ),
                             ),
-                          ),
-                  ),
-                  ListTile(
-                    textColor: Colors.white,
-                    iconColor: Colors.white,
-                    leading: const Icon(Icons.workspace_premium),
-                    title: const Text('称号规则'),
-                    onTap: busy
-                        ? null
-                        : () => Navigator.push(
-                            context,
-                            MaterialPageRoute<void>(
-                              builder: (_) => TitleConfigPage(
-                                api: api,
-                                environment: environmentLabel,
-                                canReadClient: !widget.onlineOnly,
+                    ),
+                    ListTile(
+                      textColor: Colors.white,
+                      iconColor: Colors.white,
+                      leading: const Icon(Icons.school),
+                      title: const Text('名侠奖励'),
+                      onTap: busy
+                          ? null
+                          : () => Navigator.push(
+                              context,
+                              MaterialPageRoute<void>(
+                                builder: (_) => TrainingConfigPage(
+                                  api: api,
+                                  environment: environmentLabel,
+                                ),
                               ),
                             ),
-                          ),
-                  ),
-                  ListTile(
-                    textColor: Colors.white,
-                    iconColor: Colors.white,
-                    leading: const Icon(Icons.school),
-                    title: const Text('武器升级'),
-                    onTap: busy
-                        ? null
-                        : () => Navigator.push(
-                            context,
-                            MaterialPageRoute<void>(
-                              builder: (_) => WeaponLevelsConfigPage(
-                                api: api,
-                                environment: environmentLabel,
+                    ),
+                    ListTile(
+                      textColor: Colors.white,
+                      iconColor: Colors.white,
+                      leading: const Icon(Icons.map),
+                      title: const Text('关卡开关'),
+                      onTap: busy
+                          ? null
+                          : () => Navigator.push(
+                              context,
+                              MaterialPageRoute<void>(
+                                builder: (_) => StageConfigPage(
+                                  api: api,
+                                  environment: environmentLabel,
+                                  canReadClient: !widget.onlineOnly,
+                                ),
                               ),
                             ),
-                          ),
-                  ),
-                  ListTile(
-                    textColor: Colors.white,
-                    iconColor: Colors.white,
-                    leading: const Icon(Icons.school),
-                    title: const Text('宠物／法宝'),
-                    onTap: busy
-                        ? null
-                        : () => Navigator.push(
-                            context,
-                            MaterialPageRoute<void>(
-                              builder: (_) => TalismanConfigPage(
-                                api: api,
-                                environment: environmentLabel,
+                    ),
+                    ListTile(
+                      textColor: Colors.white,
+                      iconColor: Colors.white,
+                      leading: const Icon(Icons.military_tech),
+                      title: const Text('荣誉规则'),
+                      onTap: busy
+                          ? null
+                          : () => Navigator.push(
+                              context,
+                              MaterialPageRoute<void>(
+                                builder: (_) => HonourConfigPage(
+                                  api: api,
+                                  environment: environmentLabel,
+                                ),
                               ),
                             ),
-                          ),
-                  ),
-                  ListTile(
-                    textColor: Colors.white,
-                    iconColor: Colors.white,
-                    leading: const Icon(Icons.school),
-                    title: const Text('名侠奖励'),
-                    onTap: busy
-                        ? null
-                        : () => Navigator.push(
-                            context,
-                            MaterialPageRoute<void>(
-                              builder: (_) => TrainingConfigPage(
-                                api: api,
-                                environment: environmentLabel,
+                    ),
+                    ListTile(
+                      textColor: Colors.white,
+                      iconColor: Colors.white,
+                      leading: const Icon(Icons.card_membership),
+                      title: const Text('VIP商城折扣'),
+                      onTap: busy
+                          ? null
+                          : () => Navigator.push(
+                              context,
+                              MaterialPageRoute<void>(
+                                builder: (_) => VipShopConfigPage(
+                                  api: api,
+                                  environment: environmentLabel,
+                                ),
                               ),
                             ),
-                          ),
-                  ),
-                  ListTile(
-                    textColor: Colors.white,
-                    iconColor: Colors.white,
-                    leading: const Icon(Icons.map),
-                    title: const Text('关卡开关'),
-                    onTap: busy
-                        ? null
-                        : () => Navigator.push(
-                            context,
-                            MaterialPageRoute<void>(
-                              builder: (_) => StageConfigPage(
-                                api: api,
-                                environment: environmentLabel,
-                                canReadClient: !widget.onlineOnly,
+                    ),
+                    ListTile(
+                      textColor: Colors.white,
+                      iconColor: Colors.white,
+                      leading: const Icon(Icons.card_membership),
+                      title: const Text('VIP管理'),
+                      onTap: busy || uid == null
+                          ? null
+                          : () => Navigator.push(
+                              context,
+                              MaterialPageRoute<void>(
+                                builder: (_) => VipConfigPage(
+                                  uid: uid!,
+                                  account: accounts
+                                      .firstWhere(
+                                        (a) => a['uid'] == uid,
+                                      )['account']
+                                      .toString(),
+                                  api: api,
+                                  environment: environmentLabel,
+                                ),
                               ),
                             ),
-                          ),
-                  ),
-                  ListTile(
-                    textColor: Colors.white,
-                    iconColor: Colors.white,
-                    leading: const Icon(Icons.military_tech),
-                    title: const Text('荣誉规则'),
-                    onTap: busy
-                        ? null
-                        : () => Navigator.push(
-                            context,
-                            MaterialPageRoute<void>(
-                              builder: (_) => HonourConfigPage(
-                                api: api,
-                                environment: environmentLabel,
+                    ),
+                    ListTile(
+                      textColor: Colors.white,
+                      leading: const Icon(Icons.lock_open, color: Colors.white),
+                      title: const Text('个人关卡解锁'),
+                      onTap: busy || uid == null
+                          ? null
+                          : () => Navigator.push(
+                              context,
+                              MaterialPageRoute<void>(
+                                builder: (_) => StageUnlocksPage(
+                                  api: api,
+                                  environment: environmentLabel,
+                                  uid: uid!,
+                                ),
                               ),
                             ),
-                          ),
-                  ),
-                  ListTile(
-                    textColor: Colors.white,
-                    iconColor: Colors.white,
-                    leading: const Icon(Icons.card_membership),
-                    title: const Text('VIP商城折扣'),
-                    onTap: busy
-                        ? null
-                        : () => Navigator.push(
-                            context,
-                            MaterialPageRoute<void>(
-                              builder: (_) => VipShopConfigPage(
-                                api: api,
-                                environment: environmentLabel,
-                              ),
-                            ),
-                          ),
-                  ),
-                  ListTile(
-                    textColor: Colors.white,
-                    iconColor: Colors.white,
-                    leading: const Icon(Icons.card_membership),
-                    title: const Text('VIP管理'),
-                    onTap: busy || uid == null
-                        ? null
-                        : () => Navigator.push(
-                            context,
-                            MaterialPageRoute<void>(
-                              builder: (_) => VipConfigPage(
-                                uid: uid!,
-                                account: accounts
-                                    .firstWhere(
-                                      (a) => a['uid'] == uid,
-                                    )['account']
-                                    .toString(),
-                                api: api,
-                                environment: environmentLabel,
-                              ),
-                            ),
-                          ),
-                  ),
-                  ListTile(
-                    textColor: Colors.white,
-                    leading: const Icon(Icons.lock_open, color: Colors.white),
-                    title: const Text('个人关卡解锁'),
-                    onTap: busy || uid == null
-                        ? null
-                        : () => Navigator.push(
-                            context,
-                            MaterialPageRoute<void>(
-                              builder: (_) => StageUnlocksPage(
-                                api: api,
-                                environment: environmentLabel,
-                                uid: uid!,
-                              ),
-                            ),
-                          ),
-                  ),
-                  Expanded(
-                    child: ListView(
+                    ),
+                    Column(
                       children: ['全部道具', ...groups]
                           .map(
                             (g) => Padding(
@@ -757,79 +760,79 @@ class _ManagerState extends State<Manager> {
                           )
                           .toList(),
                     ),
-                  ),
-                  Material(
-                    color: Colors.transparent,
-                    child: ListTile(
-                      textColor: Colors.white,
-                      iconColor: Colors.white,
-                      leading: const Icon(Icons.storefront),
-                      title: const Text('商城配置'),
-                      onTap: busy
-                          ? null
-                          : () => Navigator.push(
-                              context,
-                              MaterialPageRoute<void>(
-                                builder: (_) => ShopConfigPage(
-                                  api: api,
-                                  environment: environmentLabel,
-                                ),
-                              ),
-                            ),
-                    ),
-                  ),
-                  Material(
-                    color: Colors.transparent,
-                    child: ListTile(
-                      textColor: Colors.white,
-                      iconColor: Colors.white,
-                      leading: const Icon(Icons.card_giftcard),
-                      title: const Text('点券设置与赠送'),
-                      onTap: busy
-                          ? null
-                          : () => Navigator.push(
-                              context,
-                              MaterialPageRoute<void>(
-                                builder: (_) => WalletConfigPage(
-                                  api: api,
-                                  environment: environmentLabel,
-                                ),
-                              ),
-                            ),
-                    ),
-                  ),
-                  if (!widget.onlineOnly)
                     Material(
                       color: Colors.transparent,
                       child: ListTile(
                         textColor: Colors.white,
                         iconColor: Colors.white,
-                        leading: const Icon(Icons.sports_martial_arts),
-                        title: const Text('武器配置（客户端）'),
+                        leading: const Icon(Icons.storefront),
+                        title: const Text('商城配置'),
                         onTap: busy
                             ? null
                             : () => Navigator.push(
                                 context,
                                 MaterialPageRoute<void>(
-                                  builder: (_) => WeaponConfigPage(api: api),
+                                  builder: (_) => ShopConfigPage(
+                                    api: api,
+                                    environment: environmentLabel,
+                                  ),
                                 ),
                               ),
                       ),
                     ),
-                  Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Text(
-                      widget.onlineOnly
-                          ? '线上管理 · HTTPS'
-                          : '$environmentLabel · MySQL\n武器配置仅修改本机客户端',
-                      style: TextStyle(
-                        color: Color(0xFF9AB1C1),
-                        height: 1.8,
-                        fontSize: 12,
+                    Material(
+                      color: Colors.transparent,
+                      child: ListTile(
+                        textColor: Colors.white,
+                        iconColor: Colors.white,
+                        leading: const Icon(Icons.card_giftcard),
+                        title: const Text('点券设置与赠送'),
+                        onTap: busy
+                            ? null
+                            : () => Navigator.push(
+                                context,
+                                MaterialPageRoute<void>(
+                                  builder: (_) => WalletConfigPage(
+                                    api: api,
+                                    environment: environmentLabel,
+                                  ),
+                                ),
+                              ),
                       ),
                     ),
-                  ),
-                ],
+                    if (!widget.onlineOnly)
+                      Material(
+                        color: Colors.transparent,
+                        child: ListTile(
+                          textColor: Colors.white,
+                          iconColor: Colors.white,
+                          leading: const Icon(Icons.sports_martial_arts),
+                          title: const Text('武器配置（客户端）'),
+                          onTap: busy
+                              ? null
+                              : () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => WeaponConfigPage(api: api),
+                                  ),
+                                ),
+                        ),
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Text(
+                        widget.onlineOnly
+                            ? '线上管理 · HTTPS'
+                            : '$environmentLabel · MySQL\n武器配置仅修改本机客户端',
+                        style: TextStyle(
+                          color: Color(0xFF9AB1C1),
+                          height: 1.8,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
             Expanded(

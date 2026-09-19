@@ -58,7 +58,12 @@ func TestWeaponUpgradeLocalDatabase(t *testing.T) {
 	errs := make(chan error, 2)
 	for i := 0; i < 2; i++ {
 		wg.Add(1)
-		go func() { defer wg.Done(); r, e := s.UpgradeWeapon(uid, "same", 1, rules); results <- r; errs <- e }()
+		go func() {
+			defer wg.Done()
+			r, e := s.ItemManager().UpgradeWeapon(uid, "same", 1, rules)
+			results <- r
+			errs <- e
+		}()
 	}
 	wg.Wait()
 	close(results)
@@ -73,21 +78,21 @@ func TestWeaponUpgradeLocalDatabase(t *testing.T) {
 			t.Fatal("bad concurrent success", r)
 		}
 	}
-	r, err := s.UpgradeWeapon(uid, "failure", 1, rules)
+	r, err := s.ItemManager().UpgradeWeapon(uid, "failure", 1, rules)
 	if err != nil || r.Success || r.Gold != 840 || protocol.ReadUint32(r.Item, 43) != 1 || protocol.ReadUint32(r.Item, 47) != 200 {
 		t.Fatal("failure policy", r, err)
 	}
-	replay, err := s.UpgradeWeapon(uid, "failure", 1, rules)
+	replay, err := s.ItemManager().UpgradeWeapon(uid, "failure", 1, rules)
 	if err != nil || replay.Gold != 840 || !bytes.Equal(replay.Item, r.Item) {
 		t.Fatal("failure replay charged twice", err)
 	}
-	if _, err = s.UpgradeWeapon(uid, "same", 2, rules); err == nil {
+	if _, err = s.ItemManager().UpgradeWeapon(uid, "same", 2, rules); err == nil {
 		t.Fatal("changed operation target accepted")
 	}
-	if _, err = s.UpgradeWeapon(uid, "missing", 2, rules); err == nil {
+	if _, err = s.ItemManager().UpgradeWeapon(uid, "missing", 2, rules); err == nil {
 		t.Fatal("unowned instance accepted")
 	}
-	if _, err = s.UpgradeWeapon(uid+1, "other", 1, rules); err == nil {
+	if _, err = s.ItemManager().UpgradeWeapon(uid+1, "other", 1, rules); err == nil {
 		t.Fatal("other owner accepted")
 	}
 	// Keep a persisted copy to verify denied requests leave both balances and record intact.
@@ -96,7 +101,7 @@ func TestWeaponUpgradeLocalDatabase(t *testing.T) {
 		if _, err := s.DB.Exec(`UPDATE inventory SET record=? WHERE uid=? AND instance=1`, record, uid); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.UpgradeWeapon(uid, name, 1, policy); err == nil {
+		if _, err := s.ItemManager().UpgradeWeapon(uid, name, 1, policy); err == nil {
 			t.Fatal("accepted", name)
 		}
 		var gold uint32

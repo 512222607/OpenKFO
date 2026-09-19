@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
+import 'reward_picker.dart';
+
 class DropConfigDialog extends StatefulWidget {
-  const DropConfigDialog({super.key, required this.drops});
+  const DropConfigDialog({super.key, required this.drops, this.api});
+  final PickerApi? api;
   final List<Map<String, dynamic>> drops;
   @override
   State<DropConfigDialog> createState() => _DropConfigDialogState();
@@ -9,6 +12,10 @@ class DropConfigDialog extends StatefulWidget {
 
 class _DropConfigDialogState extends State<DropConfigDialog> {
   final form = GlobalKey<FormState>();
+  late final catalog = widget.api == null
+      ? null
+      : RewardCatalog.load(widget.api!);
+  String error = "";
   late final rows = widget.drops
       .map((e) => Map<String, dynamic>.from(e))
       .toList();
@@ -21,8 +28,9 @@ class _DropConfigDialogState extends State<DropConfigDialog> {
       child: Column(
         children: [
           const Text(
-            '每条规则独立判定，按开战等级匹配。概率 10000 = 100%，0 = 关闭。商品编号使用商城销售配置编号，期限沿用该商品的发放配置。中止或结果不一致不掉落。',
+            '每条规则独立判定，按开战等级匹配。概率 10000 = 100%，0 = 关闭。按名称选择武器，商城下架不影响掉落。中止或结果不一致不掉落。',
           ),
+          Text(error, style: const TextStyle(color: Colors.red)),
           Expanded(
             child: Form(
               key: form,
@@ -57,7 +65,23 @@ class _DropConfigDialogState extends State<DropConfigDialog> {
                         spacing: 12,
                         runSpacing: 8,
                         children: [
-                          number('catalog_key', '商品编号', 1, 4294967295),
+                          if (catalog != null)
+                            SizedBox(
+                              width: 620,
+                              child: RewardItemsField(
+                                catalog: catalog!,
+                                items: (row['catalog_key'] as int) > 0
+                                    ? [row['catalog_key'] as int]
+                                    : [],
+                                maximum: 1,
+                                weaponsOnly: true,
+                                onChanged: (v) => setState(
+                                  () => row['catalog_key'] = v.isEmpty
+                                      ? 0
+                                      : v.first,
+                                ),
+                              ),
+                            ),
                           SizedBox(
                             width: 100,
                             child: DropdownButtonFormField<String>(
@@ -121,6 +145,10 @@ class _DropConfigDialogState extends State<DropConfigDialog> {
       ),
       FilledButton(
         onPressed: () {
+          if (rows.any((r) => (r['catalog_key'] as int) <= 0)) {
+            setState(() => error = '请为每条规则选择武器');
+            return;
+          }
           if (form.currentState!.validate()) Navigator.pop(context, rows);
         },
         child: const Text('应用到表格（仍需保存）'),

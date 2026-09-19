@@ -9,11 +9,29 @@ func (h *Hub) stageGate(players ...*Session) (func(uint32) bool, error) {
 	if err != nil {
 		return nil, err
 	}
+	var request []byte
+	if len(players) == 1 && players[0] != nil && players[0].Room != nil {
+		request = players[0].Room.Request
+	}
+	return h.stageGateWithAccess(access, request, players...)
+}
+
+func (h *Hub) stageGateWithAccess(access persistence.StageAccess, request []byte, players ...*Session) (func(uint32) bool, error) {
 	if !access.RequirementsEnabled {
+		if (access.ForceOpenAll || len(access.ForceOpenMaps) > 0) && access.ClientHash != h.Config.ConfigHash {
+			return nil, persistence.ErrDenied
+		}
 		return access.Allows, nil
 	}
 	if len(players) == 0 || access.ClientHash != h.Config.ConfigHash {
 		return nil, persistence.ErrDenied
+	}
+	// Native new characters have title 0. mapmgr's title requirement for
+	// training mountain is 1, so applying progression here creates a deadlock.
+	// Restrict this exemption to the exact single-player guide request, for
+	// both creation and start. Explicit closure and version checks still apply.
+	if len(players) == 1 && players[0] != nil && players[0].UID != 0 && tutorialRequest(request) {
+		return access.Allows, nil
 	}
 	minimum := byte(255)
 	locked := map[uint32]bool{}
@@ -27,7 +45,7 @@ func (h *Hub) stageGate(players ...*Session) (func(uint32) bool, error) {
 		if s == nil {
 			return nil, persistence.ErrDenied
 		}
-		title, err := h.Store.AccountTitle(s.UID)
+		title, err := h.Store.TitleManager().AccountTitle(s.UID)
 		if err != nil {
 			return nil, err
 		}
@@ -62,9 +80,13 @@ func roomPlayers(room *Room) []*Session {
 }
 
 func (h *Hub) resolveForPlayers(request []byte, players ...*Session) ([]byte, error) {
-	allows, err := h.stageGate(players...)
+	access, err := h.stageAccess()
 	if err != nil {
 		return nil, err
 	}
-	return h.resolveWithAllowed(request, allows)
+	allows, err := h.stageGateWithAccess(access, request, players...)
+	if err != nil {
+		return nil, err
+	}
+	return h.resolveWithPolicy(request, allows, access)
 }

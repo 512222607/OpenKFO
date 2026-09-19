@@ -54,7 +54,7 @@ func TestWeaponUpgradeProtocolLocalDatabase(t *testing.T) {
 		}
 	}()
 	h := NewHub(store, Config{WeaponUpgradeMode: "consume_score_keep_level", WeaponLevels: []WeaponLevel{{Level: 0, ScoreThreshold: 100, Gold: 70, DisplayOdds: 100}, {Level: 1, ScoreThreshold: 200, Gold: 90, DisplayOdds: 0}, {Level: 2, ScoreThreshold: 300}}})
-	if err = store.SeedWeaponSettings(persistence.WeaponRules{Enabled: true, Levels: h.Config.WeaponLevels}); err != nil {
+	if err = store.ItemManager().SeedWeaponSettings(persistence.WeaponRules{Enabled: true, Levels: h.Config.WeaponLevels}); err != nil {
 		t.Fatal(err)
 	}
 	s, err := h.Attach(a, 19091)

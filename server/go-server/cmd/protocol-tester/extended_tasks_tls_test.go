@@ -238,7 +238,7 @@ func TestExtendedTaskActionsTLS(t *testing.T) {
 		rules.Extended.Catalogue[i].Conditions[1].Event = "battle_win"
 	}
 	save()
-	before, e := store.Snapshot(uid)
+	before, e := store.RoleManager().Snapshot(uid)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -267,7 +267,7 @@ func TestExtendedTaskActionsTLS(t *testing.T) {
 		}
 		send(uint32(6311+i), p, 20150)
 	}
-	after, e := store.Snapshot(uid)
+	after, e := store.RoleManager().Snapshot(uid)
 	if e != nil || after.Gold != before.Gold+40 {
 		t.Fatal("claim balances", e)
 	}

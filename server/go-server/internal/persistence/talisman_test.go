@@ -50,20 +50,20 @@ func TestTalismanEquipmentLocalDatabase(t *testing.T) {
 		}
 	}()
 	for _, slot := range []uint16{0, 8, 36, 39, 42} {
-		if _, e = s.EquipDefault(uid, 1, slot); e != ErrDenied {
+		if _, e = s.EquipmentManager().EquipDefault(uid, 1, slot); e != ErrDenied {
 			t.Fatalf("unverified slot %d accepted: %v", slot, e)
 		}
 	}
-	if _, e = s.EquipDefault(uid+1, 1, 37); e == nil {
+	if _, e = s.EquipmentManager().EquipDefault(uid+1, 1, 37); e == nil {
 		t.Fatal("foreign equip accepted")
 	}
 	for _, instance := range []uint32{1, 2} {
-		p, e := s.EquipDefault(uid, instance, 37)
+		p, e := s.EquipmentManager().EquipDefault(uid, instance, 37)
 		if e != nil || protocol.ReadUint16(p, 17) != 37 {
 			t.Fatal("talisman equip", e)
 		}
 	}
-	state, e := s.Snapshot(uid)
+	state, e := s.RoleManager().Snapshot(uid)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -76,10 +76,10 @@ func TestTalismanEquipmentLocalDatabase(t *testing.T) {
 			t.Fatal("replaced talisman retained slot")
 		}
 	}
-	if _, e = s.EquipDefault(uid, 1, 38); e != nil {
+	if _, e = s.EquipmentManager().EquipDefault(uid, 1, 38); e != nil {
 		t.Fatal("second talisman slot", e)
 	}
-	state, e = s.Snapshot(uid)
+	state, e = s.RoleManager().Snapshot(uid)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -92,7 +92,7 @@ func TestTalismanEquipmentLocalDatabase(t *testing.T) {
 			t.Fatal("second slot replaced first")
 		}
 	}
-	p, e := s.Equip(uid, 2, 0)
+	p, e := s.EquipmentManager().Equip(uid, 2, 0)
 	if e != nil || protocol.ReadUint16(p, 17) != 0 {
 		t.Fatal("unequip", e)
 	}
@@ -109,12 +109,12 @@ func TestTalismanEquipmentLocalDatabase(t *testing.T) {
 	}
 	rule := TalismanRepairRule{Item: 303110, Material: 603001, Quantity: 4, Capacity: 10000}
 	for i := 0; i < 2; i++ {
-		item, e := s.RepairTalisman(uid, "repair-once", 2, rule)
+		item, e := s.ItemManager().RepairTalisman(uid, "repair-once", 2, rule)
 		if e != nil || protocol.ReadUint16(item, 23) != 10000 {
 			t.Fatal("repair/replay", e)
 		}
 	}
-	state, e = s.Snapshot(uid)
+	state, e = s.RoleManager().Snapshot(uid)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -136,26 +136,26 @@ func TestTalismanEquipmentLocalDatabase(t *testing.T) {
 			}
 		}
 	}
-	item, e := s.RepairTalisman(uid, "repair-once", 2, rule)
+	item, e := s.ItemManager().RepairTalisman(uid, "repair-once", 2, rule)
 	if e != nil || protocol.ReadUint16(item, 23) != 5 {
 		t.Fatal("replay refilled quota", e)
 	}
-	if _, e = s.RepairTalisman(uid, "insufficient", 2, rule); e != ErrDenied {
+	if _, e = s.ItemManager().RepairTalisman(uid, "insufficient", 2, rule); e != ErrDenied {
 		t.Fatal("insufficient materials", e)
 	}
 	bad := rule
 	bad.Quantity = 1
-	if _, e = s.RepairTalisman(uid, "repair-once", 2, bad); e != ErrDenied {
+	if _, e = s.ItemManager().RepairTalisman(uid, "repair-once", 2, bad); e != ErrDenied {
 		t.Fatal("mutated operation admitted", e)
 	}
-	if _, e = s.RepairTalisman(uid+1, "foreign", 2, rule); e == nil {
+	if _, e = s.ItemManager().RepairTalisman(uid+1, "foreign", 2, rule); e == nil {
 		t.Fatal("foreign repair")
 	}
 	use := TalismanUse{Instance: 2, Item: 303110, Kind: 8292, Slot: 37, Cost: 2}
-	if _, _, e = s.UseTalisman(uid, "unequipped", use); e != ErrDenied {
+	if _, _, e = s.ItemManager().UseTalisman(uid, "unequipped", use); e != ErrDenied {
 		t.Fatal("unequipped use", e)
 	}
-	if _, e = s.EquipDefault(uid, 2, 37); e != nil {
+	if _, e = s.EquipmentManager().EquipDefault(uid, 2, 37); e != nil {
 		t.Fatal(e)
 	}
 	// Two simultaneous deliveries of one event must commit only one debit.
@@ -169,7 +169,7 @@ func TestTalismanEquipmentLocalDatabase(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, applied, err := s.UseTalisman(uid, "use-once", use)
+			_, applied, err := s.ItemManager().UseTalisman(uid, "use-once", use)
 			results <- result{applied, err}
 		}()
 	}
@@ -187,46 +187,46 @@ func TestTalismanEquipmentLocalDatabase(t *testing.T) {
 	if commits != 1 {
 		t.Fatal("duplicate debit", commits)
 	}
-	item, applied, e := s.UseTalisman(uid, "use-next", use)
+	item, applied, e := s.ItemManager().UseTalisman(uid, "use-next", use)
 	if e != nil || !applied || protocol.ReadUint16(item, 23) != 1 {
 		t.Fatal("wrong quota", e)
 	}
-	item, applied, e = s.UseTalisman(uid, "use-once", use)
+	item, applied, e = s.ItemManager().UseTalisman(uid, "use-once", use)
 	if e != nil || applied || protocol.ReadUint16(item, 23) != 1 {
 		t.Fatal("replay restored quota", e)
 	}
-	if _, _, e = s.UseTalisman(uid, "insufficient-use", use); e != ErrTalismanQuota {
+	if _, _, e = s.ItemManager().UseTalisman(uid, "insufficient-use", use); e != ErrTalismanQuota {
 		t.Fatal("quota underflow", e)
 	}
 	changed := use
 	changed.Cost = 1
-	item, applied, e = s.UseTalisman(uid, "use-once", changed)
+	item, applied, e = s.ItemManager().UseTalisman(uid, "use-once", changed)
 	if e != nil || applied || protocol.ReadUint16(item, 23) != 1 {
 		t.Fatal("repriced replay changed quota", e)
 	}
 	changed.Kind = 8291
-	if _, _, e = s.UseTalisman(uid, "use-once", changed); e != ErrDenied {
+	if _, _, e = s.ItemManager().UseTalisman(uid, "use-once", changed); e != ErrDenied {
 		t.Fatal("event kind substitution accepted", e)
 	}
 	changed = use
-	if _, _, e = s.UseTalisman(uid+1, "foreign-use", use); e == nil {
+	if _, _, e = s.ItemManager().UseTalisman(uid+1, "foreign-use", use); e == nil {
 		t.Fatal("foreign use")
 	}
 	changed.Slot = 38
-	if _, _, e = s.UseTalisman(uid, "wrong-slot", changed); e != ErrDenied {
+	if _, _, e = s.ItemManager().UseTalisman(uid, "wrong-slot", changed); e != ErrDenied {
 		t.Fatal("wrong slot", e)
 	}
 	changed = use
 	changed.Cost = 0
 	changed.Kind = 8291
-	item, applied, e = s.UseTalisman(uid, "free-passive", changed)
+	item, applied, e = s.ItemManager().UseTalisman(uid, "free-passive", changed)
 	if e != nil || !applied || protocol.ReadUint16(item, 23) != 1 {
 		t.Fatal("zero-cost passive", e)
 	}
 	if _, e = s.DB.Exec(`INSERT INTO inventory_expirations(uid,instance,expires_at) VALUES(?,?,?)`, uid, 2, time.Now().Unix()-1); e != nil {
 		t.Fatal(e)
 	}
-	if _, _, e = s.UseTalisman(uid, "free-passive", changed); e != ErrDenied {
+	if _, _, e = s.ItemManager().UseTalisman(uid, "free-passive", changed); e != ErrDenied {
 		t.Fatal("expired passive replay", e)
 	}
 

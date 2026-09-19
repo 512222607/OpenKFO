@@ -105,6 +105,10 @@ var schema = []string{
         enabled BOOLEAN NOT NULL DEFAULT TRUE
     ) ENGINE=InnoDB`,
 	`CREATE TABLE IF NOT EXISTS offer_lifetimes(catalog_key INT UNSIGNED PRIMARY KEY,days INT UNSIGNED NOT NULL,FOREIGN KEY(catalog_key) REFERENCES offers(catalog_key) ON DELETE CASCADE) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS item_definitions(definition_key INT UNSIGNED PRIMARY KEY,revision BIGINT UNSIGNED NOT NULL,record VARBINARY(68) NOT NULL,days INT UNSIGNED NOT NULL) ENGINE=InnoDB`,
+	seedDefinitionsSQL,
+	`CREATE TABLE IF NOT EXISTS tutorial_rewards(uid BIGINT UNSIGNED PRIMARY KEY,reward MEDIUMBLOB NOT NULL,FOREIGN KEY(uid) REFERENCES accounts(uid) ON DELETE CASCADE) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS level_reward_receipts(uid BIGINT UNSIGNED NOT NULL,level SMALLINT UNSIGNED NOT NULL,items MEDIUMBLOB NOT NULL,PRIMARY KEY(uid,level),FOREIGN KEY(uid) REFERENCES accounts(uid) ON DELETE CASCADE) ENGINE=InnoDB`,
 	`CREATE TABLE IF NOT EXISTS purchases(
         uid BIGINT UNSIGNED NOT NULL ,
         operation_id VARCHAR(128) CHARACTER SET ascii NOT NULL ,
@@ -186,41 +190,6 @@ func open(dsn string, initialize bool) (*Store, error) {
 	}
 	return store, nil
 }
-func (store *Store) Snapshot(uid uint64) (Account, error) {
-	account := Account{UID: uid}
-	if err := store.ExpireInventory(uid); err != nil {
-		return account, err
-	}
-	err := store.DB.QueryRow(`SELECT account,nickname,profile,gold,tickets FROM accounts WHERE uid=?`, uid).Scan(&account.Account, &account.Nickname, &account.Profile, &account.Gold, &account.Tickets)
-	if err != nil {
-		return account, err
-	}
-	rows, err := store.DB.Query(`SELECT record FROM inventory WHERE uid=? ORDER BY instance`, uid)
-	if err != nil {
-		return account, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var record []byte
-		if err = rows.Scan(&record); err != nil {
-			return account, err
-		}
-		if len(record) != 68 {
-			return account, ErrDenied
-		}
-		account.Inventory = append(account.Inventory, record)
-	}
-	if len(account.Profile) != 360 {
-		return account, ErrDenied
-	}
-	if err = rows.Err(); err != nil {
-		return account, err
-	}
-	if err = rows.Close(); err != nil {
-		return account, err
-	}
-	return account, store.projectVIPInventory(&account)
-}
 func (account Account) InventoryBytes() []byte { return bytes.Join(account.Inventory, nil) }
 func (store *Store) Authenticate(account, legacy string) (Account, error) {
 	if !accountPattern.MatchString(account) || !legacyPattern.MatchString(legacy) {
@@ -239,7 +208,7 @@ func (store *Store) Authenticate(account, legacy string) (Account, error) {
 	if err != nil || lookupErr != nil || len(salt) != 16 || len(digest) != 32 || subtle.ConstantTimeCompare(actual, digest) != 1 {
 		return Account{}, ErrDenied
 	}
-	return store.Snapshot(uid)
+	return store.RoleManager().Snapshot(uid)
 }
 func NewAccount(uid uint64, name, password string) (Account, error) {
 	if uid == 0 || !accountPattern.MatchString(name) || len(password) < 6 || len(password) > 128 {
@@ -352,122 +321,12 @@ func (store *Store) Import(export Export) error {
 			return err
 		}
 	}
+	if _, err := transaction.Exec(seedDefinitionsSQL); err != nil {
+		return err
+	}
 	return transaction.Commit()
 }
-func (store *Store) Offers(category, variant int) ([]Offer, error) {
-	query := `SELECT catalog_key,category,variant,record,grant_record FROM offers WHERE enabled=TRUE`
-	args := []any{}
-	if category >= 0 {
-		query += ` AND category=? AND variant=?`
-		args = append(args, category, variant)
-	}
-	query += ` ORDER BY catalog_key LIMIT 4000`
-	rows, err := store.DB.Query(query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var offers []Offer
-	for rows.Next() {
-		var offer Offer
-		if err = rows.Scan(&offer.Key, &offer.Category, &offer.Variant, &offer.Record, &offer.Grant); err != nil {
-			return nil, err
-		}
-		if len(offer.Record) != 108 || len(offer.Grant) != 68 {
-			return nil, ErrDenied
-		}
-		offers = append(offers, offer)
-	}
-	return offers, rows.Err()
-}
 
-func (store *Store) Wallet(uid uint64, mode string, amount uint32, operationID string) (uint32, uint32, error) {
-	if (mode != "gift" && mode != "set") || amount > 2147483647 || len(operationID) < 1 || len(operationID) > 128 {
-		return 0, 0, ErrDenied
-	}
-	transaction, err := store.DB.Begin()
-	if err != nil {
-		return 0, 0, err
-	}
-	defer transaction.Rollback()
-	var before uint32
-	if err = transaction.QueryRow(`SELECT tickets FROM accounts WHERE uid=? FOR UPDATE`, uid).Scan(&before); err != nil {
-		return 0, 0, err
-	}
-	var oldUID uint64
-	var oldMode string
-	var oldAmount, oldBefore, oldAfter uint32
-	err = transaction.QueryRow(`SELECT uid,mode,amount,before_balance,after_balance FROM wallet_operations WHERE operation_id=?`, operationID).Scan(&oldUID, &oldMode, &oldAmount, &oldBefore, &oldAfter)
-	if err == nil {
-		if oldUID != uid || mode != oldMode || amount != oldAmount {
-			return 0, 0, ErrDenied
-		}
-		return oldBefore, oldAfter, transaction.Commit()
-	}
-	if err != sql.ErrNoRows {
-		return 0, 0, err
-	}
-	after := uint64(amount)
-	if mode == "gift" {
-		after += uint64(before)
-	}
-	if after > 2147483647 {
-		return 0, 0, ErrDenied
-	}
-	if _, err = transaction.Exec(`UPDATE accounts SET tickets=? WHERE uid=?`, after, uid); err != nil {
-		return 0, 0, err
-	}
-	if _, err = transaction.Exec(`INSERT INTO wallet_operations(operation_id,uid,mode,amount,before_balance,after_balance) VALUES(?,?,?,?,?,?)`, operationID, uid, mode, amount, before, after); err != nil {
-		return 0, 0, err
-	}
-	return before, uint32(after), transaction.Commit()
-}
-func (store *Store) NextBattle() (uint32, error) {
-	transaction, err := store.DB.Begin()
-	if err != nil {
-		return 0, err
-	}
-	defer transaction.Rollback()
-	var serial uint64
-	if err = transaction.QueryRow(`SELECT value FROM counters WHERE name='battle' FOR UPDATE`).Scan(&serial); err != nil {
-		return 0, err
-	}
-	if serial >= 0xffffffff {
-		return 0, ErrDenied
-	}
-	serial++
-	if _, err = transaction.Exec(`UPDATE counters SET value=? WHERE name='battle'`, serial); err != nil {
-		return 0, err
-	}
-	return uint32(serial), transaction.Commit()
-}
-func (store *Store) Training(uid uint64, start bool) (uint32, bool, error) {
-	if start {
-		if _, err := store.DB.Exec(`INSERT IGNORE INTO training(uid) VALUES(?)`, uid); err != nil {
-			return 0, false, err
-		}
-		if _, err := store.DB.Exec(`UPDATE training SET started=? WHERE uid=? AND started IS NULL`, time.Now().Unix(), uid); err != nil {
-			return 0, false, err
-		}
-	}
-	var started sql.NullInt64
-	// A profile lookup must not create or start training for its target.
-	// LEFT JOIN distinguishes an existing idle account from a missing UID.
-	if err := store.DB.QueryRow(`SELECT t.started FROM accounts a LEFT JOIN training t ON t.uid=a.uid WHERE a.uid=?`, uid).Scan(&started); err != nil {
-		return 0, false, err
-	}
-	if !started.Valid {
-		return 0, false, nil
-	}
-	minutes := (time.Now().Unix() - started.Int64) / 60
-	if minutes < 0 {
-		minutes = 0
-	}
-	if minutes > 35791394 {
-		minutes = 35791394
-	}
-	return uint32(minutes), true, nil
-}
 func GBK(text string) []byte {
 	encoded, err := simplifiedchinese.GBK.NewEncoder().Bytes([]byte(text))
 	if err != nil {

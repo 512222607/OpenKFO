@@ -91,7 +91,7 @@ func TestCharacterCreationTLS(t *testing.T) {
 	if err != nil || f.Op != "pong" {
 		t.Fatal("new character lobby/P2P", err)
 	}
-	before, err := store.Snapshot(uid)
+	before, err := store.RoleManager().Snapshot(uid)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,7 +205,7 @@ func TestCharacterCreationTLS(t *testing.T) {
 	if err := again.wait(3, 2421); err != nil {
 		t.Fatal(err)
 	}
-	after, err := store.Snapshot(uid)
+	after, err := store.RoleManager().Snapshot(uid)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -18,6 +18,9 @@ func (hub *Hub) RefreshExpiredInventory(s *Session) error {
 	if ch == nil || (ch.Phase != "lobby" && ch.Phase != "room") || (s.Room != nil && s.Room.Stage != "room") {
 		return nil
 	}
+	if err := hub.refreshStageSelection(s); err != nil {
+		log.Printf("stage_refresh_failed uid=%d", s.UID)
+	}
 	if err := hub.refreshMail(s); err != nil {
 		log.Printf("mail_refresh_failed uid=%d", s.UID)
 	}
@@ -44,7 +47,7 @@ func (hub *Hub) RefreshExpiredInventory(s *Session) error {
 	if !refresh {
 		return nil
 	}
-	a, err := hub.Store.Snapshot(s.UID)
+	a, err := hub.Store.RoleManager().Snapshot(s.UID)
 	if err != nil {
 		return err
 	}

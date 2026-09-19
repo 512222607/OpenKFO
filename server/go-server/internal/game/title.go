@@ -7,9 +7,12 @@ import (
 )
 
 func (h *Hub) announceTitleReward(s *Session) error {
+	if sent, err := h.announceTutorialReward(s); sent || err != nil {
+		return err
+	}
 	supported := h.Config.TitleLevels
 	if h.Config.ConfigHash != "" {
-		settings, err := h.Store.TitleSettings()
+		settings, err := h.Store.TitleManager().TitleSettings()
 		if err != nil {
 			return err
 		}
@@ -21,11 +24,11 @@ func (h *Hub) announceTitleReward(s *Session) error {
 		return nil
 	}
 	if s.TitleOffer == 0 {
-		if _, err := h.Store.AdvanceTitle(s.UID, supported, h.Config.ConfigHash); err != nil {
+		if _, err := h.Store.TitleManager().AdvanceTitle(s.UID, supported, h.Config.ConfigHash); err != nil {
 			return err
 		}
 	}
-	level, choices, err := h.Store.PendingTitleReward(s.UID)
+	level, choices, err := h.Store.TitleManager().PendingTitleReward(s.UID)
 	if err != nil {
 		return err
 	}
@@ -42,7 +45,7 @@ func (h *Hub) announceTitleReward(s *Session) error {
 		return err
 	}
 	s.TitleOffer = level
-	s.sendGame(protocol.Message{ID: 4125, Payload: p})
+	s.sendGame(protocol.Message{ID: protocol.MsgTitleAward, Payload: p})
 	return nil
 }
 
@@ -52,7 +55,7 @@ func (h *Hub) claimTitleReward(s *Session, payload []byte) error {
 		s.sendGame(notice("称号领奖未完成，请先取得并打开本人的奖励资格。"))
 		return nil
 	}
-	item, err := h.Store.ClaimTitleReward(s.UID, s.TitleOffer, key)
+	item, err := h.Store.TitleManager().ClaimTitleReward(s.UID, s.TitleOffer, key)
 	if err != nil {
 		s.sendGame(notice("称号领奖未完成，请核对奖励资格及所选商品。"))
 		return nil

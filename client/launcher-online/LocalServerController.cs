@@ -49,7 +49,11 @@ internal sealed class LocalServerController
             if(existing!=null)return "本地服务器已运行，无需重复启动。";
             foreach(string file in new[]{"kungfu-server.exe","settings.private.json","config.json"})
                 if(!File.Exists(Path.Combine(directory,file)))throw new FileNotFoundException("缺少本地服务器文件："+file);
-            using var started=Process.Start(new ProcessStartInfo(executable){WorkingDirectory=directory,UseShellExecute=true,WindowStyle=style})??throw new IOException("无法启动本地服务器。");
+            string monitor=Path.Combine(directory,"功夫小子本地服务器.exe");
+            var launch=File.Exists(monitor)
+                ? new ProcessStartInfo(monitor){Arguments="--start",WorkingDirectory=directory,UseShellExecute=true,WindowStyle=ProcessWindowStyle.Normal}
+                : new ProcessStartInfo(executable){WorkingDirectory=directory,UseShellExecute=true,WindowStyle=style};
+            using var started=Process.Start(launch)??throw new IOException("无法启动本地服务器。");
             return "本地服务器已启动，正在检查连接…";
         }finally{if(acquired)gate.ReleaseMutex();}
     });

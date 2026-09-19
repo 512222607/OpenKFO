@@ -51,14 +51,14 @@ func taskConditionsMet(rule TaskRule, profile, baseline []byte) bool {
 
 // CompleteTasks is driven by server-owned profile counters, never request
 // progress values. State, account balances and reward receipts commit together.
-func (s *Store) CompleteTasks(uid uint64, growth RewardRules) (r TaskAwards, err error) {
+func (s *TaskManager) CompleteTasks(uid uint64, growth RewardRules) (r TaskAwards, err error) {
 	if uid == 0 {
 		return r, ErrDenied
 	}
 	if err = growth.Validate(); err != nil {
 		return r, err
 	}
-	tx, err := s.DB.Begin()
+	tx, err := s.store.DB.Begin()
 	if err != nil {
 		return r, err
 	}
@@ -143,7 +143,7 @@ func (s *Store) CompleteTasks(uid uint64, growth RewardRules) (r TaskAwards, err
 		return r, ErrDenied
 	}
 	r.Experience, r.Gold = uint32(xp), uint32(gold)
-	r.GoldBalance, err = creditRewardProgress(r.Profile, uint64(r.GoldBalance), r.Experience, r.Gold, growth)
+	r.GoldBalance, r.Items, err = (RewardManager{}).GrantProgressItems(tx, uid, r.Profile, uint64(r.GoldBalance), r.Experience, r.Gold, growth)
 	if err != nil {
 		return TaskAwards{}, err
 	}
@@ -152,7 +152,7 @@ func (s *Store) CompleteTasks(uid uint64, growth RewardRules) (r TaskAwards, err
 	}
 	for _, a := range awards {
 		if a.rule.RewardCatalog != 0 {
-			item, e := awardCatalogItem(tx, uid, a.rule.RewardCatalog)
+			item, e := (RewardManager{}).GrantItem(tx, uid, a.rule.RewardCatalog)
 			if e != nil {
 				return TaskAwards{}, e
 			}

@@ -100,10 +100,10 @@ func (a TaskSettings) Validate() error {
 	return nil
 }
 
-func (s *Store) TaskSettings() (TaskSettings, error) {
+func (s *TaskManager) TaskSettings() (TaskSettings, error) {
 	a := TaskSettings{}
 	var data []byte
-	err := s.DB.QueryRow("SELECT revision,rules FROM task_rules WHERE id=1").Scan(&a.Revision, &data)
+	err := s.store.DB.QueryRow("SELECT revision,rules FROM task_rules WHERE id=1").Scan(&a.Revision, &data)
 	if err == sql.ErrNoRows {
 		return a, nil
 	}
@@ -115,7 +115,7 @@ func (s *Store) TaskSettings() (TaskSettings, error) {
 	}
 	return a, a.Validate()
 }
-func (s *Store) SaveTaskSettings(a TaskSettings) (TaskSettings, error) {
+func (s *TaskManager) SaveTaskSettings(a TaskSettings) (TaskSettings, error) {
 	if err := a.Validate(); err != nil {
 		return TaskSettings{}, err
 	}
@@ -126,7 +126,7 @@ func (s *Store) SaveTaskSettings(a TaskSettings) (TaskSettings, error) {
 	if err != nil {
 		return TaskSettings{}, err
 	}
-	tx, err := s.DB.Begin()
+	tx, err := s.store.DB.Begin()
 	if err != nil {
 		return TaskSettings{}, err
 	}

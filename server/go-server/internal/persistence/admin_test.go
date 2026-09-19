@@ -99,7 +99,7 @@ func TestDesktopAdminTransactions(t *testing.T) {
 	if _, err = store.Admin(grant); err != nil {
 		t.Fatal("retry", err)
 	}
-	snapshot, err := store.Snapshot(uid)
+	snapshot, err := store.RoleManager().Snapshot(uid)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func TestDesktopAdminTransactions(t *testing.T) {
 	if _, err = store.Admin(AdminRequest{Operation: "grant", ID: prefix + "-overflow", UID: uid, Records: [][]byte{other, bad}}); err == nil {
 		t.Fatal("overflow admitted")
 	}
-	snapshot, err = store.Snapshot(uid)
+	snapshot, err = store.RoleManager().Snapshot(uid)
 	if err != nil || len(snapshot.Inventory) != before {
 		t.Fatal("failed batch partially committed", err)
 	}

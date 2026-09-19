@@ -3,7 +3,7 @@ package persistence
 // The progress row's (uid, task_key, cycle) primary key is the entitlement.
 // State 3 is its durable receipt; account, inventory and state commit together.
 // Request pointers, claimed state and trailing native bytes are never inputs.
-func (s *Store) ClaimExtendedTask(uid uint64, hash string, action uint32, key uint16, growth RewardRules) (r TaskAwards, err error) {
+func (s *TaskManager) ClaimExtendedTask(uid uint64, hash string, action uint32, key uint16, growth RewardRules) (r TaskAwards, err error) {
 	kind := "daily"
 	if action == 6312 {
 		kind = "newbie"
@@ -16,7 +16,7 @@ func (s *Store) ClaimExtendedTask(uid uint64, hash string, action uint32, key ui
 	if err = growth.Validate(); err != nil {
 		return r, err
 	}
-	tx, err := s.DB.Begin()
+	tx, err := s.store.DB.Begin()
 	if err != nil {
 		return r, err
 	}
@@ -39,12 +39,12 @@ func (s *Store) ClaimExtendedTask(uid uint64, hash string, action uint32, key ui
 		return r, err
 	}
 	r.Experience, r.Gold = task.Snapshot.Rule.Experience, task.Snapshot.Rule.Gold
-	r.GoldBalance, err = creditRewardProgress(r.Profile, uint64(r.GoldBalance), r.Experience, r.Gold, growth)
+	r.GoldBalance, r.Items, err = (RewardManager{}).GrantProgressItems(tx, uid, r.Profile, uint64(r.GoldBalance), r.Experience, r.Gold, growth)
 	if err != nil {
 		return TaskAwards{}, err
 	}
 	if task.Snapshot.Rule.RewardCatalog != 0 {
-		item, e := awardCatalogItem(tx, uid, task.Snapshot.Rule.RewardCatalog)
+		item, e := (RewardManager{}).GrantItem(tx, uid, task.Snapshot.Rule.RewardCatalog)
 		if e != nil {
 			return TaskAwards{}, e
 		}

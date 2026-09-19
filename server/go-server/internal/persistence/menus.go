@@ -27,7 +27,7 @@ func DecodeGBK(encoded []byte) (string, error) {
 	return text, nil
 }
 
-func (store *Store) Rename(uid uint64, nickname string) (string, error) {
+func (m *RoleManager) Rename(uid uint64, nickname string) (string, error) {
 	encoded := GBK(nickname)
 	if len(encoded) == 0 || len(encoded) > 20 || strings.TrimSpace(nickname) != nickname {
 		return "", ErrDenied
@@ -35,7 +35,7 @@ func (store *Store) Rename(uid uint64, nickname string) (string, error) {
 	if decoded, err := DecodeGBK(encoded); err != nil || decoded != nickname {
 		return "", ErrDenied
 	}
-	transaction, err := store.DB.Begin()
+	transaction, err := m.store.DB.Begin()
 	if err != nil {
 		return "", err
 	}

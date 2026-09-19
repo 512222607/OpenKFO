@@ -95,41 +95,41 @@ func TestTitleSettingsLocalDatabase(t *testing.T) {
 		}
 	}
 	s := &Store{DB: db}
-	a, err := s.TitleSettings()
+	a, err := s.TitleManager().TitleSettings()
 	if err != nil || a.Revision != 0 || a.Rules.Enabled {
 		t.Fatal(a, err)
 	}
 	a.Rules.Enabled = true
 	a.Rules.Titles = []TitleRule{{Level: 1, Enabled: true, Matches: 10, Choices: []uint32{7}}}
-	saved, err := s.SaveTitleSettings(a)
+	saved, err := s.TitleManager().SaveTitleSettings(a)
 	if err != nil || saved.Revision != 1 {
 		t.Fatal(saved, err)
 	}
-	if _, err = s.SaveTitleSettings(a); err == nil {
+	if _, err = s.TitleManager().SaveTitleSettings(a); err == nil {
 		t.Fatal("stale save accepted")
 	}
 	if _, err = db.Exec(`INSERT INTO title_rules_audit VALUES(2,'{}','{}')`); err != nil {
 		t.Fatal(err)
 	}
 	saved.Rules.Enabled = false
-	if _, err = s.SaveTitleSettings(saved); err == nil {
+	if _, err = s.TitleManager().SaveTitleSettings(saved); err == nil {
 		t.Fatal("audit failure accepted")
 	}
-	restored, err := s.TitleSettings()
+	restored, err := s.TitleManager().TitleSettings()
 	if err != nil || restored.Revision != 1 || !restored.Rules.Enabled {
 		t.Fatal(restored, err)
 	}
 	if _, err = db.Exec(`DELETE FROM title_rules_audit WHERE revision=2`); err != nil {
 		t.Fatal(err)
 	}
-	saved, err = s.SaveTitleSettings(saved)
+	saved, err = s.TitleManager().SaveTitleSettings(saved)
 	if err != nil || saved.Rules.Enabled || len(saved.Rules.Titles) != 1 {
 		t.Fatal(saved, err)
 	}
 	if _, err = db.Exec(`UPDATE title_rules SET rules='{"enabled":true,"titles":[]}'`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.TitleSettings(); err == nil {
+	if _, err = s.TitleManager().TitleSettings(); err == nil {
 		t.Fatal("corrupt enabled rules accepted")
 	}
 }

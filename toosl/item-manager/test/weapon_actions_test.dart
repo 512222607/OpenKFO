@@ -15,6 +15,8 @@ void main(){
     ]}]};
   }
   await tester.pumpWidget(MaterialApp(home:WeaponConfigPage(api:api)));await tester.pumpAndSettle();
+  await tester.tap(find.text('其他动作（2）'));await tester.pumpAndSettle();
+  await tester.tap(find.text('状态 2021'));await tester.pumpAndSettle();
   expect(find.text('招式 2021'),findsOneWidget);expect(find.text('移动'),findsNothing);
   await tester.tap(find.text('命中 811106 · 基础伤害 9'));await tester.pumpAndSettle();
   await tester.enterText(find.widgetWithText(TextFormField,'基础伤害'),'71');

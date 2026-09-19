@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 const rewardColumns = <String, String>{
   'level': '等级',
   'next_experience': '升级所需经验',
@@ -82,6 +84,18 @@ List<String> rewardDiff(
   Map<String, dynamic> target,
 ) {
   final a = rewardRows(source), b = rewardRows(target), result = <String>[];
+  if (jsonEncode(source['level_gifts'] ?? []) !=
+      jsonEncode(target['level_gifts'] ?? [])) {
+    result.add(
+      '升级礼包：${jsonEncode(target['level_gifts'] ?? [])} → ${jsonEncode(source['level_gifts'] ?? [])}',
+    );
+  }
+  if (jsonEncode(source['tutorial_reward'] ?? {}) !=
+      jsonEncode(target['tutorial_reward'] ?? {})) {
+    result.add(
+      '新手引导奖励：${jsonEncode(target['tutorial_reward'] ?? {})} → ${jsonEncode(source['tutorial_reward'] ?? {})}',
+    );
+  }
   final sourceDrops = source['drops'] as List? ?? [];
   final targetDrops = target['drops'] as List? ?? [];
   for (var i = 0; i < sourceDrops.length || i < targetDrops.length; i++) {

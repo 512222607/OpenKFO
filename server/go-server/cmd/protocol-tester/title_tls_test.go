@@ -201,7 +201,7 @@ func TestTitlesTLS(t *testing.T) {
 	reconnect()
 	expect(query(), 4300, 1240, 6020)
 	expect(send(4126, claim), 20150) // No pending offer after both titles were claimed.
-	snapshot, e := store.Snapshot(uid)
+	snapshot, e := store.RoleManager().Snapshot(uid)
 	if e != nil || snapshot.Profile[persistence.TitleLevelOffset] != 2 || len(snapshot.Inventory) != len(a.Inventory)+2 {
 		t.Fatal("persistent title/inventory mismatch", e)
 	}

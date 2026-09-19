@@ -8,7 +8,7 @@ import (
 )
 
 func activeVIPCard(r []byte) bool {
-	return len(r) == 68 && r[4] == 73 && protocol.ReadUint32(r, 19) == 1 && protocol.ReadUint32(r, 5) >= 730001 && protocol.ReadUint32(r, 5) <= 730003
+	return len(r) == 68 && r[4] == protocol.ItemVIPCard && protocol.ReadUint32(r, 19) == 1 && protocol.ReadUint32(r, 5) >= 730001 && protocol.ReadUint32(r, 5) <= 730003
 }
 
 // Use only server-projected inventory (Snapshot expires cards before returning).
@@ -98,7 +98,7 @@ func (v *VIPMembership) include(record []byte, deadline sql.NullInt64, now int64
 	if len(record) != 68 {
 		return ErrDenied
 	}
-	if record[4] != 73 || protocol.ReadUint32(record, 19) != 1 || (deadline.Valid && deadline.Int64 <= now) {
+	if record[4] != protocol.ItemVIPCard || protocol.ReadUint32(record, 19) != 1 || (deadline.Valid && deadline.Int64 <= now) {
 		return nil
 	}
 	id := protocol.ReadUint32(record, 5)

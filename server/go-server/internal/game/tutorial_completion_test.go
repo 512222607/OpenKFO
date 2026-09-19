@@ -28,10 +28,21 @@ func TestTutorialCompletionLocalDatabase(t *testing.T) {
 	defer db.Close()
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
-	if _, e = db.Exec("CREATE TEMPORARY TABLE accounts(uid BIGINT PRIMARY KEY,profile BLOB) ENGINE=InnoDB"); e != nil {
+	if _, e = db.Exec("CREATE TEMPORARY TABLE title_rewards(uid BIGINT,title_level TINYINT,choices BLOB,claimed_key INT UNSIGNED NULL,claimed_instance INT UNSIGNED NULL,PRIMARY KEY(uid,title_level)) ENGINE=InnoDB"); e != nil {
 		t.Fatal(e)
 	}
+	if _, e = db.Exec("CREATE TEMPORARY TABLE accounts(uid BIGINT PRIMARY KEY,profile BLOB,gold INT DEFAULT 0,tickets INT DEFAULT 0) ENGINE=InnoDB"); e != nil {
+		t.Fatal(e)
+	}
+	for _, q := range []string{"CREATE TEMPORARY TABLE tutorial_rewards(uid BIGINT PRIMARY KEY,reward BLOB) ENGINE=InnoDB", "CREATE TEMPORARY TABLE battle_reward_rules(id INT PRIMARY KEY,rules BLOB) ENGINE=InnoDB"} {
+		if _, e = db.Exec(q); e != nil {
+			t.Fatal(e)
+		}
+	}
 	for _, level := range []byte{0, 1, 2, 8} {
+		if _, e = db.Exec("DELETE FROM tutorial_rewards"); e != nil {
+			t.Fatal(e)
+		}
 		h, s, peer, _ := combatFixture()
 		r := s.Room
 		delete(r.Members, peer.UID)
@@ -85,13 +96,9 @@ func TestTutorialCompletionLocalDatabase(t *testing.T) {
 		if want < 2 {
 			want = 2
 		}
-		if want == 2 {
-			out := roomOutputs(t, s, 4125, 3115)
-			if len(out[0].Payload) != 64 || out[0].Payload[0] != want || !bytes.Equal(out[0].Payload[1:], make([]byte, 63)) {
-				t.Fatal("invalid title status")
-			}
-		} else {
-			roomOutputs(t, s, 3115)
+		out := roomOutputs(t, s, 4125, 1240, 1230, 3115, notice("").ID)
+		if len(out[0].Payload) != 64 || out[0].Payload[0] != want {
+			t.Fatal("native guide gate not synchronized before leave")
 		}
 
 		if s.Room != nil || s.game().Phase != "lobby" || len(h.Rooms) != 0 {
@@ -109,5 +116,89 @@ func TestTutorialCompletionLocalDatabase(t *testing.T) {
 			t.Fatal(e)
 		}
 		roomOutputs(t, s)
+		// Reproduce the stale native 3010 that arrived 100ms after 3115.
+		for i := 0; i < 2; i++ {
+			roomRequest(t, h, s, 3010, r.Request)
+			repair := roomOutputs(t, s, 4125, 3115, 20150)
+			if repair[0].Payload[0] != want || s.Room != nil || len(h.Rooms) != 0 {
+				t.Fatal("completed guide recreated")
+			}
+		}
 	}
+	t.Run("native weapon selection and relogin", func(t *testing.T) {
+		exec := func(q string, args ...any) {
+			t.Helper()
+			if _, err := db.Exec(q, args...); err != nil {
+				t.Fatal(err)
+			}
+		}
+		for _, q := range []string{
+			"CREATE TEMPORARY TABLE item_definitions(definition_key INT PRIMARY KEY,revision BIGINT,record BLOB,days INT) ENGINE=InnoDB",
+			"CREATE TEMPORARY TABLE offers(catalog_key INT PRIMARY KEY,record BLOB,enabled BOOL) ENGINE=InnoDB",
+			"CREATE TEMPORARY TABLE inventory(uid BIGINT,instance INT UNSIGNED,record BLOB,PRIMARY KEY(uid,instance)) ENGINE=InnoDB",
+			"CREATE TEMPORARY TABLE inventory_expirations(uid BIGINT,instance INT UNSIGNED,expires_at BIGINT,PRIMARY KEY(uid,instance)) ENGINE=InnoDB",
+			"DELETE FROM tutorial_rewards", "DELETE FROM title_rewards",
+		} {
+			exec(q)
+		}
+		h, s, peer, _ := combatFixture()
+		h.Store = &persistence.Store{DB: db}
+		r := s.Room
+		delete(r.Members, peer.UID)
+		r.Request[37], r.Request[46] = 1, 4
+		protocol.WriteUint32(r.Request, 38, 1201)
+		protocol.WriteUint32(r.Request, 42, 1201)
+		r.Members[s.UID].Input = true
+		exec("REPLACE INTO accounts(uid,profile) VALUES(?,?)", s.UID, make([]byte, 360))
+		for key := uint32(1); key <= 2; key++ {
+			record := make([]byte, 68)
+			record[4] = 25
+			protocol.WriteUint32(record, 5, 253000+key)
+			protocol.WriteUint16(record, 23, 1)
+			exec("INSERT INTO item_definitions VALUES(?,1,?,1)", key, record)
+		}
+		exec("INSERT INTO battle_reward_rules VALUES(1,?)", []byte(`{"tutorial_reward":{"items":[1,2],"gold":0,"tickets":0}}`))
+		if err := h.route(s, s.game(), protocol.Message{ID: 4124}); err != nil {
+			t.Fatal(err)
+		}
+		out := roomOutputs(t, s, 1550, 4125, 1240, 1230, 3115, 20150)
+		if len(out[0].Payload) != 216 || protocol.ReadUint32(out[1].Payload, 8) != 1 || protocol.ReadUint32(out[1].Payload, 16) != 2 || s.TitleOffer != 2 {
+			t.Fatal("missing catalogue or selection")
+		}
+		var count int
+		db.QueryRow("SELECT COUNT(*) FROM inventory").Scan(&count)
+		if count != 0 {
+			t.Fatal("weapon granted before selection")
+		}
+		// Session reset: restore via the existing login task refresh hook,
+		// including when ordinary title advancement is disabled.
+		s.TitleOffer = 0
+		h.Config.TitleLevels = nil
+		if err := h.announceTitleReward(s); err != nil {
+			t.Fatal(err)
+		}
+		roomOutputs(t, s, 1550, 4125)
+		claim := make([]byte, 149)
+		protocol.WriteUint32(claim, 145, 2)
+		if err := h.route(s, s.game(), protocol.Message{ID: 4126, Payload: claim}); err != nil {
+			t.Fatal(err)
+		}
+		awarded := roomOutputs(t, s, 2160, 20150)
+		if protocol.ReadUint32(awarded[0].Payload, 5) != 253002 {
+			t.Fatal("wrong choice")
+		}
+		if err := h.route(s, s.game(), protocol.Message{ID: 4126, Payload: claim}); err != nil {
+			t.Fatal(err)
+		}
+		roomOutputs(t, s, 2161, 20150)
+		protocol.WriteUint32(claim, 145, 1)
+		if err := h.route(s, s.game(), protocol.Message{ID: 4126, Payload: claim}); err != nil {
+			t.Fatal(err)
+		}
+		roomOutputs(t, s, 20150)
+		db.QueryRow("SELECT COUNT(*) FROM inventory").Scan(&count)
+		if count != 1 {
+			t.Fatal("duplicate reward", count)
+		}
+	})
 }

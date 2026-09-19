@@ -16,6 +16,7 @@ import (
 )
 
 type Request struct {
+	Definition       *persistence.ItemDefinition     `json:"definition,omitempty"`
 	StageUnlocks     *persistence.StagePlayerUnlocks `json:"stage_unlocks,omitempty"`
 	WeaponSettings   *persistence.WeaponSettings     `json:"weapon_settings,omitempty"`
 	VIPShopSettings  *persistence.VIPShopSettings    `json:"vip_shop_settings,omitempty"`
@@ -183,6 +184,7 @@ func (admin *Admin) Call(request Request) (any, error) {
 	remote.WeaponSettings = request.WeaponSettings
 	remote.VIPShopSettings = request.VIPShopSettings
 	remote.TalismanSettings = request.TalismanSettings
+	remote.Definition = request.Definition
 	remote.Tasks = request.Tasks
 	remote.Titles = request.Titles
 	remote.VIPKind = request.VIPKind
@@ -193,7 +195,7 @@ func (admin *Admin) Call(request Request) (any, error) {
 		return call(remote)
 	case "vip_shop_settings_get", "vip_shop_settings_save", "talisman_settings_get", "talisman_settings_save", "weapon_settings_get", "weapon_settings_save", "training_get", "training_save", "stages_get", "stages_save", "honour_get", "honour_save", "vip_get", "vip_grant":
 		return call(remote)
-	case "accounts", "inventory", "inventory_expiry", "wallet_accounts", "wallet_update", "rewards_get", "rewards_save":
+	case "definitions_get", "definition_save", "accounts", "inventory", "inventory_expiry", "wallet_accounts", "wallet_update", "rewards_get", "rewards_save":
 		return call(remote)
 	}
 	client := filepath.Join(admin.Root, "runtime-local", "client")
@@ -258,6 +260,39 @@ func (admin *Admin) Call(request Request) (any, error) {
 	}
 	if strings.HasPrefix(request.Operation, "weapon_") {
 		return weaponHandle(request, client, items, filepath.Join(admin.Root, "runtime-local", "weapon-config"))
+	}
+	if request.Operation == "definition_from_item" {
+		for _, item := range items {
+			if item.Key != request.Key {
+				continue
+			}
+			if item.ID > 0x1fffffff {
+				return nil, fmt.Errorf("物品编号超出奖励目录范围")
+			}
+			key := uint32(0x60000000) + item.ID // Independent reward namespace, never a player instance.
+			d := persistence.ItemDefinition{Key: key, Record: template(item, 1, 7)}
+			if item.Timed {
+				d.Days = 7
+			}
+			raw, e := call(persistence.AdminRequest{Operation: "definitions_get"})
+			if e != nil {
+				return nil, e
+			}
+			var existing []persistence.ItemDefinition
+			if e = json.Unmarshal(raw, &existing); e != nil {
+				return nil, e
+			}
+			for _, old := range existing {
+				if old.Key == key {
+					if bytes.Equal(old.Record, d.Record) && old.Days == d.Days {
+						return old, nil
+					}
+					return nil, fmt.Errorf("该物品已有不同奖励规格，请从已有定义中选择")
+				}
+			}
+			return call(persistence.AdminRequest{Operation: "definition_save", Definition: &d})
+		}
+		return nil, fmt.Errorf("物品不在当前客户端目录")
 	}
 	if request.Operation == "catalog" {
 		categories := map[byte]bool{}

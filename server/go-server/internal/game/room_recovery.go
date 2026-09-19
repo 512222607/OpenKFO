@@ -34,7 +34,7 @@ func (hub *Hub) expireLoading(room *Room, serial uint32) {
 func (hub *Hub) recoverRoom(room *Room, reason string) error {
 	peers := make([]roomPeer, 0, len(room.Members))
 	for uid, member := range room.Members {
-		account, err := hub.Store.Snapshot(uid)
+		account, err := hub.Store.RoleManager().Snapshot(uid)
 		if err != nil {
 			return err
 		}
@@ -61,15 +61,15 @@ func (hub *Hub) restoreRoom(room *Room, peers []roomPeer, reason string) {
 		m.TalismanEvents = nil
 		m.Session.ConsumeIntents = nil
 		m.Session.TalismanPending = nil
-		m.Session.sendGame(protocol.Message{ID: 3115})
+		m.Session.sendGame(protocol.Message{ID: protocol.MsgRoomLeft})
 	}
 	for _, peer := range peers {
 		own := bytes.Clone(peer.raw)
 		own[53] = 0
 		s := peer.member.Session
 		s.game().Phase = "room"
-		s.sendGame(protocol.Message{ID: 3100, Payload: roomEntryForMember(room, peer.member, own)})
-		s.sendGame(protocol.Message{ID: 3160, Payload: protocol.Uint64Bytes(room.Owner)})
+		s.sendGame(protocol.Message{ID: protocol.MsgRoomEntered, Payload: roomEntryForMember(room, peer.member, own)})
+		s.sendGame(protocol.Message{ID: protocol.MsgRoomOwner, Payload: protocol.Uint64Bytes(room.Owner)})
 		var roster []byte
 		for _, other := range peers {
 			if other.member != peer.member {

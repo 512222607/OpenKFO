@@ -50,14 +50,14 @@ func TestTaskLifecycleLocalDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	store := &Store{DB: db}
-	list, err := store.Tasks(1, 0, 0)
+	list, err := store.TaskManager().Tasks(1, 0, 0)
 	if err != nil || len(list) != 1 || list[0].Key != 1001 || list[0].State != 1 {
 		t.Fatal(list, err)
 	}
-	if _, err = store.Tasks(1, 6050, 1002); err == nil {
+	if _, err = store.TaskManager().Tasks(1, 6050, 1002); err == nil {
 		t.Fatal("locked successor accepted")
 	}
-	list, err = store.Tasks(1, 6050, 1001)
+	list, err = store.TaskManager().Tasks(1, 6050, 1001)
 	if err != nil || list[0].State != 2 || list[0].ProfileBaseline[0] != 50 {
 		t.Fatal(list, err)
 	}
@@ -65,7 +65,7 @@ func TestTaskLifecycleLocalDatabase(t *testing.T) {
 	if _, err = db.Exec("UPDATE accounts SET profile=? WHERE uid=1", profile); err != nil {
 		t.Fatal(err)
 	}
-	list, err = store.Tasks(1, 6050, 1001)
+	list, err = store.TaskManager().Tasks(1, 6050, 1001)
 	if err != nil || list[0].ProfileBaseline[0] != 50 {
 		t.Fatal("repeat acceptance reset baseline", list, err)
 	}
@@ -78,15 +78,15 @@ func TestTaskLifecycleLocalDatabase(t *testing.T) {
 	if err = json.Unmarshal(snapshot, &frozen); err != nil || revision != 7 || frozen.Experience != 100 {
 		t.Fatal(frozen, err)
 	}
-	list, err = store.Tasks(2, 0, 0)
+	list, err = store.TaskManager().Tasks(2, 0, 0)
 	if err != nil || list[0].State != 1 {
 		t.Fatal("account isolation failed", list, err)
 	}
-	list, err = store.Tasks(1, 6080, 1001)
+	list, err = store.TaskManager().Tasks(1, 6080, 1001)
 	if err != nil || list[0].State != 1 || list[0].ProfileBaseline[0] != 0 {
 		t.Fatal(list, err)
 	}
-	list, err = store.Tasks(1, 6050, 1001)
+	list, err = store.TaskManager().Tasks(1, 6050, 1001)
 	if err != nil || list[0].ProfileBaseline[0] != 60 {
 		t.Fatal("new acceptance did not snapshot", list, err)
 	}
@@ -94,17 +94,17 @@ func TestTaskLifecycleLocalDatabase(t *testing.T) {
 	if _, err = db.Exec("UPDATE task_progress SET state=3 WHERE uid=1 AND task_key=1001"); err != nil {
 		t.Fatal(err)
 	}
-	list, err = store.Tasks(1, 0, 0)
+	list, err = store.TaskManager().Tasks(1, 0, 0)
 	if err != nil || len(list) != 2 || list[1].Key != 1002 || list[1].State != 1 {
 		t.Fatal("successor not unlocked", list, err)
 	}
-	if _, err = store.Tasks(1, 6080, 1001); err == nil {
+	if _, err = store.TaskManager().Tasks(1, 6080, 1001); err == nil {
 		t.Fatal("completed task cancelled")
 	}
-	if _, err = store.Tasks(3, 6050, 1001); err == nil {
+	if _, err = store.TaskManager().Tasks(3, 6050, 1001); err == nil {
 		t.Fatal("unknown account accepted")
 	}
-	if _, err = store.Tasks(1, 6030, 1001); err == nil {
+	if _, err = store.TaskManager().Tasks(1, 6030, 1001); err == nil {
 		t.Fatal("client completion accepted")
 	}
 	rules.Enabled = false
@@ -112,11 +112,11 @@ func TestTaskLifecycleLocalDatabase(t *testing.T) {
 	if _, err = db.Exec("UPDATE task_rules SET rules=?", data); err != nil {
 		t.Fatal(err)
 	}
-	list, err = store.Tasks(1, 0, 0)
+	list, err = store.TaskManager().Tasks(1, 0, 0)
 	if err != nil || len(list) != 0 {
 		t.Fatal(list, err)
 	}
-	if _, err = store.Tasks(1, 6050, 1002); err == nil {
+	if _, err = store.TaskManager().Tasks(1, 6050, 1002); err == nil {
 		t.Fatal("disabled task accepted")
 	}
 	var count int

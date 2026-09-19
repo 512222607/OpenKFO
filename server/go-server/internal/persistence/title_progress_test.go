@@ -26,6 +26,9 @@ func TestTitleProgressLocalDatabase(t *testing.T) {
 	defer db.Close()
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
+	if _, e := db.Exec("CREATE TEMPORARY TABLE item_definitions(definition_key INT PRIMARY KEY,revision BIGINT,record BLOB,days INT) ENGINE=InnoDB"); e != nil {
+		t.Fatal(e)
+	}
 	exec := func(q string, args ...any) {
 		t.Helper()
 		if _, e := db.Exec(q, args...); e != nil {
@@ -54,6 +57,7 @@ func TestTitleProgressLocalDatabase(t *testing.T) {
 		protocol.WriteUint32(item, 13, 24)
 		exec("INSERT INTO offers VALUES(?,?,?,TRUE)", key, catalog, item)
 		exec("INSERT INTO offer_lifetimes VALUES(?,1)", key)
+		exec(seedDefinitionsSQL)
 	}
 	s := &Store{DB: db}
 
@@ -72,7 +76,7 @@ func TestTitleProgressLocalDatabase(t *testing.T) {
 	exec("UPDATE accounts SET profile=? WHERE uid=1", profile)
 	advance := func(want bool, supported []byte) {
 		t.Helper()
-		got, e := s.AdvanceTitle(1, supported, "")
+		got, e := s.TitleManager().AdvanceTitle(1, supported, "")
 		if e != nil || got != want {
 			t.Fatal(got, e)
 		}
@@ -88,7 +92,7 @@ func TestTitleProgressLocalDatabase(t *testing.T) {
 	rules.Enabled = true
 	save()
 	exec("UPDATE offers SET enabled=FALSE WHERE catalog_key=7")
-	if _, e := s.AdvanceTitle(1, []byte{1, 2}, ""); e == nil {
+	if _, e := s.TitleManager().AdvanceTitle(1, []byte{1, 2}, ""); e == nil {
 		t.Fatal("disabled offer accepted")
 	}
 	var unchanged []byte
@@ -100,15 +104,15 @@ func TestTitleProgressLocalDatabase(t *testing.T) {
 	advance(false, []byte{1, 2})
 	rules.Titles[1].Choices = []uint32{8}
 	save()
-	level, choices, e := s.PendingTitleReward(1)
+	level, choices, e := s.TitleManager().PendingTitleReward(1)
 	if e != nil || level != 1 || len(choices) != 1 || choices[0] != 7 {
 		t.Fatal("pending choices changed", e)
 	}
-	if _, e = s.ClaimTitleReward(1, 1, 7); e != nil {
+	if _, e = s.TitleManager().ClaimTitleReward(1, 1, 7); e != nil {
 		t.Fatal(e)
 	}
 	advance(true, []byte{1, 2})
-	level, choices, e = s.PendingTitleReward(1)
+	level, choices, e = s.TitleManager().PendingTitleReward(1)
 	if e != nil || level != 2 || len(choices) != 1 || choices[0] != 8 {
 		t.Fatal("next title missing", e)
 	}

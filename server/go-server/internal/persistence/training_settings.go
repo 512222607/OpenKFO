@@ -47,10 +47,10 @@ func (r TrainingRule) Award(minutes uint32) uint32 {
 	}
 	return uint32(amount)
 }
-func (s *Store) TrainingSettings() (TrainingSettings, error) {
+func (s *TrainingManager) TrainingSettings() (TrainingSettings, error) {
 	a := TrainingSettings{}
 	var data []byte
-	err := s.DB.QueryRow("SELECT revision,rules FROM training_rules WHERE id=1").Scan(&a.Revision, &data)
+	err := s.store.DB.QueryRow("SELECT revision,rules FROM training_rules WHERE id=1").Scan(&a.Revision, &data)
 	if err == sql.ErrNoRows {
 		return a, nil
 	}
@@ -62,7 +62,7 @@ func (s *Store) TrainingSettings() (TrainingSettings, error) {
 	}
 	return a, a.Validate()
 }
-func (s *Store) SaveTrainingSettings(a TrainingSettings) (TrainingSettings, error) {
+func (s *TrainingManager) SaveTrainingSettings(a TrainingSettings) (TrainingSettings, error) {
 	if err := a.Validate(); err != nil {
 		return TrainingSettings{}, err
 	}
@@ -73,7 +73,7 @@ func (s *Store) SaveTrainingSettings(a TrainingSettings) (TrainingSettings, erro
 	if err != nil {
 		return TrainingSettings{}, err
 	}
-	tx, err := s.DB.Begin()
+	tx, err := s.store.DB.Begin()
 	if err != nil {
 		return TrainingSettings{}, err
 	}

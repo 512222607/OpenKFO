@@ -82,40 +82,40 @@ func TestVIPShopPurchaseLocalDatabase(t *testing.T) {
 	protocol.WriteUint64(p, 4, 1)
 	protocol.WriteUint64(p, 54, 1)
 	protocol.WriteUint32(p, 145, 7)
-	if rate, e := s.VIPShopPercent(1); e != nil || rate != 80 {
+	if rate, e := s.ShopManager().VIPShopPercent(1); e != nil || rate != 80 {
 		t.Fatal(rate, e)
 	}
-	if rate, e := s.VIPShopPercent(2); e != nil || rate != 0 {
+	if rate, e := s.ShopManager().VIPShopPercent(2); e != nil || rate != 0 {
 		t.Fatal("nonmember", rate, e)
 	}
 	protocol.WriteUint32(p, 157, 1)
-	if _, _, _, e := s.Purchase(1, "forged", p); e == nil {
+	if _, _, _, e := s.ShopManager().Purchase(1, "forged", p); e == nil {
 		t.Fatal("forged price accepted")
 	}
 	protocol.WriteUint32(p, 157, 61)
-	if balance, _, _, e := s.Purchase(1, "first", p); e != nil || balance != 939 {
+	if balance, _, _, e := s.ShopManager().Purchase(1, "first", p); e != nil || balance != 939 {
 		t.Fatal("VIP purchase", balance, e)
 	}
 	exec(`UPDATE vip_shop_rules SET revision=2,rules='{"enabled":true,"silver":90,"gold":50,"platinum":70}'`)
-	if balance, _, _, e := s.Purchase(1, "first", p); e != nil || balance != 939 {
+	if balance, _, _, e := s.ShopManager().Purchase(1, "first", p); e != nil || balance != 939 {
 		t.Fatal("replay after price change", balance, e)
 	}
-	if _, _, _, e := s.Purchase(1, "stale", p); e == nil {
+	if _, _, _, e := s.ShopManager().Purchase(1, "stale", p); e == nil {
 		t.Fatal("stale price accepted")
 	}
 	protocol.WriteUint32(p, 157, 38)
-	if balance, _, _, e := s.Purchase(1, "second", p); e != nil || balance != 901 {
+	if balance, _, _, e := s.ShopManager().Purchase(1, "second", p); e != nil || balance != 901 {
 		t.Fatal("updated VIP purchase", balance, e)
 	}
 	exec("UPDATE inventory_expirations SET expires_at=? WHERE uid=1 AND instance=7", time.Now().Unix()-1)
-	if rate, e := s.VIPShopPercent(1); e != nil || rate != 0 {
+	if rate, e := s.ShopManager().VIPShopPercent(1); e != nil || rate != 0 {
 		t.Fatal("expired membership", rate, e)
 	}
-	if _, _, _, e := s.Purchase(1, "expired", p); e == nil {
+	if _, _, _, e := s.ShopManager().Purchase(1, "expired", p); e == nil {
 		t.Fatal("expired VIP discount")
 	}
 	protocol.WriteUint32(p, 157, 77)
-	if balance, _, _, e := s.Purchase(1, "third", p); e != nil || balance != 824 {
+	if balance, _, _, e := s.ShopManager().Purchase(1, "third", p); e != nil || balance != 824 {
 		t.Fatal("normal purchase", balance, e)
 	}
 	exec("UPDATE inventory_expirations SET expires_at=? WHERE uid=1 AND instance=7", time.Now().Unix()+3600)
@@ -126,19 +126,19 @@ func TestVIPShopPurchaseLocalDatabase(t *testing.T) {
 	copy(gift[170:], "VIP gift")
 	protocol.WriteUint32(gift, 145, 7)
 	protocol.WriteUint32(gift, 157, 61)
-	gr, e := s.Gift(1, "gift", gift)
+	gr, e := s.MailManager().Gift(1, "gift", gift)
 	if e != nil || gr.Balance != 763 || !gr.Created {
 		t.Fatal("VIP gift", gr, e)
 	}
 	exec("UPDATE inventory_expirations SET expires_at=? WHERE uid=1 AND instance=7", time.Now().Unix()-1)
-	if gr, e = s.Gift(1, "gift", gift); e != nil || gr.Balance != 763 || gr.Created {
+	if gr, e = s.MailManager().Gift(1, "gift", gift); e != nil || gr.Balance != 763 || gr.Created {
 		t.Fatal("gift replay", gr, e)
 	}
-	if _, e = s.Gift(1, "expired-gift", gift); e == nil {
+	if _, e = s.MailManager().Gift(1, "expired-gift", gift); e == nil {
 		t.Fatal("expired gift discount")
 	}
 	protocol.WriteUint32(gift, 157, 77)
-	if gr, e = s.Gift(1, "normal-gift", gift); e != nil || gr.Balance != 686 {
+	if gr, e = s.MailManager().Gift(1, "normal-gift", gift); e != nil || gr.Balance != 686 {
 		t.Fatal("normal gift", gr, e)
 	}
 	var purchases, mail int
@@ -156,12 +156,12 @@ func TestVIPShopPurchaseLocalDatabase(t *testing.T) {
 	protocol.WriteUint32(p, 0, 111)
 	protocol.WriteUint32(p, 149, 100)
 	protocol.WriteUint32(p, 157, 0)
-	if balance, _, _, e := s.Purchase(1, "gold", p); e != nil || balance != 900 {
+	if balance, _, _, e := s.ShopManager().Purchase(1, "gold", p); e != nil || balance != 900 {
 		t.Fatal("gold purchase", balance, e)
 	}
 	exec("UPDATE inventory_expirations SET expires_at=? WHERE uid=1 AND instance=7", time.Now().Unix()+3600)
 	protocol.WriteUint32(p, 149, 80)
-	if balance, _, _, e := s.Purchase(1, "vip-gold", p); e != nil || balance != 820 {
+	if balance, _, _, e := s.ShopManager().Purchase(1, "vip-gold", p); e != nil || balance != 820 {
 		t.Fatal("VIP gold", balance, e)
 	}
 }

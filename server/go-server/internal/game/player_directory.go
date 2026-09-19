@@ -101,6 +101,6 @@ func (hub *Hub) playerDirectory(s *Session, payload []byte) error {
 			return persistence.ErrDenied
 		}
 	}
-	s.sendGame(protocol.Message{ID: 2270, Payload: reply})
+	s.sendGame(protocol.Message{ID: protocol.MsgPlayerList, Payload: reply})
 	return nil
 }

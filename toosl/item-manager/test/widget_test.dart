@@ -69,6 +69,11 @@ void main() {
     expect(grant?['uid'], 1002);
     expect(grant?['keys'], ['12:121001']);
     expect(find.text('背包已更新'), findsOneWidget);
+    await tester.tap(find.text('知道了'));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byKey(const ValueKey('gm-sidebar-scroll')), const Offset(0, -1600));
+    await tester.pumpAndSettle();
+    expect(find.text('VIP管理').hitTestable(), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

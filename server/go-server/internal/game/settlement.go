@@ -89,7 +89,7 @@ func (hub *Hub) settleReport(session *Session, payload []byte) error {
 		}
 	}
 	alive := map[uint64]bool{}
-	teamMode := room.Request[46] == 1 || room.Request[46] == 3
+	teamMode := room.Type() == protocol.TeamSurvival || room.Type() == protocol.TeamDeathmatch
 	group := func(uid uint64) uint64 {
 		if teamMode {
 			return uint64(room.Members[uid].Team)
@@ -102,7 +102,7 @@ func (hub *Hub) settleReport(session *Session, payload []byte) error {
 		}
 	}
 	var rewards []persistence.BattleReward
-	settings, err := hub.Store.BattleRewards(hub.Config.Settlement)
+	settings, err := hub.Store.RewardManager().BattleRewards(hub.Config.Settlement)
 	if err != nil {
 		return fmt.Errorf("settlement rules: %w", err)
 	}
@@ -126,15 +126,15 @@ func (hub *Hub) settleReport(session *Session, payload []byte) error {
 			outcome, gold = "unconfirmed", 0
 			experience = 0
 		}
-		period, points := honour.Award(room.Request[46], outcome, len(room.Members))
-		mode := room.Request[46]
+		period, points := honour.Award(byte(room.Type()), outcome, len(room.Members))
+		mode := byte(room.Type())
 		rewards = append(rewards, persistence.BattleReward{TaskClientHash: hub.Config.ConfigHash, BattleMode: &mode, UID: uid, Outcome: outcome, Gold: gold, Experience: experience, StartLevel: member.BattleLevel, HonourPeriod: period, HonourPoints: points})
 	}
 	reports, err := json.Marshal(room.Reports)
 	if err != nil {
 		return err
 	}
-	rewards, err = hub.Store.SettleBattle(room.Serial, reports, rewards, settings.Rules)
+	rewards, err = hub.Store.BattleManager().SettleBattle(room.Serial, reports, rewards, settings.Rules)
 	if err != nil {
 		return fmt.Errorf("settlement persistence: %w", err)
 	}
@@ -150,11 +150,14 @@ func (hub *Hub) settleReport(session *Session, payload []byte) error {
 		s.sendGame(protocol.Message{ID: 4300, Payload: bytes.Clone(r.Profile[persistence.ExperienceOffset : persistence.ExperienceOffset+8])})
 		s.sendGame(protocol.Message{ID: 1240, Payload: protocol.Uint32Bytes(r.GoldBalance)})
 		for _, item := range r.Items {
-			s.sendGame(protocol.Message{ID: 2160, Payload: bytes.Clone(item)})
+			s.sendGame(protocol.Message{ID: protocol.MsgItemAdded, Payload: bytes.Clone(item)})
 			if s.Inventory == nil {
 				s.Inventory = map[uint32][]byte{}
 			}
 			s.Inventory[protocol.ReadUint32(item, 0)] = bytes.Clone(item)
+		}
+		if err := hub.rewardBalances(s, settings.Rules.LevelGifts); err != nil {
+			return err
 		}
 		s.sendGame(settlementPacket(room, rewards, r.UID))
 		log.Printf("battle_settled serial=%d room=%d uid=%d outcome=%s gold=%d experience=%d start_level=%d level=%d drops=%d titles=disabled", room.Serial, room.ID, r.UID, r.Outcome, r.Gold, r.Experience, room.Members[r.UID].BattleLevel, persistence.ProfileLevel(r.Profile), len(r.Items))
@@ -199,7 +202,7 @@ func settlementPacket(room *Room, rewards []persistence.BattleReward, recipient 
 
 func (hub *Hub) returnFromSettlement(session *Session) error {
 	room := session.Room
-	account, err := hub.Store.Snapshot(session.UID)
+	account, err := hub.Store.RoleManager().Snapshot(session.UID)
 	if err != nil {
 		return err
 	}
@@ -208,13 +211,13 @@ func (hub *Hub) returnFromSettlement(session *Session) error {
 		if uid == session.UID {
 			continue
 		}
-		other, err := hub.Store.Snapshot(uid)
+		other, err := hub.Store.RoleManager().Snapshot(uid)
 		if err != nil {
 			return err
 		}
 		peers = append(peers, roomPeer{member, fighter(other, member, false)})
 	}
-	session.sendGame(protocol.Message{ID: 3115})
+	session.sendGame(protocol.Message{ID: protocol.MsgRoomLeft})
 	room.Stage = "room"
 	hub.completeRoomJoin(room, room.Members[session.UID], fighter(account, room.Members[session.UID], false), peers)
 	if err := hub.extendedTaskLists(session); err != nil {

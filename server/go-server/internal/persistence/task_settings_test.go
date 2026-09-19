@@ -33,7 +33,7 @@ func TestTaskSettingsLocalDatabase(t *testing.T) {
 		}
 	}
 	s := &Store{DB: db}
-	a, err := s.TaskSettings()
+	a, err := s.TaskManager().TaskSettings()
 	if err != nil || a.Revision != 0 || a.Rules.Enabled {
 		t.Fatal(a, err)
 	}
@@ -42,38 +42,38 @@ func TestTaskSettingsLocalDatabase(t *testing.T) {
 	a.Rules.Catalogue = []TaskCatalogueEntry{{ID: 1001, TitleLevel: 2, Enabled: true}}
 	a.Rules.Tasks = []TaskRule{{ID: 1001, Enabled: true, Matches: 10, Counters: make([]uint32, 29), Experience: 200, Gold: 100}}
 	a.Rules.Extended = extendedTaskFixture()
-	saved, err := s.SaveTaskSettings(a)
+	saved, err := s.TaskManager().SaveTaskSettings(a)
 	if err != nil || saved.Revision != 1 {
 		t.Fatal(saved, err)
 	}
-	if _, err = s.SaveTaskSettings(a); err == nil {
+	if _, err = s.TaskManager().SaveTaskSettings(a); err == nil {
 		t.Fatal("stale save accepted")
 	}
 	if _, err = db.Exec(`INSERT INTO task_rules_audit VALUES(2,'{}','{}')`); err != nil {
 		t.Fatal(err)
 	}
 	saved.Rules.Enabled = false
-	if _, err = s.SaveTaskSettings(saved); err == nil {
+	if _, err = s.TaskManager().SaveTaskSettings(saved); err == nil {
 		t.Fatal("audit failure accepted")
 	}
-	restored, err := s.TaskSettings()
+	restored, err := s.TaskManager().TaskSettings()
 	if err != nil || restored.Revision != 1 || !restored.Rules.Enabled {
 		t.Fatal(restored, err)
 	}
 	if _, err = db.Exec(`DELETE FROM task_rules_audit WHERE revision=2`); err != nil {
 		t.Fatal(err)
 	}
-	saved, err = s.SaveTaskSettings(saved)
+	saved, err = s.TaskManager().SaveTaskSettings(saved)
 	if err != nil || saved.Rules.Enabled || len(saved.Rules.Tasks) != 1 {
 		t.Fatal(saved, err)
 	}
-	restored, err = s.TaskSettings()
+	restored, err = s.TaskManager().TaskSettings()
 	if err != nil || restored.Rules.ClientHash != strings.Repeat("a", 64) || len(restored.Rules.Catalogue) != 1 || restored.Rules.Catalogue[0].TitleLevel != 2 {
 		t.Fatal("catalogue round trip failed", restored, err)
 	}
 	stripped := saved
 	stripped.Rules.Extended = nil
-	if _, err = s.SaveTaskSettings(stripped); err == nil {
+	if _, err = s.TaskManager().SaveTaskSettings(stripped); err == nil {
 		t.Fatal("old GM erased extended rules")
 	}
 	if restored.Rules.Extended == nil || restored.Rules.Extended.Tasks[0].Gold != 500 || restored.Rules.Extended.Catalogue[0].Conditions[0].Required != 1 {
@@ -82,13 +82,13 @@ func TestTaskSettingsLocalDatabase(t *testing.T) {
 	stripped = saved
 	stripped.Rules.ClientHash = ""
 	stripped.Rules.Catalogue = nil
-	if _, err = s.SaveTaskSettings(stripped); err == nil {
+	if _, err = s.TaskManager().SaveTaskSettings(stripped); err == nil {
 		t.Fatal("old GM erased binding")
 	}
 	if _, err = db.Exec(`UPDATE task_rules SET rules='{"enabled":true,"tasks":[]}'`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.TaskSettings(); err == nil {
+	if _, err = s.TaskManager().TaskSettings(); err == nil {
 		t.Fatal("corrupt enabled rules accepted")
 	}
 }

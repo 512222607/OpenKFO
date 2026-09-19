@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 
 import 'reward_table.dart';
 import 'drop_config.dart';
+import 'level_gift_config.dart';
+import 'item_definitions.dart';
 
 typedef RewardApi = Future<dynamic> Function(Map<String, dynamic>);
 
@@ -27,6 +29,8 @@ class RewardConfigPage extends StatefulWidget {
 class _RewardConfigPageState extends State<RewardConfigPage> {
   List<Map<String, int>> rows = [];
   List<Map<String, dynamic>> drops = [];
+  List<Map<String, dynamic>> levelGifts = [];
+  Map<String, dynamic> tutorial = {"items": <int>[], "gold": 0, "tickets": 0};
   int? revision;
   bool busy = false, growth = false, dirty = false;
   String status = '';
@@ -34,6 +38,8 @@ class _RewardConfigPageState extends State<RewardConfigPage> {
     'growth_enabled': growth,
     'levels': rows,
     'drops': drops,
+    'level_gifts': levelGifts,
+    'tutorial_reward': tutorial,
   };
   @override
   void initState() {
@@ -58,6 +64,13 @@ class _RewardConfigPageState extends State<RewardConfigPage> {
     drops = (r['rules']['drops'] as List? ?? [])
         .map((e) => Map<String, dynamic>.from(e))
         .toList();
+    levelGifts = (r['rules']['level_gifts'] as List? ?? [])
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+    tutorial = Map<String, dynamic>.from(
+      r['rules']['tutorial_reward'] ??
+          {'items': <int>[], 'gold': 0, 'tickets': 0},
+    );
     growth = r['rules']['growth_enabled'] == true;
     revision = r['revision'] as int;
     dirty = false;
@@ -306,10 +319,7 @@ class _RewardConfigPageState extends State<RewardConfigPage> {
     if (importing) {
       final next = rewardsFromCsv(await file.readAsString());
       if (!mounted) return;
-      final changes = rewardDiff({
-        'levels': next,
-        'growth_enabled': growth,
-      }, rules);
+      final changes = rewardDiff({...rules, 'levels': next}, rules);
       if (await confirm(
         '导入 150 行到当前表格',
         '${changes.length} 项变化。确认后仍需点击保存。\n${changes.join('\n')}',
@@ -351,7 +361,7 @@ class _RewardConfigPageState extends State<RewardConfigPage> {
     }
     if (!await confirm(
       '确认用本地已保存配置覆盖线上？',
-      '共 ${diff.length} 项变化（线上旧值 → 本地新值）。不包含本页未保存修改。\n${diff.join('\n')}',
+      '共 ${diff.length} 项变化（线上旧值 → 本地新值）。不包含本页未保存修改。只复制奖励规则，请确认两边同编号物品定义一致；物品定义不会自动复制。\n${diff.join('\n')}',
     )) {
       return;
     }
@@ -382,7 +392,7 @@ class _RewardConfigPageState extends State<RewardConfigPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              '1–150 级成长与战斗奖励表 · 点击行编辑。奖励按开战等级计算；150 级为满级。\n这是自定义规则；客户端经验条分母仍取客户端配置，修改曲线后显示可能不同。武器掉落、称号单独配置，当前未启用。',
+              '1–150 级成长与战斗奖励表 · 点击行编辑。奖励按开战等级计算；150 级为满级。\n这是自定义规则；客户端经验条分母仍取客户端配置，修改曲线后显示可能不同。升级礼包、武器掉落可单独配置；空配置不发放。CSV仅包含成长数值，保留礼包和掉落。',
             ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
@@ -406,7 +416,10 @@ class _RewardConfigPageState extends State<RewardConfigPage> {
                           final result =
                               await showDialog<List<Map<String, dynamic>>>(
                                 context: context,
-                                builder: (_) => DropConfigDialog(drops: drops),
+                                builder: (_) => DropConfigDialog(
+                                  drops: drops,
+                                  api: widget.api,
+                                ),
                               );
                           if (result != null && mounted) {
                             setState(() {
@@ -416,6 +429,63 @@ class _RewardConfigPageState extends State<RewardConfigPage> {
                           }
                         },
                   child: Text('武器掉落（${drops.length}条）'),
+                ),
+                OutlinedButton(
+                  onPressed: busy || revision == null
+                      ? null
+                      : () async {
+                          final result =
+                              await showDialog<List<Map<String, dynamic>>>(
+                                context: context,
+                                builder: (_) => LevelGiftDialog(
+                                  gifts: levelGifts,
+                                  api: widget.api,
+                                ),
+                              );
+                          if (result != null && mounted) {
+                            setState(() {
+                              levelGifts = result;
+                              dirty = true;
+                            });
+                          }
+                        },
+                  child: Text('升级礼包（${levelGifts.length}级）'),
+                ),
+                OutlinedButton(
+                  onPressed: busy || revision == null
+                      ? null
+                      : () async {
+                          final result =
+                              await showDialog<List<Map<String, dynamic>>>(
+                                context: context,
+                                builder: (_) => LevelGiftDialog(
+                                  gifts: [tutorial],
+                                  api: widget.api,
+                                  tutorial: true,
+                                ),
+                              );
+                          if (result != null && mounted)
+                            setState(() {
+                              tutorial = result.single;
+                              dirty = true;
+                            });
+                        },
+                  child: const Text('新手引导奖励'),
+                ),
+
+                OutlinedButton(
+                  onPressed: busy
+                      ? null
+                      : () => Navigator.push(
+                          context,
+                          MaterialPageRoute<void>(
+                            builder: (_) => ItemDefinitionsPage(
+                              api: widget.api,
+                              environment: widget.environment,
+                            ),
+                          ),
+                        ),
+                  child: const Text('奖励物品定义'),
                 ),
                 FilledButton(
                   onPressed: busy || revision == null || revision == 0

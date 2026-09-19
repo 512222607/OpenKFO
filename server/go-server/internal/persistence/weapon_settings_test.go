@@ -33,7 +33,7 @@ func TestWeaponSettingsLocalDatabase(t *testing.T) {
 		}
 	}
 	s := &Store{DB: db}
-	a, err := s.WeaponSettings()
+	a, err := s.ItemManager().WeaponSettings()
 	if err != nil || a.Revision != 0 || a.Rules.Enabled {
 		t.Fatal(a, err)
 	}
@@ -41,35 +41,35 @@ func TestWeaponSettingsLocalDatabase(t *testing.T) {
 	for i := uint32(0); i <= 1; i++ {
 		a.Rules.Levels = append(a.Rules.Levels, WeaponLevel{Level: i, ScoreThreshold: 100, Gold: 50, DisplayOdds: 75})
 	}
-	saved, err := s.SaveWeaponSettings(a)
+	saved, err := s.ItemManager().SaveWeaponSettings(a)
 	if err != nil || saved.Revision != 1 {
 		t.Fatal(saved, err)
 	}
-	if _, err = s.SaveWeaponSettings(a); err == nil {
+	if _, err = s.ItemManager().SaveWeaponSettings(a); err == nil {
 		t.Fatal("stale save accepted")
 	}
 	if _, err = db.Exec(`INSERT INTO weapon_rules_audit VALUES(2,'{}','{}')`); err != nil {
 		t.Fatal(err)
 	}
 	saved.Rules.Enabled = false
-	if _, err = s.SaveWeaponSettings(saved); err == nil {
+	if _, err = s.ItemManager().SaveWeaponSettings(saved); err == nil {
 		t.Fatal("audit failure accepted")
 	}
-	restored, err := s.WeaponSettings()
+	restored, err := s.ItemManager().WeaponSettings()
 	if err != nil || restored.Revision != 1 || !restored.Rules.Enabled {
 		t.Fatal(restored, err)
 	}
 	if _, err = db.Exec(`DELETE FROM weapon_rules_audit WHERE revision=2`); err != nil {
 		t.Fatal(err)
 	}
-	saved, err = s.SaveWeaponSettings(saved)
+	saved, err = s.ItemManager().SaveWeaponSettings(saved)
 	if err != nil || saved.Rules.Enabled || len(saved.Rules.Levels) != 2 {
 		t.Fatal(saved, err)
 	}
 	if _, err = db.Exec(`UPDATE weapon_rules SET rules='{"enabled":true,"levels":[]}'`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.WeaponSettings(); err == nil {
+	if _, err = s.ItemManager().WeaponSettings(); err == nil {
 		t.Fatal("corrupt enabled rules accepted")
 	}
 }

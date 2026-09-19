@@ -68,34 +68,34 @@ func TestVIPShopSettingsLocalDatabase(t *testing.T) {
 	exec(`CREATE TEMPORARY TABLE vip_shop_rules(id TINYINT PRIMARY KEY,revision BIGINT UNSIGNED NOT NULL,rules MEDIUMBLOB NOT NULL) ENGINE=InnoDB`)
 	exec(`CREATE TEMPORARY TABLE vip_shop_rules_audit(revision BIGINT UNSIGNED PRIMARY KEY,before_data MEDIUMBLOB NOT NULL,after_data MEDIUMBLOB NOT NULL) ENGINE=InnoDB`)
 	s := &Store{DB: db}
-	a, err := s.VIPShopSettings()
+	a, err := s.ShopManager().VIPShopSettings()
 	if err != nil || a.Revision != 0 || a.Rules.Enabled {
 		t.Fatal(a, err)
 	}
 	a.Rules = VIPShopRules{Enabled: true, Silver: 90, Gold: 80, Platinum: 70}
-	saved, err := s.SaveVIPShopSettings(a)
+	saved, err := s.ShopManager().SaveVIPShopSettings(a)
 	if err != nil || saved.Revision != 1 {
 		t.Fatal(saved, err)
 	}
-	if _, err = s.SaveVIPShopSettings(a); err == nil {
+	if _, err = s.ShopManager().SaveVIPShopSettings(a); err == nil {
 		t.Fatal("stale write")
 	}
 	exec(`INSERT INTO vip_shop_rules_audit VALUES(2,'{}','{}')`)
 	saved.Rules.Enabled = false
-	if _, err = s.SaveVIPShopSettings(saved); err == nil {
+	if _, err = s.ShopManager().SaveVIPShopSettings(saved); err == nil {
 		t.Fatal("audit error ignored")
 	}
-	got, err := s.VIPShopSettings()
+	got, err := s.ShopManager().VIPShopSettings()
 	if err != nil || got.Revision != 1 || !got.Rules.Enabled {
 		t.Fatal("rollback", got, err)
 	}
 	exec(`DELETE FROM vip_shop_rules_audit WHERE revision=2`)
-	saved, err = s.SaveVIPShopSettings(saved)
+	saved, err = s.ShopManager().SaveVIPShopSettings(saved)
 	if err != nil || saved.Revision != 2 || saved.Rules.Enabled || saved.Rules.Gold != 80 {
 		t.Fatal(saved, err)
 	}
 	exec(`UPDATE vip_shop_rules SET rules='{"gold":101}'`)
-	if _, err = s.VIPShopSettings(); err == nil {
+	if _, err = s.ShopManager().VIPShopSettings(); err == nil {
 		t.Fatal("invalid stored policy")
 	}
 }

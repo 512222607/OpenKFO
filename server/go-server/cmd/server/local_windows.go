@@ -16,7 +16,7 @@ import (
 	"golang.org/x/crypto/ssh/knownhosts"
 )
 
-// No arguments means double-click console mode. Explicit CLI arguments retain
+// The local window starts a no-argument worker. Explicit CLI arguments retain
 // the normal server/admin behavior, including externally supplied database DSNs.
 func prepareLocalConsole() (func(), error) {
 	noop := func() {}
@@ -136,6 +136,6 @@ func prepareLocalConsole() (func(), error) {
 	os.Args = append(os.Args, "-config", filepath.Join(root, "config.json"), "-cert-dir", filepath.Join(root, "certificates"),
 		"-listen", "127.0.0.1:19090", "-tls-listen", "127.0.0.1:19091", "-trace-protocol", "-protocol-log", logPath)
 	fmt.Println("TLS: 127.0.0.1:19091 | Protocol log:", logPath)
-	fmt.Println("Press Ctrl+C or close this window to stop. No PowerShell or SSH helper process is required.")
+	fmt.Println("Local server ready; use the local monitor window to stop the server.")
 	return cleanup, nil
 }

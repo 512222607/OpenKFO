@@ -25,7 +25,7 @@ type ExtendedTaskState struct {
 // archive supplies hash. Native process pointers/state claims are not inputs.
 // Daily cycles use the database's UTC date as explicit emulator policy;
 // newbie tasks have one permanent cycle. Historical rows are retained.
-func (s *Store) ExtendedTaskTransition(uid uint64, hash string, action uint32, key uint16) (ExtendedTaskState, bool, error) {
+func (s *TaskManager) ExtendedTaskTransition(uid uint64, hash string, action uint32, key uint16) (ExtendedTaskState, bool, error) {
 	var result ExtendedTaskState
 	kind := ""
 	switch action {
@@ -39,7 +39,7 @@ func (s *Store) ExtendedTaskTransition(uid uint64, hash string, action uint32, k
 	if uid == 0 || key == 0 || hash == "" {
 		return result, false, ErrDenied
 	}
-	tx, err := s.DB.Begin()
+	tx, err := s.store.DB.Begin()
 	if err != nil {
 		return result, false, err
 	}

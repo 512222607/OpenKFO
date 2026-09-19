@@ -148,7 +148,7 @@ func TestTalismanRepairTLS(t *testing.T) {
 	protocol.WriteUint32(request, 4, 603001)
 	checkInventory := func(quota, materials uint16, receipts int) {
 		t.Helper()
-		account, e := store.Snapshot(uid)
+		account, e := store.RoleManager().Snapshot(uid)
 		if e != nil {
 			t.Fatal(e)
 		}

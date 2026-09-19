@@ -15,8 +15,9 @@ class StageConfigPage extends StatefulWidget {
 }
 
 class _StageConfigPageState extends State<StageConfigPage> {
-  final input = TextEditingController();
   List<int> disabled = [];
+  List<int> opened = [];
+  bool openAll = false;
   Map<String, dynamic> preserved = {};
   List<Map<String, dynamic>> requirements = [];
   bool showRequirements = false;
@@ -27,12 +28,6 @@ class _StageConfigPageState extends State<StageConfigPage> {
   void initState() {
     super.initState();
     load();
-  }
-
-  @override
-  void dispose() {
-    input.dispose();
-    super.dispose();
   }
 
   Future<void> run(Future<void> Function() action) async {
@@ -56,6 +51,8 @@ class _StageConfigPageState extends State<StageConfigPage> {
           .map((r) => Map<String, dynamic>.from(r as Map))
           .toList();
       disabled = (result['disabled_maps'] as List).cast<int>()..sort();
+      opened = ((result['force_open_maps'] as List?) ?? []).cast<int>();
+      openAll = result['force_open_all'] == true;
       status = '已读取 ${widget.environment}，版本 $revision';
     });
   }
@@ -71,6 +68,8 @@ class _StageConfigPageState extends State<StageConfigPage> {
         ...preserved,
         'revision': revision,
         'disabled_maps': disabled,
+        'force_open_all': openAll,
+        'force_open_maps': opened,
         if (preserved.containsKey('requirements')) 'requirements': requirements,
       },
     });
@@ -190,24 +189,6 @@ class _StageConfigPageState extends State<StageConfigPage> {
     });
   }
 
-  void add() {
-    final id = int.tryParse(input.text.trim());
-    if (id == null ||
-        id <= 0 ||
-        id > 2147483647 ||
-        disabled.contains(id) ||
-        disabled.length >= 4096) {
-      setState(() => status = '请输入未重复的正整数地图ID（最多4096项）');
-      return;
-    }
-    setState(() {
-      disabled.add(id);
-      disabled.sort();
-      input.clear();
-      status = '有未保存的修改';
-    });
-  }
-
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: Text('关卡开关 · ${widget.environment}')),
@@ -216,7 +197,9 @@ class _StageConfigPageState extends State<StageConfigPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('列表中的地图已关闭。移除后恢复服务器原有开放规则，不会解锁尚未支持的玩法。进行中的战斗不强制中断。'),
+          const Text(
+            '开放：跳过称号和个人解锁条件。原规则：恢复默认准入。只控制地图准入，不增加未实现的关卡玩法；进行中的战斗不强制中断。',
+          ),
           const SizedBox(height: 12),
           SwitchListTile(
             title: const Text('启用地图准入条件'),
@@ -233,7 +216,7 @@ class _StageConfigPageState extends State<StageConfigPage> {
             spacing: 8,
             children: [
               ChoiceChip(
-                label: const Text('关闭地图'),
+                label: const Text('地图开放设置'),
                 selected: !showRequirements,
                 onSelected: (_) => setState(() => showRequirements = false),
               ),
@@ -251,22 +234,28 @@ class _StageConfigPageState extends State<StageConfigPage> {
                 ),
             ],
           ),
-          Row(
+          Wrap(
+            spacing: 8,
             children: [
-              Expanded(
-                child: TextField(
-                  controller: input,
-                  enabled: !busy && revision != null,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: '地图ID'),
+              for (final mode in ['全部开放', '全部关闭', '恢复原规则'])
+                TextButton(
+                  onPressed: busy || requirements.isEmpty
+                      ? null
+                      : () => setState(() {
+                          openAll = mode == '全部开放';
+                          opened = [];
+                          disabled = mode == '全部关闭'
+                              ? requirements
+                                    .map((r) => r['map_id'] as int)
+                                    .toList()
+                              : [];
+                          status = '有未保存的修改';
+                        }),
+                  child: Text(mode),
                 ),
-              ),
-              TextButton(
-                onPressed: busy || revision == null ? null : add,
-                child: const Text('加入关闭列表'),
-              ),
             ],
           ),
+          if (requirements.isEmpty) const Text('请先读取客户端地图条件，保存后可按地图名称设置。'),
           Expanded(
             child: showRequirements
                 ? ListView.builder(
@@ -298,21 +287,44 @@ class _StageConfigPageState extends State<StageConfigPage> {
                     },
                   )
                 : ListView.builder(
-                    itemCount: disabled.length,
-                    itemBuilder: (context, i) => ListTile(
-                      title: Text('地图 ${disabled[i]}'),
-                      subtitle: const Text('关闭'),
-                      trailing: IconButton(
-                        tooltip: '恢复开放',
-                        icon: const Icon(Icons.remove_circle_outline),
-                        onPressed: busy
-                            ? null
-                            : () => setState(() {
-                                disabled.removeAt(i);
-                                status = '有未保存的修改';
-                              }),
-                      ),
-                    ),
+                    itemCount: requirements.length,
+                    itemBuilder: (context, i) {
+                      final r = requirements[i];
+                      final id = r['map_id'] as int;
+                      final mode = disabled.contains(id)
+                          ? '关闭'
+                          : (openAll || opened.contains(id))
+                          ? '开放'
+                          : '原规则';
+                      return ListTile(
+                        title: Text('${r['name']}'),
+                        trailing: DropdownButton<String>(
+                          value: mode,
+                          items: ['原规则', '开放', '关闭']
+                              .map(
+                                (v) =>
+                                    DropdownMenuItem(value: v, child: Text(v)),
+                              )
+                              .toList(),
+                          onChanged: busy || revision == null
+                              ? null
+                              : (v) => setState(() {
+                                  if (openAll) {
+                                    opened = requirements
+                                        .map((r) => r['map_id'] as int)
+                                        .where((id) => !disabled.contains(id))
+                                        .toList();
+                                    openAll = false;
+                                  }
+                                  opened.remove(id);
+                                  disabled.remove(id);
+                                  if (v == '开放') opened.add(id);
+                                  if (v == '关闭') disabled.add(id);
+                                  status = '有未保存的修改';
+                                }),
+                        ),
+                      );
+                    },
                   ),
           ),
           Text(status),

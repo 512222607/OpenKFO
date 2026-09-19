@@ -58,10 +58,10 @@ func vipShopPrice(base, percent uint32) (uint32, error) {
 	return uint32(product / 100), nil
 }
 
-func (s *Store) VIPShopSettings() (VIPShopSettings, error) {
+func (s *ShopManager) VIPShopSettings() (VIPShopSettings, error) {
 	var a VIPShopSettings
 	var data []byte
-	err := s.DB.QueryRow("SELECT revision,rules FROM vip_shop_rules WHERE id=1").Scan(&a.Revision, &data)
+	err := s.store.DB.QueryRow("SELECT revision,rules FROM vip_shop_rules WHERE id=1").Scan(&a.Revision, &data)
 	if err == sql.ErrNoRows {
 		return a, nil
 	}
@@ -73,7 +73,7 @@ func (s *Store) VIPShopSettings() (VIPShopSettings, error) {
 	}
 	return a, a.Validate()
 }
-func (s *Store) SaveVIPShopSettings(a VIPShopSettings) (VIPShopSettings, error) {
+func (s *ShopManager) SaveVIPShopSettings(a VIPShopSettings) (VIPShopSettings, error) {
 	if err := a.Validate(); err != nil {
 		return VIPShopSettings{}, err
 	}
@@ -81,7 +81,7 @@ func (s *Store) SaveVIPShopSettings(a VIPShopSettings) (VIPShopSettings, error) 
 	if err != nil {
 		return VIPShopSettings{}, err
 	}
-	tx, err := s.DB.Begin()
+	tx, err := s.store.DB.Begin()
 	if err != nil {
 		return VIPShopSettings{}, err
 	}

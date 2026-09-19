@@ -36,14 +36,14 @@ func titleCountersMet(profile []byte, rule TitleRule) bool {
 
 // Only the lowest enabled title above the current title is eligible. Existing
 // pending offers freeze their choices; edits apply only to future grants.
-func (s *Store) AdvanceTitle(uid uint64, supported []byte, clientHash string) (bool, error) {
+func (s *TitleManager) AdvanceTitle(uid uint64, supported []byte, clientHash string) (bool, error) {
 	if uid == 0 {
 		return false, ErrDenied
 	}
 	if len(supported) == 0 {
 		return false, nil
 	}
-	tx, err := s.DB.Begin()
+	tx, err := s.store.DB.Begin()
 	if err != nil {
 		return false, err
 	}

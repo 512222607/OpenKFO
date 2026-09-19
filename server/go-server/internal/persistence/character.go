@@ -100,12 +100,12 @@ func ParseCharacterCreation(payload []byte, choices []CharacterChoice) (Characte
 
 // CreateCharacter never replaces a pre-existing character. The account row lock
 // makes repeated requests and competing creates for one account atomic.
-func (store *Store) CreateCharacter(uid uint64, payload []byte, choices []CharacterChoice) (Account, error) {
+func (m *RoleManager) CreateCharacter(uid uint64, payload []byte, choices []CharacterChoice) (Account, error) {
 	role, err := ParseCharacterCreation(payload, choices)
 	if err != nil {
 		return Account{}, err
 	}
-	tx, err := store.DB.Begin()
+	tx, err := m.store.DB.Begin()
 	if err != nil {
 		return Account{}, err
 	}
@@ -122,7 +122,7 @@ func (store *Store) CreateCharacter(uid uint64, payload []byte, choices []Charac
 		if err = tx.Commit(); err != nil {
 			return Account{}, err
 		}
-		return store.Snapshot(uid)
+		return m.store.RoleManager().Snapshot(uid)
 	}
 	if err != sql.ErrNoRows {
 		return Account{}, err
@@ -159,5 +159,5 @@ func (store *Store) CreateCharacter(uid uint64, payload []byte, choices []Charac
 	if err = tx.Commit(); err != nil {
 		return Account{}, err
 	}
-	return store.Snapshot(uid)
+	return m.store.RoleManager().Snapshot(uid)
 }

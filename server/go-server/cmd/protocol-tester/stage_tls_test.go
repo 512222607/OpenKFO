@@ -212,13 +212,18 @@ func TestStageGateTLS(t *testing.T) {
 		}
 	}
 	setGrants(0, []uint32{104})
-	selection := func(c *client, want int) {
+	receiveSelection := func(c *client, want int) {
 		t.Helper()
-		send(c, 21370, nil)
 		messages := drain(c)
-		if len(messages) != 2 || messages[0].ID != 21372 || messages[1].ID != 21373 {
+		if len(messages) < 2 || len(messages)%2 != 0 {
 			t.Fatal("stage records must precede selection", messages)
 		}
+		for i := 0; i < len(messages); i += 2 {
+			if messages[i].ID != 21372 || messages[i+1].ID != 21373 {
+				t.Fatal("invalid refresh sequence", messages)
+			}
+		}
+		messages = messages[len(messages)-2:]
 		records, e := protocol.ParseStageRecords(messages[0].Payload)
 		if e != nil || len(records) != 1 || records[0].MapID != 104 || records[0].RequiredMapID != 0xffffffff || records[0].Unknown != [4]uint32{} {
 			t.Fatal("invalid stage catalogue records", records, e)
@@ -235,6 +240,19 @@ func TestStageGateTLS(t *testing.T) {
 			t.Fatal("empty list did not clear controls")
 		}
 	}
+	selection := func(c *client, want int) { t.Helper(); send(c, 21370, nil); receiveSelection(c, want) }
+	refresh := func(i int) {
+		t.Helper()
+		hub.Mutex.Lock()
+		s := hub.Sessions[accounts[i].UID]
+		hub.Mutex.Unlock()
+		if s == nil {
+			t.Fatal("missing session")
+		}
+		if e := hub.RefreshExpiredInventory(s); e != nil {
+			t.Fatal(e)
+		}
+	}
 	selection(host, 1)
 	selection(peer, 0)
 	send(peer, 21370, []byte{1})
@@ -245,11 +263,15 @@ func TestStageGateTLS(t *testing.T) {
 	absent(denied, 4080)
 	absent(drain(peer), 4080)
 	setGrants(1, []uint32{104})
-	selection(peer, 1)
+	refresh(1)
+	receiveSelection(peer, 1) // No new 21370 request: same hook as the 15-second ticker.
+	refresh(1)
+	absent(drain(peer), 21373)
 	// Revocation must clear a previously populated client list and block the
 	// owner's start, even though the member joined and readied before revocation.
 	setGrants(1, []uint32{})
-	selection(peer, 0)
+	refresh(1)
+	receiveSelection(peer, 0)
 	selection(host, 1)
 	send(host, 4030, nil)
 	denied = drain(host)

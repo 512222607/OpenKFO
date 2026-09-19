@@ -31,7 +31,7 @@ func validateDrops(rules []DropRule) error {
 }
 
 func validDropItem(r []byte) bool {
-	return len(r) == 68 && r[4] == 25 && protocol.ReadUint32(r, 5) != 0 && protocol.ReadUint16(r, 17) == 0 && protocol.ReadUint32(r, 19) != 0xffffffff && (protocol.ReadUint32(r, 13) != 0 || protocol.ReadUint16(r, 23) != 0)
+	return len(r) == 68 && r[4] == protocol.ItemWeapon && protocol.ReadUint32(r, 5) != 0 && protocol.ReadUint16(r, 17) == 0 && protocol.ReadUint32(r, 19) != 0xffffffff && (protocol.ReadUint32(r, 13) != 0 || protocol.ReadUint16(r, 23) != 0)
 }
 
 func awardDrops(tx *sql.Tx, reward *BattleReward, level uint16, rules []DropRule) error {
@@ -47,13 +47,13 @@ func awardDrops(tx *sql.Tx, reward *BattleReward, level uint16, rules []DropRule
 			continue
 		}
 		var item []byte
-		if err = tx.QueryRow("SELECT grant_record FROM offers WHERE catalog_key=?", rule.CatalogKey).Scan(&item); err != nil {
+		if err = tx.QueryRow("SELECT record FROM item_definitions WHERE definition_key=?", rule.CatalogKey).Scan(&item); err != nil {
 			return err
 		}
 		if !validDropItem(item) {
 			return ErrDenied
 		}
-		item, err = deliverInventoryItem(tx, reward.UID, item, 0)
+		item, err = (InventoryManager{}).AddItem(tx, reward.UID, item, 0)
 		if err != nil {
 			return err
 		}

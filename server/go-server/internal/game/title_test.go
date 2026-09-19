@@ -53,6 +53,8 @@ func TestTitleClaimProtocolLocalDatabase(t *testing.T) {
 		}
 	}
 	for _, q := range []string{
+		`CREATE TEMPORARY TABLE item_definitions(definition_key INT PRIMARY KEY,revision BIGINT,record BLOB,days INT) ENGINE=InnoDB`,
+		`CREATE TEMPORARY TABLE tutorial_rewards(uid BIGINT PRIMARY KEY,reward BLOB) ENGINE=InnoDB`,
 		`CREATE TEMPORARY TABLE title_rules(id INT PRIMARY KEY,revision BIGINT,rules BLOB) ENGINE=InnoDB`,
 		`CREATE TEMPORARY TABLE accounts(uid BIGINT PRIMARY KEY,profile BLOB) ENGINE=InnoDB`,
 		`CREATE TEMPORARY TABLE title_rewards(uid BIGINT,title_level TINYINT UNSIGNED,choices BLOB,claimed_key INT UNSIGNED NULL,claimed_instance INT UNSIGNED NULL,PRIMARY KEY(uid,title_level)) ENGINE=InnoDB`,
@@ -71,18 +73,19 @@ func TestTitleClaimProtocolLocalDatabase(t *testing.T) {
 	protocol.WriteUint32(item, 5, 250001)
 	protocol.WriteUint32(item, 13, 24)
 	exec("INSERT INTO offers VALUES(7,?,?,TRUE)", catalog, item)
+	exec("INSERT INTO item_definitions VALUES(7,1,?,0)", item)
 	h, s, peer, _ := waitingRoomFixture()
 	h.Store = &persistence.Store{DB: db}
 	s.UID = 1
 	s.Inventory = map[uint32][]byte{99: make([]byte, 68)}
-	if err = h.Store.GrantTitleChoices(1, 1, []uint32{7}); err != nil {
+	if err = h.Store.TitleManager().GrantTitleChoices(1, 1, []uint32{7}); err != nil {
 		t.Fatal(err)
 	}
-	level, choices, err := h.Store.PendingTitleReward(1)
+	level, choices, err := h.Store.TitleManager().PendingTitleReward(1)
 	if err != nil || level != 1 || len(choices) != 1 || choices[0] != 7 {
 		t.Fatal(level, choices, err)
 	}
-	if level, _, err = h.Store.PendingTitleReward(2); err != nil || level != 0 {
+	if level, _, err = h.Store.TitleManager().PendingTitleReward(2); err != nil || level != 0 {
 		t.Fatal("cross account pending", err)
 	}
 	p := make([]byte, 149)
@@ -120,10 +123,10 @@ func TestTitleClaimProtocolLocalDatabase(t *testing.T) {
 	if len(s.Inventory) != 2 || s.TitleOffer != 1 {
 		t.Fatal("cache or retry binding lost")
 	}
-	if level, _, err = h.Store.PendingTitleReward(1); err != nil || level != 0 {
+	if level, _, err = h.Store.TitleManager().PendingTitleReward(1); err != nil || level != 0 {
 		t.Fatal("claimed still pending", err)
 	}
-	if err = h.Store.GrantTitleChoices(1, 2, []uint32{7}); err != nil {
+	if err = h.Store.TitleManager().GrantTitleChoices(1, 2, []uint32{7}); err != nil {
 		t.Fatal(err)
 	}
 	if err = h.announceTitleReward(s); err != nil {
@@ -131,7 +134,7 @@ func TestTitleClaimProtocolLocalDatabase(t *testing.T) {
 	}
 	roomOutputs(t, s)
 	send(2161, 20150) // Same product in next title must not be claimed by retry.
-	if level, _, err = h.Store.PendingTitleReward(1); err != nil || level != 2 {
+	if level, _, err = h.Store.TitleManager().PendingTitleReward(1); err != nil || level != 2 {
 		t.Fatal("retry consumed next title", err)
 	}
 	var count int
@@ -145,12 +148,12 @@ func TestTitleClaimProtocolLocalDatabase(t *testing.T) {
 	protocol.WriteUint32(p, 145, 8)
 	send(20150)
 	exec("UPDATE title_rewards SET choices=? WHERE uid=1 AND title_level=2", []byte(`[7,7]`))
-	if _, _, err = h.Store.PendingTitleReward(1); err == nil {
+	if _, _, err = h.Store.TitleManager().PendingTitleReward(1); err == nil {
 		t.Fatal("duplicate candidates accepted")
 	}
 	exec("UPDATE title_rewards SET choices=? WHERE uid=1 AND title_level=2", []byte(`[7]`))
 	exec("INSERT INTO title_rewards(uid,title_level,choices) VALUES(1,3,?)", []byte(`[7]`))
-	if _, _, err = h.Store.PendingTitleReward(1); err == nil {
+	if _, _, err = h.Store.TitleManager().PendingTitleReward(1); err == nil {
 		t.Fatal("ambiguous pending titles accepted")
 	}
 	roomOutputs(t, peer)

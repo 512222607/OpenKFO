@@ -29,3 +29,30 @@ func TestStageAccessSelection(t *testing.T) {
 		t.Fatal("switch unlocked unsupported map")
 	}
 }
+
+func TestStageExplicitOpenOutsideOriginalPool(t *testing.T) {
+	hash := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	h := NewHub(nil, Config{ConfigHash: hash, Pools: map[string][]uint32{"0:2": {101}}})
+	a := persistence.StageAccess{ClientHash: hash, ForceOpenAll: true, Requirements: []persistence.StageTitleRequirement{{MapID: 999, Name: "Configured stage"}}}
+	p := make([]byte, 81)
+	p[37] = 2
+	protocol.WriteUint32(p, 38, 999)
+	r, e := h.resolveWithAccess(p, a)
+	if e != nil || protocol.ReadUint32(r, 42) != 999 {
+		t.Fatal("explicit map not resolved", e)
+	}
+	protocol.WriteUint32(p, 42, 101)
+	if _, e = h.resolveWithAccess(p, a); e == nil {
+		t.Fatal("contradicting map accepted")
+	}
+	protocol.WriteUint32(p, 42, 0)
+	p[46] = 4
+	if _, e = h.resolveWithAccess(p, a); e == nil {
+		t.Fatal("override bypassed game-mode validation")
+	}
+	p[46] = 0
+	a.Disabled = []uint32{999}
+	if _, e = h.resolveWithAccess(p, a); e == nil {
+		t.Fatal("override bypassed closed map")
+	}
+}

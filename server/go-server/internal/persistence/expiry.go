@@ -48,16 +48,16 @@ func expireInventory(tx *sql.Tx, uid uint64, now int64) error {
 	return nil
 }
 
-func (store *Store) ExpireInventory(uid uint64) error {
+func (m *InventoryManager) ExpireInventory(uid uint64) error {
 	// The indexed fast path leaves permanent accounts read-only.
 	var due bool
-	if err := store.DB.QueryRow(`SELECT EXISTS(SELECT 1 FROM inventory_expirations WHERE uid=? AND expires_at<=? AND processed=FALSE)`, uid, time.Now().Unix()).Scan(&due); err != nil {
+	if err := m.store.DB.QueryRow(`SELECT EXISTS(SELECT 1 FROM inventory_expirations WHERE uid=? AND expires_at<=? AND processed=FALSE)`, uid, time.Now().Unix()).Scan(&due); err != nil {
 		return err
 	}
 	if !due {
 		return nil
 	}
-	tx, err := store.DB.Begin()
+	tx, err := m.store.DB.Begin()
 	if err != nil {
 		return err
 	}

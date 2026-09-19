@@ -150,7 +150,7 @@ func LoginAck(account string, uid uint64) Message {
 	for index := 1; index <= 48; index++ {
 		payload = append(payload, byte(index))
 	}
-	return Message{1002, payload}
+	return Message{MsgSDKLoginResponse, payload}
 }
 func LoginDirectory(port uint16) Message {
 	payload := make([]byte, 60)
@@ -202,5 +202,5 @@ func Lobby(port uint16) Message {
 	copy(payload[4:24], "127.0.0.1")
 	WriteUint16(payload, 24, port)
 	WriteUint32(payload, 26, 1)
-	return Message{2030, payload}
+	return Message{MsgLobbyEntered, payload}
 }

@@ -15,7 +15,7 @@ type GiftResult struct {
 
 // Gift debits the authenticated sender and durably creates a recipient-owned
 // mail plus attachment in the same transaction. It never grants inventory yet.
-func (s *Store) Gift(uid uint64, operation string, p []byte) (GiftResult, error) {
+func (s *MailManager) Gift(uid uint64, operation string, p []byte) (GiftResult, error) {
 	var out GiftResult
 	r, err := protocol.ParseGiftRequest(p)
 	if err != nil || uid == 0 || len(operation) == 0 || len(operation) > 128 || r.Currency != 109 || r.Flag169 != 0 || r.CatalogField77 != 0 {
@@ -23,7 +23,7 @@ func (s *Store) Gift(uid uint64, operation string, p []byte) (GiftResult, error)
 	}
 	// Name is mandatory in the native packet. UID is only a hint. Ambiguous
 	// historical nicknames are rejected, never resolved to the first account.
-	rows, err := s.DB.Query(`SELECT uid FROM accounts WHERE BINARY nickname=BINARY ? LIMIT 2`, r.RecipientName)
+	rows, err := s.store.DB.Query(`SELECT uid FROM accounts WHERE BINARY nickname=BINARY ? LIMIT 2`, r.RecipientName)
 	if err != nil {
 		return out, err
 	}
@@ -45,7 +45,7 @@ func (s *Store) Gift(uid uint64, operation string, p []byte) (GiftResult, error)
 		return out, ErrDenied
 	}
 	target := ids[0]
-	tx, err := s.DB.Begin()
+	tx, err := s.store.DB.Begin()
 	if err != nil {
 		return out, err
 	}

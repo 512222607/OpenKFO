@@ -240,7 +240,7 @@ func TestTasksTLS(t *testing.T) {
 		}
 	})
 	for _, account := range []persistence.Account{a, peer} {
-		current, err := store.Snapshot(account.UID)
+		current, err := store.RoleManager().Snapshot(account.UID)
 		if err != nil {
 			t.Fatal(err)
 		}

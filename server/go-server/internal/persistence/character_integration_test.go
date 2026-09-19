@@ -57,7 +57,7 @@ func TestCharacterCreationLocalDatabase(t *testing.T) {
 	results := make(chan error, 2)
 	for i := 0; i < 2; i++ {
 		wg.Add(1)
-		go func() { defer wg.Done(); _, err := store.CreateCharacter(base, p, c); results <- err }()
+		go func() { defer wg.Done(); _, err := store.RoleManager().CreateCharacter(base, p, c); results <- err }()
 	}
 	wg.Wait()
 	close(results)
@@ -66,7 +66,7 @@ func TestCharacterCreationLocalDatabase(t *testing.T) {
 			t.Fatal("identical retry", err)
 		}
 	}
-	a, err := store.Snapshot(base)
+	a, err := store.RoleManager().Snapshot(base)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,13 +79,13 @@ func TestCharacterCreationLocalDatabase(t *testing.T) {
 	}
 	changed := bytes.Clone(p)
 	changed[22] = 14
-	if _, err = store.CreateCharacter(base, changed, c); err == nil {
+	if _, err = store.RoleManager().CreateCharacter(base, changed, c); err == nil {
 		t.Fatal("changed retry overwrote character")
 	}
-	if _, err = store.CreateCharacter(base+1, p, c); err == nil {
+	if _, err = store.RoleManager().CreateCharacter(base+1, p, c); err == nil {
 		t.Fatal("duplicate nickname")
 	}
-	rejected, err := store.Snapshot(base + 1)
+	rejected, err := store.RoleManager().Snapshot(base + 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,14 +94,14 @@ func TestCharacterCreationLocalDatabase(t *testing.T) {
 	}
 	clear(p[:21])
 	copy(p, []byte(fmt.Sprintf("r%d", base+2)))
-	before, err := store.Snapshot(base + 2)
+	before, err := store.RoleManager().Snapshot(base + 2)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = store.CreateCharacter(base+2, p, c); err == nil {
+	if _, err = store.RoleManager().CreateCharacter(base+2, p, c); err == nil {
 		t.Fatal("existing character overwritten")
 	}
-	after, err := store.Snapshot(base + 2)
+	after, err := store.RoleManager().Snapshot(base + 2)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -16,7 +16,7 @@ type TalismanUse struct {
 	Slot, Cost           uint16
 }
 
-func (s *Store) UseTalisman(uid uint64, operation string, use TalismanUse) (item []byte, applied bool, err error) {
+func (s *ItemManager) UseTalisman(uid uint64, operation string, use TalismanUse) (item []byte, applied bool, err error) {
 	if uid == 0 || operation == "" || len(operation) > 128 || use.Instance == 0 || use.Item == 0 || (use.Slot != 37 && use.Slot != 38) || (use.Kind != 8291 && use.Kind != 8292) {
 		return nil, false, ErrDenied
 	}
@@ -26,7 +26,7 @@ func (s *Store) UseTalisman(uid uint64, operation string, use TalismanUse) (item
 	protocol.WriteUint32(request, 8, use.Kind)
 	protocol.WriteUint16(request, 12, use.Slot)
 	protocol.WriteUint16(request, 14, use.Cost)
-	tx, err := s.DB.Begin()
+	tx, err := s.store.DB.Begin()
 	if err != nil {
 		return nil, false, err
 	}
@@ -48,7 +48,7 @@ func (s *Store) UseTalisman(uid uint64, operation string, use TalismanUse) (item
 	if err = tx.QueryRow(`SELECT record FROM inventory WHERE uid=? AND instance=? FOR UPDATE`, uid, use.Instance).Scan(&item); err != nil {
 		return nil, false, err
 	}
-	if len(item) != 68 || item[4] != 30 || protocol.ReadUint32(item, 0) != use.Instance || protocol.ReadUint32(item, 5) != use.Item {
+	if len(item) != 68 || item[4] != protocol.ItemTalisman || protocol.ReadUint32(item, 0) != use.Instance || protocol.ReadUint32(item, 5) != use.Item {
 		return nil, false, ErrDenied
 	}
 	if !usableItem(item) || protocol.ReadUint16(item, 17) != use.Slot {

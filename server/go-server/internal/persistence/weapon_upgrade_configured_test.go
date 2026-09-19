@@ -70,7 +70,7 @@ func TestWeaponUpgradeConfiguredLocalDatabase(t *testing.T) {
 	}
 	save(2)
 	for _, rev := range []uint64{0, 1, 3} {
-		if _, e := s.UpgradeWeaponConfigured(uid, fmt.Sprintf("old%d", rev), 1, rev); e == nil {
+		if _, e := s.ItemManager().UpgradeWeaponConfigured(uid, fmt.Sprintf("old%d", rev), 1, rev); e == nil {
 			t.Fatal("unquoted/stale version charged", rev)
 		}
 	}
@@ -78,17 +78,17 @@ func TestWeaponUpgradeConfiguredLocalDatabase(t *testing.T) {
 	if e := s.DB.QueryRow("SELECT gold FROM accounts WHERE uid=?", uid).Scan(&balance); e != nil || balance != 1000 {
 		t.Fatal(balance, e)
 	}
-	r, e := s.UpgradeWeaponConfigured(uid, "valid", 1, 2)
+	r, e := s.ItemManager().UpgradeWeaponConfigured(uid, "valid", 1, 2)
 	if e != nil || !r.Success || r.Gold != 930 || protocol.ReadUint32(r.Item, 43) != 1 {
 		t.Fatal(r, e)
 	}
 	policy.Enabled = false
 	save(3)
-	if _, e = s.UpgradeWeaponConfigured(uid, "disabled", 1, 3); e == nil {
+	if _, e = s.ItemManager().UpgradeWeaponConfigured(uid, "disabled", 1, 3); e == nil {
 		t.Fatal("disabled policy charged")
 	}
 	// An already committed operation still recovers its result after config change.
-	retry, e := s.UpgradeWeaponConfigured(uid, "valid", 1, 2)
+	retry, e := s.ItemManager().UpgradeWeaponConfigured(uid, "valid", 1, 2)
 	if e != nil || retry.Gold != 930 || !bytes.Equal(r.Item, retry.Item) {
 		t.Fatal(retry, e)
 	}

@@ -22,7 +22,7 @@ func roomEntry(room *Room, uid uint64) []byte {
 		entry[61] = 1
 	}
 	entry[62] = request[37]
-	entry[65] = request[46]
+	entry[65] = request[protocol.RoomTypeOffset]
 	copy(entry[67:69], request[47:49])
 	copy(entry[69:73], request[50:54])
 	entry[73] = request[49]
@@ -76,7 +76,7 @@ func roomEntryForMember(room *Room, member *Member, own []byte) []byte {
 	entry := roomEntry(room, room.Owner)
 	entry[10], entry[11], entry[66] = member.Slot, member.Spawn, member.Team
 	// Preserve the existing practice entry path until its model load is verified.
-	if room.Request[46] != 5 || len(room.Members) > 1 {
+	if room.Type() != protocol.FreePractice || len(room.Members) > 1 {
 		copy(entry[96:], own[:149])
 	}
 	return entry
