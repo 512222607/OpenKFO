@@ -138,6 +138,28 @@ func (s *TitleManager) SaveTitleSettings(a TitleSettings) (TitleSettings, error)
 	if revision != a.Revision {
 		return TitleSettings{}, fmt.Errorf("称号配置已被修改，请重新读取后保存")
 	}
+	if a.Rules.Enabled {
+		// Validate one catalogue for all active rules, not one full shop query
+		// per title. Disabled rules can retain drafts or unavailable definitions.
+		var choices []uint32
+		seen := map[uint32]bool{}
+		for _, rule := range a.Rules.Titles {
+			if !rule.Enabled {
+				continue
+			}
+			for _, key := range rule.Choices {
+				if !seen[key] {
+					choices = append(choices, key)
+					seen[key] = true
+				}
+			}
+		}
+		if len(choices) != 0 {
+			if _, err = weaponRewardCatalog(tx, choices); err != nil {
+				return TitleSettings{}, fmt.Errorf("称号奖励武器展示目录无效，请检查物品定义与商城配置：%w", err)
+			}
+		}
+	}
 	if _, err = tx.Exec("UPDATE title_rules SET revision=revision+1,rules=? WHERE id=1", data); err != nil {
 		return TitleSettings{}, err
 	}

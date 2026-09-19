@@ -3,6 +3,7 @@ package persistence
 import (
 	"database/sql"
 	"github.com/go-sql-driver/mysql"
+	"kungfu.local/server/internal/protocol"
 	"os"
 	"strings"
 	"testing"
@@ -89,6 +90,8 @@ func TestTitleSettingsLocalDatabase(t *testing.T) {
 	for _, q := range []string{
 		`CREATE TEMPORARY TABLE title_rules(id TINYINT PRIMARY KEY,revision BIGINT UNSIGNED NOT NULL,rules MEDIUMBLOB NOT NULL) ENGINE=InnoDB`,
 		`CREATE TEMPORARY TABLE title_rules_audit(revision BIGINT UNSIGNED PRIMARY KEY,before_data MEDIUMBLOB NOT NULL,after_data MEDIUMBLOB NOT NULL) ENGINE=InnoDB`,
+		`CREATE TEMPORARY TABLE item_definitions(definition_key INT PRIMARY KEY,revision BIGINT,record BLOB,days INT) ENGINE=InnoDB`,
+		`CREATE TEMPORARY TABLE offers(catalog_key INT PRIMARY KEY,record BLOB,enabled BOOL) ENGINE=InnoDB`,
 	} {
 		if _, err = db.Exec(q); err != nil {
 			t.Fatal(err)
@@ -101,6 +104,39 @@ func TestTitleSettingsLocalDatabase(t *testing.T) {
 	}
 	a.Rules.Enabled = true
 	a.Rules.Titles = []TitleRule{{Level: 1, Enabled: true, Matches: 10, Choices: []uint32{7}}}
+	exec := func(q string, args ...any) {
+		t.Helper()
+		if _, e := db.Exec(q, args...); e != nil {
+			t.Fatal(e)
+		}
+	}
+	reject := func() {
+		t.Helper()
+		if _, e := s.TitleManager().SaveTitleSettings(a); e == nil || !strings.Contains(e.Error(), "展示目录无效") {
+			t.Fatal("unusable choice published", e)
+		}
+		for _, table := range []string{"title_rules", "title_rules_audit"} {
+			var count int
+			if e := db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count); e != nil || count != 0 {
+				t.Fatal("partial settings save", table, e)
+			}
+		}
+	}
+	reject() // Missing definition.
+	item := make([]byte, protocol.InventoryRecordSize)
+	item[4] = protocol.ItemConsumable
+	protocol.WriteUint32(item, 5, 250001)
+	exec("INSERT INTO item_definitions VALUES(7,1,?,0)", item)
+	reject() // Native selector requires weapons.
+	item[4] = protocol.ItemWeapon
+	exec("UPDATE item_definitions SET record=?", item)
+	catalog := make([]byte, 108)
+	protocol.WriteUint32(catalog, 0, 7)
+	catalog[4] = protocol.ItemWeapon
+	protocol.WriteUint32(catalog, 5, 999999)
+	exec("INSERT INTO offers VALUES(7,?,TRUE)", catalog)
+	reject()                   // Same key with conflicting display definition.
+	exec("DELETE FROM offers") // Valid unsold weapon is supported.
 	saved, err := s.TitleManager().SaveTitleSettings(a)
 	if err != nil || saved.Revision != 1 {
 		t.Fatal(saved, err)
@@ -112,6 +148,7 @@ func TestTitleSettingsLocalDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	saved.Rules.Enabled = false
+	exec("DELETE FROM item_definitions") // Disabling must remain possible with broken definitions.
 	if _, err = s.TitleManager().SaveTitleSettings(saved); err == nil {
 		t.Fatal("audit failure accepted")
 	}
@@ -125,6 +162,22 @@ func TestTitleSettingsLocalDatabase(t *testing.T) {
 	saved, err = s.TitleManager().SaveTitleSettings(saved)
 	if err != nil || saved.Rules.Enabled || len(saved.Rules.Titles) != 1 {
 		t.Fatal(saved, err)
+	}
+	// Each selector is capped at seven, but validating several rules must not
+	// apply that cap to their combined catalogue.
+	for key := 1; key <= 8; key++ {
+		exec("INSERT INTO item_definitions VALUES(?,1,?,0)", key, item)
+	}
+	saved.Rules.Enabled = true
+	saved.Rules.Titles = []TitleRule{
+		{Level: 1, Enabled: true, MinPlayerLevel: 1, Choices: []uint32{1, 2, 3, 4, 5, 6, 7}},
+		{Level: 2, Enabled: true, MinPlayerLevel: 2, Choices: []uint32{8}},
+	}
+	if _, err = s.TitleManager().SaveTitleSettings(saved); err != nil {
+		t.Fatal("combined valid catalogue rejected", err)
+	}
+	if _, err = s.RewardManager().WeaponChoiceCatalog([]uint32{1, 2, 3, 4, 5, 6, 7, 8}); err == nil {
+		t.Fatal("single native selector exceeded seven choices")
 	}
 	if _, err = db.Exec(`UPDATE title_rules SET rules='{"enabled":true,"titles":[]}'`); err != nil {
 		t.Fatal(err)

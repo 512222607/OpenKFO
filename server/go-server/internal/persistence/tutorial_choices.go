@@ -37,6 +37,9 @@ func (m *RewardManager) TutorialChoices(uid uint64) (choices []uint32, catalog [
 // Validate the same display catalogue before committing completion and when
 // restoring a pending selection. A broken catalogue must not consume rewards.
 func (m *RewardManager) WeaponChoiceCatalog(choices []uint32) ([]byte, error) {
+	if len(choices) == 0 || len(choices) > 7 {
+		return nil, ErrDenied
+	}
 	tx, err := m.store.DB.Begin()
 	if err != nil {
 		return nil, err
@@ -50,7 +53,8 @@ func (m *RewardManager) WeaponChoiceCatalog(choices []uint32) ([]byte, error) {
 }
 
 func weaponRewardCatalog(tx *sql.Tx, choices []uint32) (catalog []byte, err error) {
-	if len(choices) == 0 || len(choices) > 7 {
+	// GM validation can combine several independently bounded choice lists.
+	if len(choices) == 0 {
 		return nil, ErrDenied
 	}
 	// 1550 is a complete catalogue. Preserve normal shop entries while adding
