@@ -153,6 +153,13 @@ func describe(m protocol.Message) string {
 	if m.ID == protocol.MsgBattlePoseRequest {
 		return "战斗姿态请求3430：发送结构未确认，不按3440布局解释"
 	}
+	if m.ID == protocol.MsgStageWaveReport {
+		r, err := protocol.ParseStageWaveReport(m.Payload)
+		if err != nil {
+			return "波次结束上报20571长度错误：必须40B"
+		}
+		return fmt.Sprintf("波次结束上报20571：波次=%d，上下文原值=%d，报告字段=%d（原生发送器写1）；不代表服务器已验证通关", r.Wave, r.ContextValue, r.ReportValue)
+	}
 	if m.ID == protocol.MsgBattlePose {
 		r, err := protocol.ParseBattlePose(m.Payload)
 		if err != nil {

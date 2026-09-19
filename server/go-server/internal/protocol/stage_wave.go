@@ -1,7 +1,29 @@
 package protocol
 
 const MsgStageWaveControl uint32 = 20572
+const MsgStageWaveReport uint32 = 20571
 const BattleEventStageWaveEnd uint32 = 20407
+
+type StageWaveReport struct {
+	ContextValue uint64
+	Wave         int32
+	ReportValue  uint32
+	Raw          [40]byte
+}
+
+// Lua Map.notify_wave_end -> 93D860 -> 938C70 sends exactly 40B.
+// +0 is copied from room+311, +8 is the script's wave argument, +12 is 1.
+// Retain other values for diagnostics; this parser does not authorize completion.
+func ParseStageWaveReport(p []byte) (r StageWaveReport, err error) {
+	if len(p) != len(r.Raw) {
+		return r, ErrFrame
+	}
+	copy(r.Raw[:], p)
+	r.ContextValue = ReadUint64(p, 0)
+	r.Wave = int32(ReadUint32(p, 8))
+	r.ReportValue = ReadUint32(p, 12)
+	return r, nil
+}
 
 type StageWaveControl struct {
 	Wave int32

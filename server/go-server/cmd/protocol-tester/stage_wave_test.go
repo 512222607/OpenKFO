@@ -9,6 +9,10 @@ import (
 func TestStageWaveDiagnostic(t *testing.T) {
 	p := make([]byte, 40)
 	protocol.WriteUint32(p, 8, 0xffffffff)
+	protocol.WriteUint32(p, 12, 1)
+	if text := describe(protocol.Message{ID: 20571, Payload: p}); !strings.Contains(text, "波次=-1") || !strings.Contains(text, "报告字段=1") {
+		t.Fatal(text)
+	}
 	if text := describe(protocol.Message{ID: 20572, Payload: p}); !strings.Contains(text, "波次=-1") {
 		t.Fatal(text)
 	}
@@ -19,7 +23,7 @@ func TestStageWaveDiagnostic(t *testing.T) {
 	if text := describe(protocol.Message{ID: 8071, Payload: event}); !strings.Contains(text, "申报UID=123") || !strings.Contains(text, "上下文原值=456") {
 		t.Fatal(text)
 	}
-	for _, m := range []protocol.Message{{ID: 20572, Payload: p[:39]}, {ID: 8071, Payload: event[:46]}} {
+	for _, m := range []protocol.Message{{ID: 20571, Payload: p[:39]}, {ID: 20572, Payload: p[:39]}, {ID: 8071, Payload: event[:46]}} {
 		if !strings.Contains(describe(m), "长度错误") {
 			t.Fatal("malformed packet described as valid")
 		}

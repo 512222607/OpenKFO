@@ -28,6 +28,18 @@ func TestStageWaveTraceDirectionAndRawPayload(t *testing.T) {
 			t.Fatal("direction or original payload lost", entry)
 		}
 	}
+	for _, direction := range []string{"C->S", "S->C"} {
+		output.Reset()
+		s.tracePacket(direction, 1, "game", 20571, p, false)
+		var entry map[string]any
+		if err := json.Unmarshal(output.Bytes(), &entry); err != nil {
+			t.Fatal(err)
+		}
+		_, annotated := entry["content"]
+		if annotated != (direction == "C->S") || len(entry["hex"].(string)) != 80 {
+			t.Fatal(entry)
+		}
+	}
 }
 
 func TestCreateRoomTraceNamesPVEWithoutGrantingAccess(t *testing.T) {

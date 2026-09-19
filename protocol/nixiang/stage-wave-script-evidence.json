@@ -1,0 +1,20 @@
+{
+  "archive_sha256": "fdb78d26c91f331fead5509795f470779f684f3fde1efbd45bbbc97655abb268",
+  "entries": [
+    {
+      "path": "/script/pve/pve.lua",
+      "bytes": 1591,
+      "sha256": "a2e679b900670b74d87804082ba9e9e4c318c190e724661b99679fa25eeebe53"
+    },
+    {
+      "path": "/script/pve/stageassault.lua",
+      "bytes": 4100,
+      "sha256": "0528f4d1d668b73982d66cd7ff167fc869e2ce1e410bbe81f34ef2d41b21a84d"
+    },
+    {
+      "path": "/script/pve/act_zombiedefend.lua",
+      "bytes": 16071,
+      "sha256": "a0cb347a2c01aeee0546a15be1caf210e51210fff5566bdc225d0a980c7362f7"
+    }
+  ]
+}

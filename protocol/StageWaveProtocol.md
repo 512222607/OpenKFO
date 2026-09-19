@@ -39,3 +39,11 @@
 在942FE0中，模式对象+18为1时传入原因码1；另一分支在八槽对象44E110判定全部满足且等待超过9000个985BD0计时单位后传入2；94BC50返回零时传入3。这些是客户端本地条件，不能把三者泛化为所有房型的胜/负/平，也不能单凭原因码发奖。
 
 共享ParseBattleReport严格读取696字节并保留八条完整原始记录。现有竞技结算的身份/上下文/重复身份校验使用此解析器，仍按原有策略判定结果；统一日志与测试器显示结束原因码及房间场次。PVE准入、结束条件复核和PVE奖励策略仍未开放。
+
+## 波次上行20571与脚本结束条件
+
+只读解包当前根目录config.spf2，发现保留的PVE Lua源码。`script/pve/pve.lua`的map_init允许地图提供check_finished；未提供时is_finished检查事件管理器大小是否为0。`stageassault.lua`在本波怪物全部生成后检查Map.get_alive_monster_count，归零时调用WaveEndCallback；`act_zombiedefend.lua`的MonsterWaveEnd再调用Map.notify_wave_end(WaveIndex)。脚本可能每次更新重复回调，服务端未来处理必须按房间场次和波次幂等，不能把每次上报都推进一波。
+
+Native绑定表B9A370将notify_wave_end映射到93D860。该包装要求一个数值参数、当前房间模式21及CStageAssaultMode对象，再调用938C70。后者清零40B、复制房间+311的QWORD到+0、波次DWORD到+8、常数1到+12，经A3C950发送20571。对应证据为`nixiang/stage-wave-report.asm`；解包条目及归档SHA256保存在`nixiang/stage-wave-script-evidence.json`，未提交客户端脚本或素材。
+
+共享ParseStageWaveReport读取上下文原值、波次、报告字段并保留40B原文；统一日志仅在C→S方向标注20571，测试器区分20571上报与20572下行控制。未知报告值保留用于诊断，不视为合法通关。这补齐了实际上行发送端，仍未提供服务端怪物存活验证、波次配置及授权推进业务。

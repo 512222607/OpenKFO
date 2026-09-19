@@ -2,6 +2,27 @@ package protocol
 
 import "testing"
 
+func TestStageWaveReportNativeLayout(t *testing.T) {
+	p := make([]byte, 40)
+	WriteUint64(p, 0, 0x8877665544332211)
+	WriteUint32(p, 8, 0xffffffff)
+	WriteUint32(p, 12, 1)
+	p[39] = 0xa5
+	r, err := ParseStageWaveReport(p)
+	if err != nil || r.ContextValue != 0x8877665544332211 || r.Wave != -1 || r.ReportValue != 1 || r.Raw[39] != 0xa5 {
+		t.Fatal(r, err)
+	}
+	p[39] = 0
+	if r.Raw[39] != 0xa5 {
+		t.Fatal("raw aliases input")
+	}
+	for _, n := range []int{0, 12, 39, 41} {
+		if _, err := ParseStageWaveReport(make([]byte, n)); err == nil {
+			t.Fatal("invalid length", n)
+		}
+	}
+}
+
 func TestStageWaveNativeLayouts(t *testing.T) {
 	p := make([]byte, 40)
 	for _, wave := range []uint32{0, 3, 0xffffffff} {
