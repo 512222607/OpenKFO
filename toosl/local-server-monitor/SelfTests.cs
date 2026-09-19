@@ -56,6 +56,14 @@ internal static class SelfTests
                 Check(probe.Name.Contains("网络检测") && probe.Description.Contains("检测状态详情") && probe.Raw == sample, $"网络检测{opcode}中文名称与原文");
             }
             Check(row.Matches("localtest1", false) && !row.Matches("localtest2", false), "账号筛选");
+            foreach (uint opcode in new uint[] {4110, 20572})
+            {
+                string sample = JsonSerializer.Serialize(new { direction = opcode == 4110 ? "C->S" : "S->C", transport = "game", protocol = opcode, content = "结束原因码=1，仍需服务器验证", hex = "0100" });
+                var report = TraceRow.Parse(sample);
+                Check(!report.Name.Contains("尚未") && report.Description.Contains("结束原因码=1") && report.Raw == sample, $"结算与波次{opcode}名称及服务器详情");
+            }
+            var pve = TraceRow.Parse(JsonSerializer.Serialize(new { direction = "C->S", transport = "game", protocol = 8071, subprotocol = 20407, hex = "" }));
+            Check(pve.Description.Contains("20407 · PVE结束标记"), "PVE子协议中文名称");
             Check(!TraceRow.Parse("{\"direction\":\"C->S\",\"protocol\":1157}").Matches("", true), "心跳筛选");
             Check(TraceRow.Parse("{\"protocol\":{}}").Direction == "", "损坏字段保留为运行日志");
             using (var tail = new LogTail())

@@ -10,6 +10,15 @@ dotnet publish -c Release -r win-x64 --self-contained true -o ../../dist/local-s
 
 生成 `功夫小子本地服务器.exe`，已包含 .NET 运行时。将它放到本地 `kungfu-server.exe` 同目录，双击即可读取该目录 `logs/protocol-*.log`；点击「启动服务器」启动本地测试服，也可传 `--start` 自动启动。附带 `--server-dir "自己的本地服务目录"` 可选择已有本地目录，无线上模式。
 
+从仓库根目录构建包含界面及Go工作进程的更新目录：
+
+```sh
+dotnet publish toosl/local-server-monitor/LocalServerMonitor.csproj -c Release -r win-x64 --self-contained true -o dist/local-debug-update
+go -C server/go-server build -o ../../dist/local-debug-update/kungfu-server.exe ./cmd/server
+```
+
+交付时只打包这两个EXE、[更新说明](UPDATE.md)和版本清单，不把本地配置或日志一起压缩。现成更新包为 `dist/local-debug-update.zip`；需要保留已有服务配置。
+
 本地服务的 `settings.private.json`、`config.json`、证书及配置引用的凭据应保留，不提交到 Git。已运行的本地服务可直接接入日志，不重启它。关闭窗口会停止**本窗口启动**的服务器；只是接入既有服务器时不停止它。手动「停止服务器」仅操作所选目录下的精确 EXE 路径。
 
 - 虚拟列表展示时间、玩家、账号、方向、协议名称、字节数；可筛选和暂停。
