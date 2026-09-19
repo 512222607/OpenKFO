@@ -66,6 +66,14 @@ func (a *archive) attachStageScripts(maps []StageMap) error {
 	if err != nil {
 		return err
 	}
+	configRaw, err := a.raw(config)
+	if err != nil {
+		return err
+	}
+	templates, err := fosterTemplates(configRaw)
+	if err != nil {
+		return err
+	}
 	var fosterRuntimeHash string
 	for i := range maps {
 		name := bindings[maps[i].MapID]
@@ -89,6 +97,7 @@ func (a *archive) attachStageScripts(maps []StageMap) error {
 				fosterRuntimeHash = digest(compiled)
 			}
 			maps[i].RuntimeScript, maps[i].RuntimeHash = runtime, fosterRuntimeHash
+			maps[i].FosterTemplates = templates
 		}
 		if maps[i].MapType == uint32(protocol.StageAssault) {
 			maps[i].WavePreview, err = a.stageWavePreview(name, raw)

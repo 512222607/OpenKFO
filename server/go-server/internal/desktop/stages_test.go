@@ -41,10 +41,14 @@ func TestStageCatalogueClientArchive(t *testing.T) {
 	t.Logf("read %d native map selections; archive unchanged", len(maps))
 	for _, row := range maps {
 		if row.MapType == 10 {
+			catalog := row.FosterTemplates
+			if catalog == nil || catalog.ConfigHash != fosterConfigHash || len(catalog.Names) != 262 || catalog.Names[0] != " 喽罗乙" || catalog.Names[254] != "喽罗乙" || catalog.Names[251] != "喽罗甲" {
+				t.Fatal("Foster native indices or whitespace lost", row.MapID)
+			}
 			if row.RuntimeScript != "script/pve/include" || row.RuntimeHash != "0a083607cab1456c0976038f1e78658a208607355c015060a4492259cde5280f" {
 				t.Fatalf("mode 10 must bind the loaded bytecode, not a loose Lua source: %+v", row)
 			}
-		} else if row.RuntimeScript != "" || row.RuntimeHash != "" {
+		} else if row.RuntimeScript != "" || row.RuntimeHash != "" || row.FosterTemplates != nil {
 			t.Fatal("mode 10 runtime leaked to another mode", row.MapID)
 		}
 		if row.MapID == 9170 && (row.Script != "script/pve/act_zombiedefend_normal.lua" || len(row.ScriptHash) != 64) {
