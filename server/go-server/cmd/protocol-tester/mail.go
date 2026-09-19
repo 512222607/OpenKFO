@@ -11,6 +11,20 @@ import (
 func describeMail(m protocol.Message) string {
 	p := m.Payload
 	switch m.ID {
+	case protocol.MsgRenewItemResult:
+		r, err := protocol.ParseRenewalResult(p)
+		if err != nil {
+			return "续费结果1430长度错误：成功至少5字节，失败至少1字节"
+		}
+		if !r.Succeeded {
+			return "续费失败1430：请核对服务器报价、点券余额及原道具期限"
+		}
+		return fmt.Sprintf("续费成功回执1430：库存实例=%d；请结合2161库存更新和1230余额确认", r.InventoryInstance)
+	case 1450:
+		if len(p) < 4 {
+			return "忽略续费提醒1450过短：需要库存实例"
+		}
+		return fmt.Sprintf("已忽略续费提醒1450：库存实例=%d；没有删除背包道具", protocol.ReadUint32(p, 0))
 	case 1410:
 		rows, err := protocol.ParseRenewalRecords(p)
 		if err != nil {

@@ -7,6 +7,21 @@ import (
 )
 
 func TestMailDiagnostics(t *testing.T) {
+	for _, tc := range []struct {
+		id   uint32
+		p    []byte
+		want string
+	}{
+		{1430, []byte{0}, "续费失败"},
+		{1430, []byte{1, 42, 0, 0, 0}, "库存实例=42"},
+		{1430, []byte{1}, "长度错误"},
+		{1450, []byte{42, 0, 0, 0}, "没有删除背包道具"},
+		{1450, nil, "过短"},
+	} {
+		if got := describe(protocol.Message{ID: tc.id, Payload: tc.p}); !strings.Contains(got, tc.want) {
+			t.Fatal(got)
+		}
+	}
 	renewal := make([]byte, 124)
 	protocol.WriteUint32(renewal, 8, 42)
 	protocol.WriteUint32(renewal, 21, 253001)

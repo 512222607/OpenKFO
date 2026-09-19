@@ -181,7 +181,7 @@ func describe(m protocol.Message) string {
 	if m.ID >= 3260 && m.ID <= 3267 {
 		return describeSeatExchange(m)
 	}
-	if m.ID == 1310 || m.ID == 1410 || m.ID == 1330 || m.ID == 1350 {
+	if m.ID == 1310 || m.ID == 1410 || m.ID == 1330 || m.ID == 1350 || m.ID == protocol.MsgRenewItemResult || m.ID == 1450 {
 		return describeMail(m)
 	}
 	if m.ID == 9090 {
