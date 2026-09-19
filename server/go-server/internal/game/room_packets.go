@@ -30,7 +30,7 @@ func roomEntry(room *Room, uid uint64) []byte {
 	protocol.WriteUint64(entry, 96, uid)
 	return entry
 }
-func fighter(account persistence.Account, member *Member, update bool) []byte {
+func fighter(account persistence.Account, member *Member) []byte {
 	record := make([]byte, 149)
 	protocol.WriteUint64(record, 0, account.UID)
 	record[8] = member.Slot
@@ -42,9 +42,8 @@ func fighter(account persistence.Account, member *Member, update bool) []byte {
 	}
 	copy(record[54:57], account.Profile[122:125])
 	protocol.WriteUint32(record, 67, member.Session.P2P)
-	if update {
-		record[76] = 1
-	}
+	// Native 3090 handler 81EEA0 routes record[76] != 0 to the spectator
+	// container. Equipment refreshes remain player records, not spectators.
 	for _, item := range account.Inventory {
 		if protocol.ReadUint16(item, 17) != 0 {
 			record[64]++

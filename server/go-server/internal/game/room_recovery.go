@@ -38,7 +38,7 @@ func (hub *Hub) recoverRoom(room *Room, reason string) error {
 		if err != nil {
 			return err
 		}
-		peers = append(peers, roomPeer{member, fighter(account, member, false)})
+		peers = append(peers, roomPeer{member, fighter(account, member)})
 	}
 	hub.restoreRoom(room, peers, reason)
 	return nil

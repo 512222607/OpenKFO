@@ -20,7 +20,7 @@ func (h *Hub) acknowledgeTutorialJoin(s *Session, r *Room) error {
 		return err
 	}
 	m := r.Members[s.UID]
-	s.sendGame(protocol.Message{ID: protocol.MsgRoomEntered, Payload: roomEntryForMember(r, m, fighter(a, m, false))})
+	s.sendGame(protocol.Message{ID: protocol.MsgRoomEntered, Payload: roomEntryForMember(r, m, fighter(a, m))})
 	s.sendGame(protocol.Message{ID: protocol.MsgRoomOwner, Payload: protocol.Uint64Bytes(r.Owner)})
 	r.TutorialPending = false
 	return nil

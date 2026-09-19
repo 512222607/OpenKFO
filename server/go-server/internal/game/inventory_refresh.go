@@ -54,7 +54,7 @@ func (hub *Hub) RefreshExpiredInventory(s *Session) error {
 	changedEquipment := s.syncUnequippedInventory(a.Inventory)
 	if changedEquipment && s.Room != nil {
 		hub.clearRoomReady(s.Room)
-		hub.broadcast(s.Room, protocol.Message{ID: 3090, Payload: fighter(a, s.Room.Members[s.UID], true)}, s.UID)
+		hub.broadcast(s.Room, protocol.Message{ID: 3090, Payload: fighter(a, s.Room.Members[s.UID])}, s.UID)
 	}
 	return nil
 }

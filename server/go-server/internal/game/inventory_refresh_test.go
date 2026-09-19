@@ -37,11 +37,11 @@ func TestExpiredEquipmentSynchronizesAtEachPlayersReturn(t *testing.T) {
 				if legacy {
 					roomRequest(t, hub, s, 3110, nil)
 					roomOutputs(t, s, 3115, 3100, 3160, 3105, 2310, 2161, 2121)
-					roomOutputs(t, other, 3090)
+					assertPlayerRefresh(t, roomOutputs(t, other, 3090)[0], s.UID)
 				} else {
 					roomRequest(t, hub, s, 3550, append(protocol.Uint64Bytes(s.UID), make([]byte, 4)...))
 					roomOutputs(t, s, 3550, 2310, 2161, 2121)
-					roomOutputs(t, other, 3550, 3090)
+					assertPlayerRefresh(t, roomOutputs(t, other, 3550, 3090)[1], s.UID)
 				}
 				if s.game().Phase != "room" || protocol.ReadUint16(s.Inventory[7], 17) != 0 || protocol.ReadUint32(s.Inventory[7], 19) != 2 {
 					t.Fatal("returned player retained expired equipment")
@@ -55,6 +55,22 @@ func TestExpiredEquipmentSynchronizesAtEachPlayersReturn(t *testing.T) {
 			}
 		})
 	}
+}
+
+func assertPlayerRefresh(t *testing.T, message protocol.Message, uid uint64) {
+	t.Helper()
+	p := message.Payload
+	if message.ID != 3090 || len(p) < 149 || protocol.ReadUint64(p, 0) != uid || p[8] >= 8 || p[76] != 0 {
+		t.Fatal("player equipment refresh entered native spectator branch", message)
+	}
+}
+
+func TestEquipmentChangeRemainsPlayerRecord(t *testing.T) {
+	hub, host, peer, _ := waitingRoomFixture()
+	hub.Store = recoveryStore(t)
+	hub.equipmentChanged(host)
+	assertPlayerRefresh(t, roomOutputs(t, peer, 3090)[0], host.UID)
+	roomOutputs(t, host)
 }
 
 func TestExpiryRefreshSkipsUnsafeSessionPhases(t *testing.T) {

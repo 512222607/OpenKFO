@@ -70,12 +70,12 @@ func TestRoomThirdMemberRosterAndNativeFields(t *testing.T) {
 	}
 	room.Members[peer.UID].Ready = true
 	peers := []roomPeer{
-		{room.Members[peer.UID], fighter(account(peer, true), room.Members[peer.UID], false)},
-		{room.Members[host.UID], fighter(account(host, false), room.Members[host.UID], false)},
+		{room.Members[peer.UID], fighter(account(peer, true), room.Members[peer.UID])},
+		{room.Members[host.UID], fighter(account(host, false), room.Members[host.UID])},
 	}
 	// Deliberately distinct values catch mixing the three native fields.
 	member := &Member{Session: newcomer, Slot: 2, Spawn: 3, Team: 1}
-	own := fighter(account(newcomer, true), member, false)
+	own := fighter(account(newcomer, true), member)
 	hub.completeRoomJoin(room, member, own, peers)
 	if newcomer.Room != room || newcomer.game().Phase != "room" || len(room.Members) != 3 {
 		t.Fatal("join did not commit membership")
@@ -240,6 +240,6 @@ func TestRoomFirstMemberReceivesNoEmptyRoster(t *testing.T) {
 	member := room.Members[host.UID]
 	clear(room.Members)
 	account := persistence.Account{UID: host.UID, Profile: make([]byte, 125)}
-	hub.completeRoomJoin(room, member, fighter(account, member, false), nil)
+	hub.completeRoomJoin(room, member, fighter(account, member), nil)
 	roomOutputs(t, host, 3100, 3160)
 }

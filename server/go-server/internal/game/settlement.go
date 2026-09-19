@@ -215,11 +215,11 @@ func (hub *Hub) returnFromSettlement(session *Session) error {
 		if err != nil {
 			return err
 		}
-		peers = append(peers, roomPeer{member, fighter(other, member, false)})
+		peers = append(peers, roomPeer{member, fighter(other, member)})
 	}
 	session.sendGame(protocol.Message{ID: protocol.MsgRoomLeft})
 	room.Stage = "room"
-	hub.completeRoomJoin(room, room.Members[session.UID], fighter(account, room.Members[session.UID], false), peers)
+	hub.completeRoomJoin(room, room.Members[session.UID], fighter(account, room.Members[session.UID]), peers)
 	if err := hub.extendedTaskLists(session); err != nil {
 		session.sendGame(notice("任务进度刷新失败，请稍后打开任务列表。"))
 	}

@@ -161,14 +161,14 @@ func (hub *Hub) install(room *Room, session *Session) error {
 		return err
 	}
 	member := &Member{Session: session, Slot: slot, Spawn: slot, Team: slot % 2}
-	own := fighter(account, member, false)
+	own := fighter(account, member)
 	var peers []roomPeer
 	for _, member := range room.Members {
 		account, err := hub.Store.RoleManager().Snapshot(member.Session.UID)
 		if err != nil {
 			return err
 		}
-		peers = append(peers, roomPeer{member, fighter(account, member, false)})
+		peers = append(peers, roomPeer{member, fighter(account, member)})
 	}
 	hub.completeRoomJoin(room, member, own, peers)
 	return nil
@@ -280,7 +280,7 @@ func (hub *Hub) equipmentChanged(session *Session) {
 	if err != nil {
 		return
 	}
-	hub.broadcast(session.Room, protocol.Message{ID: 3090, Payload: fighter(account, session.Room.Members[session.UID], true)}, session.UID)
+	hub.broadcast(session.Room, protocol.Message{ID: 3090, Payload: fighter(account, session.Room.Members[session.UID])}, session.UID)
 }
 func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol.Message) (bool, error) {
 	payload := message.Payload
@@ -465,7 +465,7 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 				hub.broadcast(room, message, 0)
 				if returned != nil && session.syncUnequippedInventory(returned.Inventory) {
 					hub.clearRoomReady(room)
-					hub.broadcast(room, protocol.Message{ID: 3090, Payload: fighter(*returned, room.Members[uid], true)}, uid)
+					hub.broadcast(room, protocol.Message{ID: 3090, Payload: fighter(*returned, room.Members[uid])}, uid)
 				}
 				if returned != nil {
 					if err := hub.extendedTaskLists(session); err != nil {
