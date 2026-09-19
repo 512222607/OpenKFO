@@ -29,3 +29,23 @@ func TestStageWaveDiagnostic(t *testing.T) {
 		}
 	}
 }
+
+func TestPVEActorDiagnostic(t *testing.T) {
+	for _, tc := range []struct {
+		id   uint32
+		size int
+	}{{20400, 67}, {20401, 47}} {
+		p := make([]byte, tc.size)
+		protocol.WriteUint32(p, 0, tc.id)
+		protocol.WriteUint64(p, 4, 123)
+		protocol.WriteUint64(p, 39, 456)
+		text := describe(protocol.Message{ID: 8071, Payload: p})
+		if !strings.Contains(text, "申报UID=123") || !strings.Contains(text, "实体=456") {
+			t.Fatal(text)
+		}
+		bad := describe(protocol.Message{ID: 8071, Payload: p[:len(p)-1]})
+		if !strings.Contains(bad, "错误") && !strings.Contains(bad, "无效") {
+			t.Fatal(bad)
+		}
+	}
+}

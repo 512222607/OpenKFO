@@ -42,6 +42,31 @@ func TestStageWaveTraceDirectionAndRawPayload(t *testing.T) {
 	}
 }
 
+func TestPVEActorTrace(t *testing.T) {
+	_, s, _, _ := waitingRoomFixture()
+	var output bytes.Buffer
+	s.Trace = log.New(&output, "", 0)
+	for _, tc := range []struct {
+		id   uint32
+		size int
+	}{{20400, 67}, {20401, 47}} {
+		p := make([]byte, tc.size)
+		protocol.WriteUint32(p, 0, tc.id)
+		protocol.WriteUint64(p, 4, 123)
+		protocol.WriteUint64(p, 39, 456)
+		output.Reset()
+		s.tracePacket("C->S", 1, "game", 8071, p, false)
+		var entry map[string]any
+		if err := json.Unmarshal(output.Bytes(), &entry); err != nil {
+			t.Fatal(err)
+		}
+		content, _ := entry["content"].(string)
+		if !strings.Contains(content, "实体=456") || entry["subprotocol"] != float64(tc.id) || len(entry["hex"].(string)) != tc.size*2 {
+			t.Fatal(entry)
+		}
+	}
+}
+
 func TestCreateRoomTraceNamesPVEWithoutGrantingAccess(t *testing.T) {
 	_, s, _, _ := waitingRoomFixture()
 	var output bytes.Buffer

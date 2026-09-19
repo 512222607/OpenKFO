@@ -148,6 +148,12 @@ func (s *Session) tracePacket(direction string, channel uint32, transport string
 		if opcode == 8071 && len(payload) >= 4 {
 			entry["subprotocol"] = protocol.ReadUint32(payload, 0)
 			if transport == "game" {
+				if r, err := protocol.ParsePVEActorCreate(payload); err == nil {
+					entry["content"] = fmt.Sprintf("PVE创建怪物：申报UID=%d，实体=%d，模板原值=%d，位置=%v，朝向原值=%d；仍需服务端授权", r.Sender, r.Actor, r.TemplateValue, r.Position, r.DirectionValue)
+				}
+				if r, err := protocol.ParsePVEActorRemove(payload); err == nil {
+					entry["content"] = fmt.Sprintf("PVE移除怪物：申报UID=%d，实体=%d；不是击杀或通关凭据", r.Sender, r.Actor)
+				}
 				if r, err := protocol.ParseStageWaveEnd(payload); err == nil {
 					entry["content"] = fmt.Sprintf("闯关结束子消息20407：申报UID=%d，上下文原值=%d；完整通关业务未接入，不作为发奖授权", r.Sender, r.ContextValue)
 				}

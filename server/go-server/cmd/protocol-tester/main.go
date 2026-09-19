@@ -140,6 +140,22 @@ func describe(m protocol.Message) string {
 		}
 		return fmt.Sprintf("闯关波次=%d；-1触发客户端结束流程，不等于通关凭据", r.Wave)
 	}
+	if m.ID == 8071 && len(m.Payload) >= 4 {
+		switch protocol.ReadUint32(m.Payload, 0) {
+		case protocol.BattleEventPVEActorCreate:
+			r, err := protocol.ParsePVEActorCreate(m.Payload)
+			if err != nil {
+				return "PVE创建怪物20400无效：要求67B且位置为有限数值"
+			}
+			return fmt.Sprintf("PVE创建怪物20400：申报UID=%d，实体=%d，模板原值=%d，位置=%v，朝向原值=%d；不作为生成授权", r.Sender, r.Actor, r.TemplateValue, r.Position, r.DirectionValue)
+		case protocol.BattleEventPVEActorRemove:
+			r, err := protocol.ParsePVEActorRemove(m.Payload)
+			if err != nil {
+				return "PVE移除怪物20401长度错误：要求47B"
+			}
+			return fmt.Sprintf("PVE移除怪物20401：申报UID=%d，实体=%d；不是击杀或通关凭据", r.Sender, r.Actor)
+		}
+	}
 	if m.ID == 8071 && len(m.Payload) >= 4 && protocol.ReadUint32(m.Payload, 0) == protocol.BattleEventStageWaveEnd {
 		r, err := protocol.ParseStageWaveEnd(m.Payload)
 		if err != nil {
