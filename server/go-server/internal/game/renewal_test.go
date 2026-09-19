@@ -40,6 +40,7 @@ func TestRenewalProtocolLocalDatabase(t *testing.T) {
 		"CREATE TEMPORARY TABLE offers(catalog_key INT PRIMARY KEY,record BLOB,grant_record BLOB,enabled BOOL) ENGINE=InnoDB",
 		"CREATE TEMPORARY TABLE offer_lifetimes(catalog_key INT PRIMARY KEY,days INT) ENGINE=InnoDB",
 		"CREATE TEMPORARY TABLE renewal_receipts(uid BIGINT,operation_id VARCHAR(128),request_hash BINARY(32),instance INT,PRIMARY KEY(uid,operation_id)) ENGINE=InnoDB",
+		"CREATE TEMPORARY TABLE renewal_reminders(uid BIGINT,instance INT,ignored_deadline BIGINT,PRIMARY KEY(uid,instance)) ENGINE=InnoDB",
 	} {
 		exec(q)
 	}
@@ -87,6 +88,50 @@ func TestRenewalProtocolLocalDatabase(t *testing.T) {
 	}
 	send(1420, p)
 	failed()
+	send(1400, nil)
+	if out := roomOutputs(t, s, 1410); len(out[0].Payload) != 0 {
+		t.Fatal("active item listed")
+	}
+	expired := time.Now().Unix() - 3600
+	exec("UPDATE inventory_expirations SET expires_at=?", expired)
+	invalid := append([]byte(nil), item...)
+	protocol.WriteUint32(invalid, 0, 43)
+	protocol.WriteUint32(invalid, 19, 0xffffffff)
+	exec("INSERT INTO inventory VALUES(?,43,?)", s.UID, invalid)
+	exec("INSERT INTO inventory_expirations VALUES(?,43,?,FALSE)", s.UID, expired)
+	send(1400, nil)
+	reminders := roomOutputs(t, s, 1410)
+	rows, err := protocol.ParseRenewalRecords(reminders[0].Payload)
+	if err != nil || len(rows) != 1 || rows[0].InventoryInstance() != 42 || rows[0].InventoryState() != 2 || rows[0].DiscountRaw() != 100 || rows[0].ItemID() != 253013 {
+		t.Fatal(rows, err)
+	}
+	var invalidStored []byte
+	if e = db.QueryRow("SELECT record FROM inventory WHERE uid=? AND instance=43", s.UID).Scan(&invalidStored); e != nil || protocol.ReadUint32(invalidStored, 19) != 0xffffffff {
+		t.Fatal("expiry revived invalid item", e)
+	}
+	exec("DELETE FROM inventory_expirations WHERE instance=43")
+	exec("DELETE FROM inventory WHERE instance=43")
+	send(1440, protocol.Uint32Bytes(99))
+	roomOutputs(t, s, 20150)
+	send(1440, protocol.Uint32Bytes(42))
+	roomOutputs(t, s, 1450)
+	send(1440, protocol.Uint32Bytes(42))
+	roomOutputs(t, s, 1450)
+	send(1400, nil)
+	if out := roomOutputs(t, s, 1410); len(out[0].Payload) != 0 {
+		t.Fatal("ignored reminder returned")
+	}
+	var kept int
+	if e = db.QueryRow("SELECT COUNT(*) FROM inventory WHERE uid=? AND instance=42", s.UID).Scan(&kept); e != nil || kept != 1 {
+		t.Fatal("ignore deleted item", e)
+	}
+	// A later expiry cycle is not hidden by the previous deadline's choice.
+	exec("UPDATE inventory_expirations SET expires_at=?", expired+1)
+	send(1400, nil)
+	if out := roomOutputs(t, s, 1410); len(out[0].Payload) != 124 {
+		t.Fatal("new deadline stayed hidden")
+	}
+	exec("UPDATE inventory_expirations SET expires_at=?", deadline)
 	query := make([]byte, 9)
 	query[0] = protocol.ItemWeapon
 	protocol.WriteUint32(query, 1, 253013)

@@ -758,10 +758,9 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 	case 1300, 1320, 1340, 2171:
 		return hub.mail(session, message)
 	case 1400:
-		if len(payload) != 0 {
-			return protocol.ErrFrame
-		}
-		session.sendGame(protocol.Message{ID: message.ID + 10})
+		return hub.renewalReminders(session, payload)
+	case 1440:
+		return hub.ignoreRenewalReminder(session, payload)
 	case 20360:
 		return hub.honourProfile(session, payload)
 	case 21006:

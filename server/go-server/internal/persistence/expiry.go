@@ -37,7 +37,9 @@ func expireInventory(tx *sql.Tx, uid uint64, now int64) error {
 	}
 	for _, i := range items {
 		protocol.WriteUint16(i.record, 17, 0)
-		protocol.WriteUint32(i.record, 19, 2)
+		if protocol.ReadUint32(i.record, 19) != 0xffffffff {
+			protocol.WriteUint32(i.record, 19, 2)
+		}
 		if _, err = tx.Exec(`UPDATE inventory SET record=? WHERE uid=? AND instance=?`, i.record, uid, i.id); err != nil {
 			return err
 		}

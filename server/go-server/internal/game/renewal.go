@@ -16,6 +16,37 @@ type renewalQuote struct {
 	Offers    map[uint32]persistence.RenewalQuote
 }
 
+func (h *Hub) renewalReminders(s *Session, p []byte) error {
+	if len(p) != 0 {
+		s.sendGame(notice("续费列表请求格式不正确。"))
+		return nil
+	}
+	rows, err := h.Store.ShopManager().RenewalReminders(s.UID)
+	if err != nil {
+		s.sendGame(notice("续费列表读取失败，请稍后重试。"))
+		return nil
+	}
+	var data []byte
+	for _, r := range rows {
+		data = append(data, r.Raw[:]...)
+	}
+	s.sendGame(protocol.Message{ID: 1410, Payload: data})
+	return nil
+}
+
+func (h *Hub) ignoreRenewalReminder(s *Session, p []byte) error {
+	if len(p) != 4 {
+		s.sendGame(notice("忽略续费提醒请求格式不正确。"))
+		return nil
+	}
+	if err := h.Store.ShopManager().IgnoreRenewalReminder(s.UID, protocol.ReadUint32(p, 0)); err != nil {
+		s.sendGame(notice("忽略提醒失败，请刷新续费列表。"))
+		return nil
+	}
+	s.sendGame(protocol.Message{ID: 1450, Payload: bytes.Clone(p)})
+	return nil
+}
+
 func (h *Hub) renewalPrices(s *Session, p []byte) error {
 	s.RenewalQuote = nil
 	quotes, err := h.Store.ShopManager().RenewalQuotes(p[0], protocol.ReadUint32(p, 1))
