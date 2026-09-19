@@ -101,6 +101,11 @@ func (s *TitleManager) AdvanceTitle(uid uint64, supported []byte, clientHash str
 			return false, tx.Commit()
 		}
 	}
+	// Do not consume title advancement for an offer the native selector cannot
+	// display. Unlisted weapons use the same display-only catalogue as tutorial.
+	if _, err = weaponRewardCatalog(tx, next.Choices); err != nil {
+		return false, err
+	}
 	if err = grantTitleChoices(tx, uid, next.Level, next.Choices); err != nil {
 		return false, err
 	}

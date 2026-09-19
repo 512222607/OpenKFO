@@ -68,6 +68,7 @@ func TestTitleClaimProtocolLocalDatabase(t *testing.T) {
 	exec("INSERT INTO accounts VALUES(1,?),(2,?)", make([]byte, 360), make([]byte, 360))
 	catalog, item := make([]byte, 108), make([]byte, 68)
 	catalog[4], item[4] = 25, 25
+	protocol.WriteUint32(catalog, 0, 7)
 	protocol.WriteUint32(catalog, 9, 7)
 	protocol.WriteUint32(catalog, 5, 250001)
 	protocol.WriteUint32(item, 5, 250001)
@@ -108,12 +109,20 @@ func TestTitleClaimProtocolLocalDatabase(t *testing.T) {
 	}
 	roomOutputs(t, s)
 	h.Config.TitleLevels = []byte{1, 2}
-	for i := 0; i < 2; i++ {
+	for i := 0; i < 3; i++ {
+		if i == 1 {
+			exec("UPDATE offers SET enabled=FALSE")
+		} else if i == 2 {
+			exec("DELETE FROM offers")
+		}
 		if err = h.announceTitleReward(s); err != nil {
 			t.Fatal(err)
 		}
-		out := roomOutputs(t, s, 4125)
-		if len(out[0].Payload) != 64 || out[0].Payload[0] != 1 || protocol.ReadUint32(out[0].Payload, 8) != 7 || s.TitleOffer != 1 {
+		out := roomOutputs(t, s, 1550, 4125)
+		if len(out[0].Payload) != 108 || protocol.ReadUint32(out[0].Payload, 0) != 7 || protocol.ReadUint32(out[0].Payload, 5) != 250001 {
+			t.Fatal("missing reward display catalogue", i)
+		}
+		if len(out[1].Payload) != 64 || out[1].Payload[0] != 1 || protocol.ReadUint32(out[1].Payload, 8) != 7 || s.TitleOffer != 1 {
 			t.Fatal("announcement", out)
 		}
 	}

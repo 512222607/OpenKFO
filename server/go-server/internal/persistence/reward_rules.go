@@ -123,7 +123,7 @@ func (m *RewardManager) SaveBattleRewards(revision uint64, rules RewardRules) (R
 			if err != nil {
 				return RewardSettings{}, err
 			}
-			_, err = tutorialChoiceCatalog(tx, choices)
+			_, err = weaponRewardCatalog(tx, choices)
 			tx.Rollback()
 			if err != nil {
 				return RewardSettings{}, fmt.Errorf("新手奖励武器展示目录无效，请检查物品定义与商城配置：%w", err)

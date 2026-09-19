@@ -27,7 +27,7 @@ func (m *RewardManager) TutorialChoices(uid uint64) (choices []uint32, catalog [
 	if json.Unmarshal(data, &choices) != nil || len(choices) == 0 || len(choices) > 7 {
 		return nil, nil, ErrDenied
 	}
-	catalog, err = tutorialChoiceCatalog(tx, choices)
+	catalog, err = weaponRewardCatalog(tx, choices)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -36,7 +36,23 @@ func (m *RewardManager) TutorialChoices(uid uint64) (choices []uint32, catalog [
 
 // Validate the same display catalogue before committing completion and when
 // restoring a pending selection. A broken catalogue must not consume rewards.
-func tutorialChoiceCatalog(tx *sql.Tx, choices []uint32) (catalog []byte, err error) {
+func (m *RewardManager) WeaponChoiceCatalog(choices []uint32) ([]byte, error) {
+	tx, err := m.store.DB.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	catalog, err := weaponRewardCatalog(tx, choices)
+	if err != nil {
+		return nil, err
+	}
+	return catalog, tx.Commit()
+}
+
+func weaponRewardCatalog(tx *sql.Tx, choices []uint32) (catalog []byte, err error) {
+	if len(choices) == 0 || len(choices) > 7 {
+		return nil, ErrDenied
+	}
 	// 1550 is a complete catalogue. Preserve normal shop entries while adding
 	// display-only reward definitions; this does not create purchasable offers.
 	rows, err := tx.Query("SELECT record FROM offers WHERE enabled=TRUE ORDER BY catalog_key LIMIT 4000")

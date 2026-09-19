@@ -51,6 +51,7 @@ func TestTitleProgressLocalDatabase(t *testing.T) {
 	for _, key := range []uint32{7, 8} {
 		catalog, item := make([]byte, 108), make([]byte, 68)
 		catalog[4], item[4] = 25, 25
+		protocol.WriteUint32(catalog, 0, key)
 		protocol.WriteUint32(catalog, 9, key)
 		protocol.WriteUint32(catalog, 5, 250001)
 		protocol.WriteUint32(item, 5, 250001)
@@ -91,6 +92,17 @@ func TestTitleProgressLocalDatabase(t *testing.T) {
 	advance(false, []byte{1, 2})
 	rules.Enabled = true
 	save()
+	var catalog []byte
+	if e := db.QueryRow("SELECT record FROM offers WHERE catalog_key=7").Scan(&catalog); e != nil {
+		t.Fatal(e)
+	}
+	conflict := append([]byte(nil), catalog...)
+	protocol.WriteUint32(conflict, 5, 999999)
+	exec("UPDATE offers SET record=? WHERE catalog_key=7", conflict)
+	if _, e := s.TitleManager().AdvanceTitle(1, []byte{1, 2}, ""); e == nil {
+		t.Fatal("unusable display catalogue consumed title advancement")
+	}
+	exec("UPDATE offers SET record=? WHERE catalog_key=7", catalog)
 	exec("UPDATE offers SET enabled=FALSE WHERE catalog_key=7")
 	// Reward definitions are independent of shop availability. A missing
 	// definition must still fail atomically; an unsold reward remains valid.

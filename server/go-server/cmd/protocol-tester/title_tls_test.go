@@ -63,13 +63,16 @@ func TestTitlesTLS(t *testing.T) {
 	exec(`CREATE TEMPORARY TABLE battle_settlements(serial INT UNSIGNED PRIMARY KEY,reports MEDIUMBLOB NOT NULL,result MEDIUMBLOB NOT NULL) ENGINE=InnoDB`)
 	exec(`CREATE TEMPORARY TABLE offers(catalog_key INT PRIMARY KEY,category INT,variant INT,record BLOB,grant_record BLOB,enabled BOOL) ENGINE=InnoDB`)
 	exec(`CREATE TEMPORARY TABLE offer_lifetimes(catalog_key INT PRIMARY KEY,days INT UNSIGNED) ENGINE=InnoDB`)
+	exec(`CREATE TEMPORARY TABLE item_definitions(definition_key INT PRIMARY KEY,revision BIGINT,record BLOB,days INT) ENGINE=InnoDB`)
 	item, catalog := make([]byte, 68), make([]byte, 108)
 	item[4], catalog[4] = 25, 25
 	protocol.WriteUint32(item, 5, 250001)
 	protocol.WriteUint32(item, 13, 24)
 	protocol.WriteUint32(catalog, 5, 250001)
 	protocol.WriteUint32(catalog, 9, 7)
+	protocol.WriteUint32(catalog, 0, 7)
 	exec(`INSERT INTO offers VALUES(7,0,0,?,?,TRUE)`, catalog, item)
+	exec(`INSERT INTO item_definitions VALUES(7,1,?,1)`, item)
 	exec(`INSERT INTO offer_lifetimes VALUES(7,1)`)
 	exec(`CREATE TEMPORARY TABLE title_rules(id INT PRIMARY KEY,revision BIGINT NOT NULL,rules BLOB NOT NULL) ENGINE=InnoDB`)
 	rules := persistence.TitleRules{ClientHash: strings.Repeat("a", 64), Catalogue: []persistence.TitleCatalogueEntry{{Level: 1, Name: "One"}, {Level: 2, Name: "Two"}}, Enabled: true, Titles: []persistence.TitleRule{
@@ -144,13 +147,17 @@ func TestTitlesTLS(t *testing.T) {
 	expect(send(4126, claim), 20150) // No announcement yet.
 	checkOffer := func(ms []protocol.Message, level byte) {
 		t.Helper()
-		expect(ms, 4300, 1240, 6020, 4125)
-		if len(ms[3].Payload) != 64 || ms[3].Payload[0] != level || protocol.ReadUint32(ms[3].Payload, 8) != 7 {
+		expect(ms, 4300, 1240, 6020, 1550, 4125)
+		if len(ms[3].Payload) != 108 || protocol.ReadUint32(ms[3].Payload, 0) != 7 || protocol.ReadUint32(ms[3].Payload, 5) != 250001 {
+			t.Fatal("reward catalogue missing before offer")
+		}
+		if len(ms[4].Payload) != 64 || ms[4].Payload[0] != level || protocol.ReadUint32(ms[4].Payload, 8) != 7 {
 			t.Fatal("wrong title offer")
 		}
 	}
 	checkOffer(query(), 1)
-	checkOffer(query(), 1) // Refresh recovers a missed offer response.
+	exec("DELETE FROM offers") // Reward-only definitions must remain displayable and claimable.
+	checkOffer(query(), 1)     // Refresh recovers a missed offer response.
 	expect(send(4126, claim[:148]), 20150)
 	protocol.WriteUint32(claim, 145, 8)
 	expect(send(4126, claim), 20150)

@@ -44,6 +44,13 @@ func (h *Hub) announceTitleReward(s *Session) error {
 	if err != nil {
 		return err
 	}
+	catalog, err := h.Store.RewardManager().WeaponChoiceCatalog(choices)
+	if err != nil {
+		return err
+	}
+	// The native selector resolves catalogue keys before loading item icons.
+	// Reward definitions may never have appeared in the purchasable shop list.
+	s.sendGame(protocol.Message{ID: 1550, Payload: catalog})
 	s.TitleOffer = level
 	s.sendGame(protocol.Message{ID: protocol.MsgTitleAward, Payload: p})
 	return nil
