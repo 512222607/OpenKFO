@@ -95,7 +95,25 @@ void main() {
                   'client_hash': hash,
                   'pve_maps': [
                     {'map_id': 8110},
-                    {'map_id': 8111},
+                    {
+                      'map_id': 8111,
+                      'script_hash': hash,
+                      'wave_preview': {
+                        'runtime_hash': hash,
+                        'templates': ['Monster'],
+                        'variants': [
+                          {
+                            'min_players': 1,
+                            'max_players': 8,
+                            'waves': [
+                              {
+                                'monsters': {'0': 2},
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                    },
                     {'map_id': 8110},
                   ],
                   'maps': [
@@ -150,6 +168,11 @@ void main() {
       final access = saved!['stage_access'];
       expect(access['revision'], 7);
       expect(access['pve_maps'], [8110, 8111]);
+      expect(access['wave_plans'].length, 1);
+      expect(access['wave_plans'][0]['map_id'], 8111);
+      expect(access['wave_plans'][0]['variants'][0]['waves'][0]['monsters'], {
+        '0': 2,
+      });
       expect(access['disabled_maps'], [104]);
       expect(access['requirements_enabled'], false);
       expect(access['requirements'].length, 2);

@@ -2,6 +2,7 @@ package desktop
 
 import (
 	"fmt"
+	"kungfu.local/server/internal/protocol"
 	"regexp"
 	"sort"
 	"strconv"
@@ -18,14 +19,8 @@ type StageWavePreview struct {
 	Templates   []string                  `json:"templates"`
 	Variants    []StageWavePreviewVariant `json:"variants"`
 }
-type StageWavePreviewVariant struct {
-	MinPlayers int                   `json:"min_players"`
-	MaxPlayers int                   `json:"max_players"`
-	Waves      []StageWavePreviewRow `json:"waves"`
-}
-type StageWavePreviewRow struct {
-	Monsters map[uint32]uint32 `json:"monsters"`
-}
+type StageWavePreviewVariant = protocol.StageWaveVariant
+type StageWavePreviewRow = protocol.StageWavePlan
 
 func zombieWavePreview(raw, runtime []byte) (*StageWavePreview, error) {
 	if digest(raw) != zombieNormalHash || digest(runtime) != stageAssaultHash {
@@ -105,7 +100,7 @@ func zombieWavePreview(raw, runtime []byte) (*StageWavePreview, error) {
 		}
 		p.Variants = append(p.Variants, variant)
 	}
-	return p, nil
+	return p, protocol.ValidateStageWaveVariants(p.Variants, len(p.Templates))
 }
 
 func (a *archive) stageWavePreview(script string, raw []byte) (*StageWavePreview, error) {

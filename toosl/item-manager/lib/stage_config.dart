@@ -118,6 +118,10 @@ class _StageConfigPageState extends State<StageConfigPage> {
       throw const FormatException('合并后超过4096项');
     }
     List<int>? pve;
+    final wavePlans = <int, Map<String, dynamic>>{
+      for (final plan in (preserved['wave_plans'] as List? ?? []))
+        plan['map_id'] as int: Map<String, dynamic>.from(plan as Map),
+    };
     if (data['pve_maps'] != null) {
       final ids = <int>{};
       for (final r in data['pve_maps'] as List) {
@@ -126,6 +130,16 @@ class _StageConfigPageState extends State<StageConfigPage> {
           throw const FormatException('PVE目录引用了不存在的地图');
         }
         ids.add(id);
+        final preview = r['wave_preview'];
+        if (preview is Map && !wavePlans.containsKey(id)) {
+          wavePlans[id] = {
+            'map_id': id,
+            'script_hash': r['script_hash'],
+            'runtime_hash': preview['runtime_hash'],
+            'templates': preview['templates'],
+            'variants': preview['variants'],
+          };
+        }
       }
       pve = ids.toList()..sort();
       if (pve.map((id) => '$id,').join().length >= 400) {
@@ -139,8 +153,10 @@ class _StageConfigPageState extends State<StageConfigPage> {
       preserved['client_hash'] = hash;
       preserved['requirements'] = requirements;
       if (pve != null) preserved['pve_maps'] = pve;
+      if (wavePlans.isNotEmpty)
+        preserved['wave_plans'] = wavePlans.values.toList();
       showRequirements = true;
-      status = '已导入地图条件草稿，已有数值保留；未保存，未自动启用';
+      status = '已导入地图条件草稿，${wavePlans.length} 张地图有波次配置；已有数值保留，未保存、未自动启用';
     });
   });
   Future<void> editRequirement(int index) async {

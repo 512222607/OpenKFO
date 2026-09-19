@@ -231,3 +231,11 @@ stageassault.lua按MonsterList的顺序下标取怪物，并非随机选模板�
 适配同时要求act_zombiedefend_normal.lua原始字节SHA256为2d966acbb0f2c255e3f0b644b45a845c863ab90acc4eec0dc517235920587c94、stageassault.lua为0528f4d1d668b73982d66cd7ff167fc869e2ce1e410bbe81f34ef2d41b21a84d。任一版本变化时不返回旧波次推测；其他地图仍只返回脚本绑定。尚未提供GM应用预览到服务器配置的流程，PVE准入仍未开放。
 
 实包测试覆盖3个人数档25波结构，1/3/4/11/14/21/25波的实际数量和模板索引边界；独立测试验证未知脚本版本不套用规则。未将上述测试声称为原生关卡实测。
+
+## GM波次配置持久化（2026-09-20）
+
+GM读取地图条件时，将尚未保存的wave_preview合并为wave_plans草稿，保留已有计划；明确点击保存后才写入当前环境的stage_access，沿用revision并发检查与审计。字段包含map_id、script_hash、runtime_hash、templates和variants。旧GM省略字段且客户端版本相同时保留已有计划；显式空数组才删除。
+
+预览、持久化与游戏波次结构共用protocol.StageWavePlan/StageWaveVariant，避免三处JSON结构各自演化。存储校验PVE目录引用、地图重复、哈希、模板名称、编号边界、人数重叠、空波次及数量上限。256地图/256波/1024模板/每波10000怪为本服配置防误填上限，不代表客户端原版限制。
+
+数据库临时表测试验证读回、旧GM保留和显式清空，Flutter测试验证重复导入不重复、保存带入实际波次。当前运行客户端Data/config.spf2的目录及波次读取已实测通过。该步骤只完成保存链；开战读取持久计划及准入仍未接通，不自动改变运行中房间。

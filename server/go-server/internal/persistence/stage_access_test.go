@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"database/sql"
+	"kungfu.local/server/internal/protocol"
 	"os"
 	"strings"
 	"testing"
@@ -165,6 +166,25 @@ func TestStageAccessLocalDatabase(t *testing.T) {
 	loaded, err = s.SaveStageAccess(loaded)
 	if err != nil || len(loaded.PVEMaps) != 1 || loaded.PVEMaps[0] != 8110 {
 		t.Fatal("old GM erased PVE catalogue", loaded, err)
+	}
+	loaded.WavePlans = []StageWaveConfig{{MapID: 8110, ScriptHash: strings.Repeat("b", 64), RuntimeHash: strings.Repeat("c", 64), Templates: []string{"Monster"}, Variants: []protocol.StageWaveVariant{{MinPlayers: 1, MaxPlayers: 8, Waves: []protocol.StageWavePlan{{Monsters: map[uint32]uint32{0: 2}}}}}}}
+	loaded, err = s.SaveStageAccess(loaded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded.WavePlans = nil
+	loaded, err = s.SaveStageAccess(loaded)
+	if err != nil || len(loaded.WavePlans) != 1 {
+		t.Fatal("older GM erased waves", err)
+	}
+	loaded, err = s.StageAccess()
+	if err != nil || len(loaded.WavePlans) != 1 || loaded.WavePlans[0].Variants[0].Waves[0].Monsters[0] != 2 {
+		t.Fatal("wave roundtrip", err)
+	}
+	loaded.WavePlans = []StageWaveConfig{}
+	loaded, err = s.SaveStageAccess(loaded)
+	if err != nil || len(loaded.WavePlans) != 0 {
+		t.Fatal("wave clear ignored", err)
 	}
 	loaded.PVEMaps = []uint32{}
 	loaded, err = s.SaveStageAccess(loaded)

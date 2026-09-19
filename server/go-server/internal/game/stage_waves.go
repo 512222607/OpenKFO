@@ -7,19 +7,11 @@ import (
 
 // Counts must come from the matching map's script/template catalogue. No
 // default wave count is inferred from another map (such as zombie defence).
-type StageWavePlan struct {
-	// Native 938E10 returns the monster name's index in mode+12C, not its
-	// model/item ID. An importer must reproduce that catalogue ordering.
-	Monsters map[uint32]uint32 `json:"monsters"`
-}
+type StageWavePlan = protocol.StageWavePlan
 
 // Map scripts may select different spawn groups for the current player count.
 // Ranges come from that script; no universal 2/4-player thresholds are assumed.
-type StageWaveVariant struct {
-	MinPlayers int             `json:"min_players"`
-	MaxPlayers int             `json:"max_players"`
-	Waves      []StageWavePlan `json:"waves"`
-}
+type StageWaveVariant = protocol.StageWaveVariant
 
 func (c Config) stagePlan(mapID uint32, players int) (*stageWaves, error) {
 	if players < 1 || players > 8 {

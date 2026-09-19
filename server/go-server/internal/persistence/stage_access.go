@@ -13,6 +13,7 @@ import (
 // StageAccess controls concrete maps from the verified client catalogue.
 // Explicit opens bypass progression gates, not game-mode implementation checks.
 type StageAccess struct {
+	WavePlans           []StageWaveConfig       `json:"wave_plans,omitempty"`
 	ForceOpenAll        bool                    `json:"force_open_all"`
 	ForceOpenMaps       []uint32                `json:"force_open_maps"`
 	Revision            uint64                  `json:"revision"`
@@ -72,6 +73,9 @@ func (a StageAccess) ForceOpens(id uint32) bool {
 	return false
 }
 func (a StageAccess) Validate() error {
+	if err := a.validateWavePlans(); err != nil {
+		return err
+	}
 	if (a.ForceOpenAll || len(a.ForceOpenMaps) > 0) && len(a.Requirements) == 0 {
 		return fmt.Errorf("强制开放前请读取客户端地图目录")
 	}
@@ -233,6 +237,9 @@ func (s *Store) SaveStageAccess(a StageAccess) (StageAccess, error) {
 		return StageAccess{}, fmt.Errorf("请更新GM后保留关卡目录；关闭条件时请保留配置")
 	}
 	if previous.ClientHash == a.ClientHash {
+		if a.WavePlans == nil {
+			a.WavePlans = previous.WavePlans
+		}
 		if a.PVEMaps == nil {
 			a.PVEMaps = previous.PVEMaps
 		}
