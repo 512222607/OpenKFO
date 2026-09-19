@@ -56,6 +56,46 @@ type BattleReward struct {
 // Commit the entire room once. The persisted response makes retries independent
 // of subsequent reward configuration changes or process restarts.
 func (m *BattleManager) SettleBattle(serial uint32, reports []byte, rewards []BattleReward, growth ...RewardRules) ([]BattleReward, error) {
+	for _, r := range rewards {
+		if r.Outcome == StageOutcomeClear || r.Outcome == StageOutcomeFailed {
+			return nil, ErrDenied
+		}
+		if r.BattleMode != nil && (protocol.RoomType(*r.BattleMode) == protocol.StageAssault || protocol.RoomType(*r.BattleMode) == protocol.FosterMode) {
+			return nil, ErrDenied
+		}
+	}
+	return m.settleBattle(serial, reports, rewards, false, growth...)
+}
+
+const (
+	StageOutcomeClear  = "stage_clear"
+	StageOutcomeFailed = "stage_failed"
+)
+
+// SettleStage shares the room transaction and progression/item managers, but
+// never awards competitive task counters, random PvP drops, or honour. The
+// caller must validate native reports and the server's wave state beforehand.
+func (m *BattleManager) SettleStage(serial uint32, reports []byte, rewards []BattleReward, growth RewardRules) ([]BattleReward, error) {
+	rewards = append([]BattleReward(nil), rewards...)
+	for i := range rewards {
+		r := &rewards[i]
+		if r.BattleMode != nil && protocol.RoomType(*r.BattleMode) != protocol.StageAssault {
+			return nil, ErrDenied
+		}
+		if (r.Outcome != StageOutcomeClear && r.Outcome != StageOutcomeFailed) || r.HonourPeriod != 0 || r.HonourPoints != 0 {
+			return nil, ErrDenied
+		}
+		if i > 0 && r.Outcome != rewards[0].Outcome {
+			return nil, ErrDenied
+		}
+		mode := byte(protocol.StageAssault)
+		r.BattleMode = &mode
+		r.TaskClientHash = ""
+	}
+	return m.settleBattle(serial, reports, rewards, true, growth)
+}
+
+func (m *BattleManager) settleBattle(serial uint32, reports []byte, rewards []BattleReward, stage bool, growth ...RewardRules) ([]BattleReward, error) {
 	if serial == 0 || len(rewards) == 0 || len(rewards) > 8 {
 		return nil, ErrDenied
 	}
@@ -86,6 +126,18 @@ func (m *BattleManager) SettleBattle(serial uint32, reports []byte, rewards []Ba
 		if err = json.Unmarshal(previous, &saved); err != nil {
 			return nil, err
 		}
+		if stage && len(saved) != len(rewards) {
+			return nil, ErrDenied
+		}
+		for i, r := range saved {
+			isStage := r.BattleMode != nil && protocol.RoomType(*r.BattleMode) == protocol.StageAssault
+			if isStage != stage {
+				return nil, ErrDenied
+			}
+			if stage && r.UID != rewards[i].UID {
+				return nil, ErrDenied
+			}
+		}
 		return saved, tx.Commit()
 	}
 	if err != sql.ErrNoRows {
@@ -112,9 +164,11 @@ func (m *BattleManager) SettleBattle(serial uint32, reports []byte, rewards []Ba
 		if len(r.Profile) != 360 || gold+uint64(r.Gold) > math.MaxUint32 {
 			return nil, ErrDenied
 		}
-		addTaskBattleCounters(r.Profile, r.BattleMode, r.Outcome, len(rewards))
-		if err = advanceExtendedTaskBattleTx(tx, *r, len(rewards)); err != nil {
-			return nil, err
+		if !stage {
+			addTaskBattleCounters(r.Profile, r.BattleMode, r.Outcome, len(rewards))
+			if err = advanceExtendedTaskBattleTx(tx, *r, len(rewards)); err != nil {
+				return nil, err
+			}
 		}
 		startLevel := ProfileLevel(r.Profile)
 		if r.StartLevel != 0 {
@@ -124,7 +178,7 @@ func (m *BattleManager) SettleBattle(serial uint32, reports []byte, rewards []Ba
 			return nil, ErrDenied
 		}
 		r.Items = nil
-		if len(growth) > 0 {
+		if !stage && len(growth) > 0 {
 			if err = awardDrops(tx, r, startLevel, growth[0].Drops); err != nil {
 				return nil, err
 			}
