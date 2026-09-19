@@ -449,16 +449,26 @@ func playTaskBattlesTLS(t *testing.T, owner, peer *client, a, b persistence.Acco
 			}
 			if i == 0 {
 				// The room is waiting again, but the peer still views results.
-				// Neither kick nor ownership transfer may target that phase.
+				// Management and configuration must not disturb that phase.
 				for _, request := range []protocol.Message{
 					{ID: protocol.MsgKickRoomPlayer, Payload: append(protocol.Uint64Bytes(accounts[1].UID), 0)},
 					{ID: protocol.MsgChangeRoomOwner, Payload: append(protocol.Uint32Bytes(uint32(room)), protocol.Uint64Bytes(accounts[1].UID)...)},
+					{ID: 3230, Payload: []byte{1}},
+					{ID: 3200, Payload: make([]byte, 48)},
 				} {
 					send(owner, request.ID, request.Payload)
 					responses := drain(owner)
 					if len(responses) != 1 || responses[0].ID != 20150 {
 						t.Fatal("management during peer results was not rejected", request.ID, responses)
 					}
+				}
+				seat := make([]byte, 24)
+				protocol.WriteUint64(seat, 0, accounts[0].UID)
+				protocol.WriteUint64(seat, 8, accounts[1].UID)
+				protocol.WriteUint32(seat, 20, 1)
+				send(owner, 3260, seat)
+				if responses := drain(owner); len(responses) != 1 || responses[0].ID != 3264 {
+					t.Fatal("seat exchange reached a player viewing results", responses)
 				}
 			}
 		}

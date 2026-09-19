@@ -52,6 +52,24 @@ type Room struct {
 	Members         map[uint64]*Member
 }
 
+// The first settlement return sets Stage to room; other clients may still
+// display results. Configuration broadcasts require every member back.
+func (r *Room) canConfigure(s *Session) bool {
+	if r == nil || r.Stage != "room" || s == nil {
+		return false
+	}
+	actor := r.Members[s.UID]
+	if actor == nil || actor.Session != s {
+		return false
+	}
+	for uid, member := range r.Members {
+		if member == nil || member.Session == nil || member.Session.UID != uid || member.Session.Room != r || member.Session.game() == nil || member.Session.game().Phase != "room" {
+			return false
+		}
+	}
+	return true
+}
+
 func (hub *Hub) resolve(request []byte) ([]byte, error) {
 	access, err := hub.stageAccess()
 	if err != nil {
@@ -496,8 +514,12 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 	case 3260, 3262, 3263:
 		return true, hub.exchangeSeat(session, message)
 	case 3230:
-		if len(payload) != 1 || payload[0] > 1 || room == nil || room.Stage != "room" {
+		if len(payload) != 1 || payload[0] > 1 {
 			return true, protocol.ErrFrame
+		}
+		if !room.canConfigure(session) {
+			session.sendGame(notice("请等待所有玩家返回房间后再换队。"))
+			return true, nil
 		}
 		member := room.Members[uid]
 		if member.Team == payload[0] {
@@ -516,6 +538,10 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 			return true, protocol.ErrFrame
 		}
 		if room == nil || room.Stage != "room" || room.Owner != uid {
+			return true, nil
+		}
+		if !room.canConfigure(session) {
+			session.sendGame(notice("请等待所有玩家返回房间后再修改设置。"))
 			return true, nil
 		}
 		candidate, err := applyRoomSettings(room.Request, payload)
@@ -538,13 +564,8 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		if len(payload) != 0 || room == nil {
 			return true, protocol.ErrFrame
 		}
-		if room.Stage != "room" {
+		if !room.canConfigure(session) {
 			return true, nil
-		}
-		for _, peer := range room.Members {
-			if peer.Session.game().Phase != "room" {
-				return true, nil
-			}
 		}
 		member := room.Members[uid]
 		if room.TutorialPending {

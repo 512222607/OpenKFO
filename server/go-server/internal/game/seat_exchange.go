@@ -35,6 +35,10 @@ func (h *Hub) exchangeSeat(s *Session, m protocol.Message) error {
 		return nil
 	}
 	reject := func() { s.sendGame(protocol.Message{ID: 3264}) }
+	if !r.canConfigure(s) {
+		reject()
+		return nil
+	}
 	sourceID, targetID := protocol.ReadUint64(p, 0), protocol.ReadUint64(p, 8)
 	source, target := r.Members[sourceID], r.Members[targetID]
 	from, to := protocol.ReadUint32(p, 16), protocol.ReadUint32(p, 20)

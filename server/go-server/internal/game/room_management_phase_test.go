@@ -1,9 +1,69 @@
 package game
 
 import (
+	"bytes"
 	"kungfu.local/server/internal/protocol"
 	"testing"
 )
+
+func TestRoomConfigurationWaitsForEverySettlementReturn(t *testing.T) {
+	for _, operation := range []uint32{3230, 3200, 3260, protocol.MsgReady} {
+		for _, phase := range []string{"loading", "wait_ready", "battle", "settlement"} {
+			h, owner, peer, _ := waitingRoomFixture()
+			r := owner.Room
+			peer.game().Phase = phase
+			original := bytes.Clone(r.Request)
+			payload := []byte{1}
+			want := []uint32{20150}
+			switch operation {
+			case 3200:
+				payload = roomSettings(r.Request)
+			case 3260:
+				payload = make([]byte, 24)
+				protocol.WriteUint64(payload, 0, owner.UID)
+				protocol.WriteUint64(payload, 8, peer.UID)
+				protocol.WriteUint32(payload, 20, 1)
+				want = []uint32{3264}
+			case protocol.MsgReady:
+				payload, want = nil, nil
+			}
+			roomRequest(t, h, owner, operation, payload)
+			roomOutputs(t, owner, want...)
+			roomOutputs(t, peer)
+			if !bytes.Equal(r.Request, original) || r.Members[owner.UID].Team != 0 || r.Members[owner.UID].Slot != 0 || r.Exchange != nil || r.Members[owner.UID].Ready || peer.game().Phase != phase {
+				t.Fatalf("operation %d changed room while peer in %s", operation, phase)
+			}
+			peer.game().Phase = "room"
+			if !r.canConfigure(owner) {
+				t.Fatal("room remained locked after all players returned")
+			}
+		}
+	}
+}
+
+func TestRoomConfigurationRejectsStaleMembership(t *testing.T) {
+	for _, broken := range []string{"member", "session", "room", "channel", "identity", "actor"} {
+		_, owner, peer, _ := waitingRoomFixture()
+		r := owner.Room
+		switch broken {
+		case "member":
+			r.Members[peer.UID] = nil
+		case "session":
+			r.Members[peer.UID].Session = nil
+		case "room":
+			peer.Room = nil
+		case "channel":
+			peer.game().Phase = "lobby"
+		case "identity":
+			r.Members[peer.UID] = r.Members[owner.UID]
+		case "actor":
+			delete(r.Members, owner.UID)
+		}
+		if r.canConfigure(owner) {
+			t.Fatal("accepted stale membership", broken)
+		}
+	}
+}
 
 func TestRoomManagementRequiresBothPlayersInWaitingPhase(t *testing.T) {
 	for _, operation := range []uint32{protocol.MsgKickRoomPlayer, protocol.MsgChangeRoomOwner} {
