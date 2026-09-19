@@ -172,6 +172,7 @@ func TestStageGateTLS(t *testing.T) {
 	send(peer, 3070, join)
 	find(drain(peer), 3100)
 	drain(host)
+	checkRoomOwnerTransferTLS(t, host, peer, accounts[0].UID, accounts[1].UID, protocol.ReadUint16(entry, 0), send, drain)
 	send(peer, 4030, nil)
 	find(drain(peer), 4050)
 	drain(host)

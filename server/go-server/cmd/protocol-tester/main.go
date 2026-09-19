@@ -181,6 +181,15 @@ func describe(m protocol.Message) string {
 	if m.ID >= 3260 && m.ID <= 3267 {
 		return describeSeatExchange(m)
 	}
+	if m.ID == protocol.MsgChangeRoomOwnerResult {
+		if len(m.Payload) < 2 {
+			return "移交房主4052过短：需要结果WORD"
+		}
+		if protocol.ReadUint16(m.Payload, 0) == 0 {
+			return "移交房主成功4052；全房新房主以3160通知为准"
+		}
+		return fmt.Sprintf("移交房主失败4052：原生错误码=%d", protocol.ReadUint16(m.Payload, 0))
+	}
 	if m.ID == 1310 || m.ID == 1410 || m.ID == 1330 || m.ID == 1350 || m.ID == protocol.MsgRenewItemResult || m.ID == 1450 {
 		return describeMail(m)
 	}
