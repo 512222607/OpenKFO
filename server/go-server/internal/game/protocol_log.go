@@ -55,6 +55,13 @@ func (s *Session) tracePacket(direction string, channel uint32, transport string
 				if rows, err := protocol.ParseBattleReport(payload); err == nil {
 					var detail strings.Builder
 					detail.WriteString("客户端结算报告（仍需服务器验证）")
+					if s.Room != nil && s.Room.Type() == protocol.StageAssault {
+						if _, reason, err := protocol.ParseStageFinishReport(payload); err == nil {
+							fmt.Fprintf(&detail, "；关卡原因=%s（%d），不是竞技胜负或发奖凭据", reason, reason)
+						} else {
+							detail.WriteString("；关卡报告字段不一致或原因未确认")
+						}
+					}
 					for slot, r := range rows {
 						if r.UID != 0 {
 							fmt.Fprintf(&detail, "；槽位%d UID=%d 血量=%d 结束原因码=%d 房间=%d 场次=%d", slot, r.UID, r.Health, r.FinishCode, r.RoomID, r.Serial)

@@ -10,6 +10,33 @@ import (
 	"testing"
 )
 
+func TestStageFinishTraceUsesRoomMode(t *testing.T) {
+	_, s, _, _ := combatFixture()
+	var output bytes.Buffer
+	s.Trace = log.New(&output, "", 0)
+	p := make([]byte, protocol.BattleReportSize)
+	protocol.WriteUint64(p, 29, s.UID)
+	protocol.WriteUint16(p, 65, uint16(protocol.StageFinishWaves))
+	for _, mode := range []protocol.RoomType{protocol.StageAssault, protocol.FosterMode, protocol.FreePractice} {
+		s.Room.Request[46] = byte(mode)
+		for _, direction := range []string{"C->S", "S->C queued"} {
+			output.Reset()
+			s.tracePacket(direction, 1, "game", 4110, p, false)
+			var entry map[string]any
+			if err := json.Unmarshal(output.Bytes(), &entry); err != nil {
+				t.Fatal(err)
+			}
+			text, _ := entry["content"].(string)
+			if strings.Contains(text, "关卡原因=波次结束标记") != (mode == protocol.StageAssault && direction == "C->S") {
+				t.Fatal("mode-specific reason leaked", entry)
+			}
+			if len(entry["hex"].(string)) != len(p)*2 {
+				t.Fatal("raw report lost")
+			}
+		}
+	}
+}
+
 func TestStageResultTraceUsesRoomMode(t *testing.T) {
 	_, s, _, _ := combatFixture()
 	var output bytes.Buffer
