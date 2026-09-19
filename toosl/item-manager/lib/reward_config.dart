@@ -7,6 +7,7 @@ import 'reward_table.dart';
 import 'drop_config.dart';
 import 'level_gift_config.dart';
 import 'item_definitions.dart';
+import 'stage_reward_config.dart';
 
 typedef RewardApi = Future<dynamic> Function(Map<String, dynamic>);
 
@@ -30,6 +31,7 @@ class _RewardConfigPageState extends State<RewardConfigPage> {
   List<Map<String, int>> rows = [];
   List<Map<String, dynamic>> drops = [];
   List<Map<String, dynamic>> levelGifts = [];
+  List<Map<String, dynamic>> stageRewards = [];
   Map<String, dynamic> tutorial = {"items": <int>[], "gold": 0, "tickets": 0};
   int? revision;
   bool busy = false, growth = false, dirty = false;
@@ -40,6 +42,7 @@ class _RewardConfigPageState extends State<RewardConfigPage> {
     'drops': drops,
     'level_gifts': levelGifts,
     'tutorial_reward': tutorial,
+    'stage_rewards': stageRewards,
   };
   @override
   void initState() {
@@ -60,6 +63,9 @@ class _RewardConfigPageState extends State<RewardConfigPage> {
   }
 
   void apply(dynamic r) {
+    stageRewards = (r['rules']['stage_rewards'] as List? ?? [])
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
     rows = rewardRows(Map<String, dynamic>.from(r['rules']));
     drops = (r['rules']['drops'] as List? ?? [])
         .map((e) => Map<String, dynamic>.from(e))
@@ -471,6 +477,26 @@ class _RewardConfigPageState extends State<RewardConfigPage> {
                             });
                         },
                   child: const Text('新手引导奖励'),
+                ),
+                OutlinedButton(
+                  onPressed: busy || revision == null
+                      ? null
+                      : () async {
+                          final result =
+                              await showDialog<List<Map<String, dynamic>>>(
+                                context: context,
+                                builder: (_) => StageRewardDialog(
+                                  rows: stageRewards,
+                                  api: widget.api,
+                                ),
+                              );
+                          if (result != null && mounted)
+                            setState(() {
+                              stageRewards = result;
+                              dirty = true;
+                            });
+                        },
+                  child: Text('关卡奖励（${stageRewards.length}张地图）'),
                 ),
 
                 OutlinedButton(

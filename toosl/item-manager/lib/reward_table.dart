@@ -84,6 +84,12 @@ List<String> rewardDiff(
   Map<String, dynamic> target,
 ) {
   final a = rewardRows(source), b = rewardRows(target), result = <String>[];
+  if (jsonEncode(source['stage_rewards'] ?? []) !=
+      jsonEncode(target['stage_rewards'] ?? [])) {
+    result.add(
+      '关卡奖励：${jsonEncode(target['stage_rewards'] ?? [])} → ${jsonEncode(source['stage_rewards'] ?? [])}',
+    );
+  }
   if (jsonEncode(source['level_gifts'] ?? []) !=
       jsonEncode(target['level_gifts'] ?? [])) {
     result.add(

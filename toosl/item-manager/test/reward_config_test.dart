@@ -67,6 +67,13 @@ void main() {
             saved?['rewards'] ??
             {
               'win_gold': 20,
+              'stage_rewards': [
+                {
+                  'map_id': 20051,
+                  'clear': {'experience': 12},
+                  'failed': {'gold': 1},
+                },
+              ],
               'level_gifts': [
                 {
                   'level': 5,
@@ -104,6 +111,7 @@ void main() {
     expect(saved?['rewards']['levels'][149]['win_gold'], 0);
     expect(saved?['rewards']['drops'][0]['catalog_key'], 123);
     expect(saved?['rewards']['level_gifts'][0]['items'], [456]);
+    expect(saved?['rewards']['stage_rewards'][0]['clear']['experience'], 12);
     expect(tester.takeException(), isNull);
   });
 }
