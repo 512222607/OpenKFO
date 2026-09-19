@@ -191,7 +191,10 @@ func TestExtendedTaskActionsTLS(t *testing.T) {
 		counts := make([]byte, 12)
 		counts[0] = 1
 		exec("UPDATE extended_task_progress SET counts=? WHERE uid=? AND task_key=?", counts, uid, pair.key)
-		send(pair.accept, p, 20150)
+		out = send(pair.accept, p, pair.accept+10)
+		if len(out.Payload) != 3 || protocol.ReadUint16(out.Payload, 0) != pair.key || out.Payload[2] != 2 {
+			t.Fatal("accept retry did not restore native acknowledgement", out)
+		}
 		var stored []byte
 		if e = store.DB.QueryRow("SELECT counts FROM extended_task_progress WHERE uid=? AND task_key=?", uid, pair.key).Scan(&stored); e != nil || stored[0] != 1 {
 			t.Fatal("replay reset counters", e)
@@ -207,7 +210,10 @@ func TestExtendedTaskActionsTLS(t *testing.T) {
 		if len(out.Payload) != 3 || out.Payload[2] != 1 {
 			t.Fatal(out)
 		}
-		send(pair.cancel, p, 20150)
+		out = send(pair.cancel, p, pair.cancel+10)
+		if len(out.Payload) != 3 || protocol.ReadUint16(out.Payload, 0) != pair.key || out.Payload[2] != 1 {
+			t.Fatal("cancel retry did not restore native acknowledgement", out)
+		}
 		if rows := query(); rows[pair.key].State != 1 || rows[pair.key].Conditions[0].Current != 0 {
 			t.Fatal("cancelled list", rows)
 		}

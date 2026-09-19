@@ -121,15 +121,15 @@ func (h *Hub) extendedTaskAction(s *Session, m protocol.Message) error {
 		s.sendGame(protocol.Message{ID: m.ID - 10, Payload: p})
 		return nil
 	}
-	state, changed, err := h.Store.TaskManager().ExtendedTaskTransition(s.UID, h.Config.ConfigHash, m.ID, r.Key)
+	state, _, err := h.Store.TaskManager().ExtendedTaskTransition(s.UID, h.Config.ConfigHash, m.ID, r.Key)
 	if err != nil {
 		s.sendGame(notice("每日/新手任务操作未完成，请检查任务配置、客户端版本和当前状态。"))
 		return nil
 	}
-	if !changed {
-		s.sendGame(notice("任务状态未改变，未重置进度。"))
-		return nil
-	}
+	// Replay the acknowledgement after response loss. Native A47A00/A480E0
+	// preserve counters for state 2; state 1 clears them, as cancellation does.
+	// The store validates the same account, kind, cycle and client hash and
+	// does not rewrite the accepted snapshot or counts on an unchanged state.
 	// Native handlers consume only WORD key and BYTE state. This server uses
 	// that minimal 3B acknowledgement, not an unproven echo of the 19B request.
 	p := make([]byte, 3)
