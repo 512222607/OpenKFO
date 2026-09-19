@@ -99,6 +99,7 @@ func (m *RewardManager) SaveBattleRewards(revision uint64, rules RewardRules) (R
 			return RewardSettings{}, err
 		}
 		weapons := map[uint32]bool{}
+		var choices []uint32
 		for _, key := range rules.Tutorial.Items {
 			var record []byte
 			if err := m.store.DB.QueryRow("SELECT record FROM item_definitions WHERE definition_key=?", key).Scan(&record); err != nil {
@@ -112,6 +113,20 @@ func (m *RewardManager) SaveBattleRewards(revision uint64, rules RewardRules) (R
 					return RewardSettings{}, fmt.Errorf("新手奖励最多配置7件不重复的武器，玩家任选一件")
 				}
 				weapons[key] = true
+				choices = append(choices, key)
+			}
+		}
+		// Reject an unusable native selector while the GM is saving, rather
+		// than discovering its missing/conflicting catalogue at guide completion.
+		if len(choices) > 0 {
+			tx, err := m.store.DB.Begin()
+			if err != nil {
+				return RewardSettings{}, err
+			}
+			_, err = tutorialChoiceCatalog(tx, choices)
+			tx.Rollback()
+			if err != nil {
+				return RewardSettings{}, fmt.Errorf("新手奖励武器展示目录无效，请检查物品定义与商城配置：%w", err)
 			}
 		}
 	}

@@ -92,6 +92,12 @@ func TestTutorialBundleLocalDatabase(t *testing.T) {
 	badCatalog[4] = protocol.ItemWeapon
 	protocol.WriteUint32(badCatalog, 5, 999999)
 	exec("INSERT INTO offers VALUES(1,?,TRUE)", badCatalog)
+	// GM must reject the same catalogue conflict before publishing settings.
+	gmRules := rules
+	gmRules.LevelGifts = []LevelGift{}
+	if _, err = store.RewardManager().SaveBattleRewards(0, gmRules); err == nil || !strings.Contains(err.Error(), "展示目录无效") {
+		t.Fatal("GM accepted an unusable tutorial selector", err)
+	}
 	if _, err = store.RewardManager().CompleteTutorial(1, ""); err == nil {
 		t.Fatal("conflicting display catalogue accepted")
 	}
