@@ -110,3 +110,36 @@ func TestKickTraceAndRejectionAreReadableWithoutLosingRawBytes(t *testing.T) {
 		t.Fatal("decoded malformed notice")
 	}
 }
+
+func TestRenewalTraceIsDiagnosticAndPreservesRawPacket(t *testing.T) {
+	p := make([]byte, 173)
+	protocol.WriteUint32(p, 0, 42)
+	protocol.WriteUint32(p, 4, 105)
+	protocol.WriteUint32(p, 149, 253013)
+	protocol.WriteUint32(p, 161, 1000)
+	for _, tc := range []struct {
+		direction, transport string
+		payload              []byte
+		want                 bool
+	}{
+		{"C->S", "game", p, true},
+		{"S->C queued", "game", p, false},
+		{"C->S", "sdk", p, false},
+		{"C->S", "game", p[:172], false},
+	} {
+		var output bytes.Buffer
+		s := &Session{Trace: log.New(&output, "", 0)}
+		s.tracePacket(tc.direction, 1, tc.transport, protocol.MsgRenewItem, tc.payload, false)
+		var row map[string]any
+		if err := json.Unmarshal(output.Bytes(), &row); err != nil {
+			t.Fatal(err)
+		}
+		content, ok := row["content"].(string)
+		if ok != tc.want || len(row["hex"].(string)) != len(tc.payload)*2 {
+			t.Fatal(row)
+		}
+		if tc.want && (!strings.Contains(content, "库存实例=42") || !strings.Contains(content, "申报金额=1000（不代表已扣款）")) {
+			t.Fatal(content)
+		}
+	}
+}
