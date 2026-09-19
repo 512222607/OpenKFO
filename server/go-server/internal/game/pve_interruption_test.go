@@ -53,3 +53,36 @@ func TestPVEReportCannotUseCompetitiveRewards(t *testing.T) {
 		}
 	}
 }
+
+func TestPVELeaveAfterSettlementKeepsRemainingResult(t *testing.T) {
+	for _, ownerLeaves := range []bool{true, false} {
+		h, owner, peer, outsider := combatFixture()
+		r := owner.Room
+		r.Request[46] = byte(protocol.StageAssault)
+		r.Stage = "settlement"
+		for _, m := range r.Members {
+			m.Ready = false
+			m.Session.game().Phase = "settlement"
+		}
+		leaver, remaining := owner, peer
+		if !ownerLeaves {
+			leaver, remaining = peer, owner
+		}
+		h.leave(leaver, false)
+		want := []uint32{protocol.MsgPlayerLeftRoom}
+		if ownerLeaves {
+			want = append(want, protocol.MsgRoomOwner)
+		}
+		roomOutputs(t, remaining, want...)
+		roomOutputs(t, leaver)
+		roomOutputs(t, outsider)
+		if h.Rooms[r.ID] != r || len(r.Members) != 1 || r.Stage != "settlement" || remaining.Room != r || remaining.game().Phase != "settlement" || r.Owner != remaining.UID {
+			t.Fatal("settled stage aborted on departure", ownerLeaves)
+		}
+		// The last departure still removes the room without database access.
+		h.leave(remaining, false)
+		if len(h.Rooms) != 0 {
+			t.Fatal("empty result room retained")
+		}
+	}
+}

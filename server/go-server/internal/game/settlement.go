@@ -240,6 +240,5 @@ func (hub *Hub) returnFromSettlement(session *Session) error {
 		session.sendGame(notice("任务进度刷新失败，请稍后打开任务列表。"))
 	}
 	session.syncUnequippedInventory(account.Inventory)
-	session.syncUnequippedInventory(account.Inventory)
 	return nil
 }

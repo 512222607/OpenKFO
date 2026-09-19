@@ -294,13 +294,16 @@ func (hub *Hub) leave(session *Session, acknowledge bool) {
 		delete(hub.Rooms, room.ID)
 		return
 	}
-	if room.Type() == protocol.StageAssault && room.Stage != "room" {
+	stageSettled := room.Type() == protocol.StageAssault && room.Stage == "settlement"
+	if room.Type() == protocol.StageAssault && room.Stage != "room" && !stageSettled {
 		// The native map script and monster pool belong to the controller.
 		// Do not hand an in-progress script to another player's empty state.
 		hub.abortStageRoom(room)
 		return
 	}
-	interrupted := room.Stage != "room"
+	// A settled stage has already committed rewards. A departing controller
+	// must not turn it into an aborted/no-reward match for the remaining peers.
+	interrupted := room.Stage != "room" && !stageSettled
 	hub.broadcast(room, protocol.Message{ID: protocol.MsgPlayerLeftRoom, Payload: protocol.Uint64Bytes(session.UID)}, 0)
 	if room.Owner == session.UID {
 		var first *Member
