@@ -24,10 +24,18 @@ func validateBattleReport(room *Room, payload []byte) (map[uint64]uint16, error)
 	for slot, r := range rows {
 		uid := r.UID
 		if uid == 0 {
+			// 987E40 zeroes the full report before filling occupied slots.
+			if r.Raw != ([protocol.BattleReportRecordSize]byte{}) {
+				return nil, fmt.Errorf("%w: battle report slot=%d has data without identity", protocol.ErrFrame, slot)
+			}
 			continue
 		}
-		if room.Members[uid] == nil {
+		member := room.Members[uid]
+		if member == nil {
 			return nil, fmt.Errorf("%w: battle report slot=%d unknown uid=%d", protocol.ErrFrame, slot, uid)
+		}
+		if int(member.Slot) != slot {
+			return nil, fmt.Errorf("%w: battle report uid=%d slot=%d want=%d", protocol.ErrFrame, uid, slot, member.Slot)
 		}
 		// Native 987E40 copies the room context pair to +67/+71.
 		if id := r.RoomID; id != uint32(room.ID) {

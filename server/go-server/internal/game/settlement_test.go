@@ -41,6 +41,13 @@ func TestSettlementWireValidation(t *testing.T) {
 		func(p []byte) []byte { protocol.WriteUint32(p, 67, uint32(room.ID)+1); return p },
 		func(p []byte) []byte { protocol.WriteUint32(p, 71, room.Serial+1); return p },
 		func(p []byte) []byte { protocol.WriteUint64(p, 87+29, host.UID); return p },
+		func(p []byte) []byte {
+			first := bytes.Clone(p[:87])
+			copy(p[:87], p[87:174])
+			copy(p[87:174], first)
+			return p
+		},
+		func(p []byte) []byte { p[7*87+65] = 1; return p },
 	} {
 		if _, err := validateBattleReport(room, mutate(bytes.Clone(valid))); err == nil {
 			t.Fatal("malformed or stale report accepted")
@@ -84,7 +91,7 @@ func TestSettlementCapturedReport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	room := &Room{ID: 1, Serial: 5, Members: map[uint64]*Member{10001: {}, 10002: {}}}
+	room := &Room{ID: 1, Serial: 5, Members: map[uint64]*Member{10001: {Slot: 0}, 10002: {Slot: 1}}}
 	health, err := validateBattleReport(room, payload)
 	if err != nil || len(health) != 2 || health[10001] != 0 || health[10002] != 100 {
 		t.Fatalf("native report rejected or misread: health=%v err=%v", health, err)
@@ -93,6 +100,28 @@ func TestSettlementCapturedReport(t *testing.T) {
 	if _, err := validateBattleReport(room, payload); err == nil {
 		t.Fatal("previous battle report accepted")
 	}
+}
+
+func TestSettlementReportUsesActualNoncontiguousSlots(t *testing.T) {
+	h, owner, peer, _ := combatFixture()
+	r := owner.Room
+	r.Members[owner.UID].Slot, r.Members[peer.UID].Slot = 3, 7
+	p := settlementReport(r)
+	if health, err := validateBattleReport(r, p); err != nil || len(health) != 2 {
+		t.Fatal("valid sparse roster rejected", health, err)
+	}
+	// Compacting records is not the native format, even with matching identities.
+	bad := make([]byte, protocol.BattleReportSize)
+	copy(bad[:87], p[3*87:4*87])
+	copy(bad[87:174], p[7*87:8*87])
+	if err := h.settleReport(owner, bad); err == nil {
+		t.Fatal("compacted report accepted")
+	}
+	if r.Stage != "battle" || len(r.Reports) != 0 {
+		t.Fatal("invalid report began settlement")
+	}
+	roomOutputs(t, owner)
+	roomOutputs(t, peer)
 }
 
 func TestSettlementReturnStatus(t *testing.T) {
