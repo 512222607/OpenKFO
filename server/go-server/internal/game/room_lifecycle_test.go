@@ -222,7 +222,7 @@ func TestRoomKickRequiresOwnerAndRemovesOnlyTarget(t *testing.T) {
 		t.Fatal("non-owner kicked a player")
 	}
 	roomOutputs(t, host)
-	roomOutputs(t, peer)
+	roomOutputs(t, peer, 20150)
 	roomOutputs(t, newcomer)
 	payload = append(protocol.Uint64Bytes(peer.UID), 0)
 	roomRequest(t, hub, host, 3140, payload)

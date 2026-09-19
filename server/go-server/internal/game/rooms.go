@@ -489,20 +489,8 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		member.Team = payload[0]
 		hub.broadcast(room, protocol.Message{ID: 3250, Payload: roomTeam(member)}, 0)
 		hub.clearRoomReady(room)
-	case 3140:
-		if len(payload) != 9 {
-			return true, protocol.ErrFrame
-		}
-		if room == nil || room.Stage != "room" || room.Owner != uid || payload[8] != 0 {
-			return true, nil
-		}
-		targetUID := protocol.ReadUint64(payload, 0)
-		if targetUID == uid || room.Members[targetUID] == nil {
-			return true, nil
-		}
-		removed := room.Members[targetUID].Session
-		hub.broadcast(room, protocol.Message{ID: 3150, Payload: payload}, 0)
-		hub.leave(removed, false)
+	case protocol.MsgKickRoomPlayer:
+		return true, hub.kickRoomPlayer(session, payload)
 	case 3200:
 		if len(payload) != 48 {
 			return true, protocol.ErrFrame

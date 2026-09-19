@@ -88,6 +88,8 @@ const (
 	MsgLeaveRoom            = 3110
 	MsgRoomLeft             = 3115
 	MsgPlayerLeftRoom       = 3130
+	MsgKickRoomPlayer       = 3140
+	MsgRoomPlayerKicked     = 3150
 	MsgRoomOwner            = 3160
 	MsgRoomAcknowledgement  = 3550
 	MsgReady                = 4030 // 准备请求

@@ -77,3 +77,36 @@ func TestProtocolTraceRedactsSDKAndKeepsFullUDP(t *testing.T) {
 		t.Fatal("UDP truncated")
 	}
 }
+
+func TestKickTraceAndRejectionAreReadableWithoutLosingRawBytes(t *testing.T) {
+	var output bytes.Buffer
+	s := &Session{Trace: log.New(&output, "", 0)}
+	p := append(protocol.Uint64Bytes(42), 1)
+	s.tracePacket("C->S", 1, "game", protocol.MsgKickRoomPlayer, p, false)
+	var row map[string]any
+	if err := json.Unmarshal(output.Bytes(), &row); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(row["content"].(string), "UID=42") || row["hex"] != "2a0000000000000001" {
+		t.Fatal(row)
+	}
+	output.Reset()
+	m := notice("只有房主可以踢出玩家。")
+	s.tracePacket("S->C queued", 1, "game", m.ID, m.Payload, false)
+	if err := json.Unmarshal(output.Bytes(), &row); err != nil {
+		t.Fatal(err)
+	}
+	if row["content"] != "只有房主可以踢出玩家。" || len(row["hex"].(string)) != 430 {
+		t.Fatal(row)
+	}
+	output.Reset()
+	m.Payload[12] = 255
+	s.tracePacket("S->C", 1, "game", m.ID, m.Payload, false)
+	row = map[string]any{}
+	if err := json.Unmarshal(output.Bytes(), &row); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := row["content"]; exists {
+		t.Fatal("decoded malformed notice")
+	}
+}

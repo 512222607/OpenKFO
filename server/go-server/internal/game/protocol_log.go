@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 
 	"kungfu.local/server/internal/persistence"
@@ -28,6 +30,22 @@ func (s *Session) tracePacket(direction string, channel uint32, transport string
 		entry["content"] = "[authentication credentials redacted]"
 	} else {
 		entry["hex"] = hex.EncodeToString(payload)
+		if transport == "game" {
+			if opcode == protocol.MsgKickRoomPlayer {
+				if r, err := protocol.ParseRoomKickRequest(payload); err == nil {
+					entry["content"] = fmt.Sprintf("请求踢出玩家 UID=%d；客户端标志=%d（不代表房主权限）", r.TargetUID, r.ClientFlag)
+				}
+			}
+			// Our own notice format includes the terminating NUL in its length.
+			if opcode == 20150 && strings.HasPrefix(direction, "S->C") && len(payload) == 215 {
+				n := int(payload[12])
+				if n > 0 && n <= 200 && payload[12+n] == 0 {
+					if text, err := persistence.DecodeGBK(payload[13 : 12+n]); err == nil {
+						entry["content"] = text
+					}
+				}
+			}
+		}
 		if text, err := persistence.DecodeGBK(payload); err == nil {
 			entry["text_gbk"] = text
 		}
