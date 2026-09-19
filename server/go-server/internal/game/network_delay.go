@@ -2,6 +2,7 @@ package game
 
 import (
 	"kungfu.local/server/internal/protocol"
+	"log"
 	"time"
 )
 
@@ -96,6 +97,11 @@ func (h *Hub) networkDelayReply(s *Session, payload []byte) error {
 	}
 	if err := h.startBattle(r); err != nil {
 		h.clearRoomReady(r)
+		if r.Type() == protocol.StageAssault {
+			log.Printf("stage_start_failed room=%d owner=%d error=%v", r.ID, r.Owner, err)
+			h.broadcast(r, notice("关卡开战失败，请检查GM中的地图版本、波次人数档和通关/失败奖励配置，再重新准备。"), 0)
+			return nil
+		}
 		h.broadcast(r, notice("开战初始化失败，请稍后重新准备。"), 0)
 		return err
 	}

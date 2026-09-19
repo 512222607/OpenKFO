@@ -2,6 +2,7 @@ package game
 
 import (
 	"database/sql"
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -35,6 +36,7 @@ func TestStageSettlementRouteLocalDatabase(t *testing.T) {
 		}
 	}
 	for _, q := range []string{
+		`CREATE TEMPORARY TABLE stage_access(id INT PRIMARY KEY,revision BIGINT,rules MEDIUMBLOB) ENGINE=InnoDB`,
 		`CREATE TEMPORARY TABLE accounts(uid BIGINT PRIMARY KEY,profile BLOB,gold INT,tickets INT) ENGINE=InnoDB`,
 		`CREATE TEMPORARY TABLE counters(name VARCHAR(32) PRIMARY KEY,value BIGINT) ENGINE=InnoDB`,
 		`CREATE TEMPORARY TABLE battle_settlements(serial INT PRIMARY KEY,reports BLOB,result BLOB) ENGINE=InnoDB`,
@@ -53,6 +55,26 @@ func TestStageSettlementRouteLocalDatabase(t *testing.T) {
 	r.StageWaves.index = 1
 	r.BattleStartedAt = time.Now().Add(-125 * time.Second)
 	h.Config.Settlement = persistence.RewardRules{StageRewards: []persistence.StageMapRewards{{MapID: 20051, Clear: persistence.StageReward{Experience: 20, RewardBundle: persistence.RewardBundle{Gold: 7, Tickets: 2}}}}}
+	h.Config.ConfigHash = strings.Repeat("a", 64)
+	access := persistence.StageAccess{ClientHash: h.Config.ConfigHash, PVEMaps: []uint32{20051}, Requirements: []persistence.StageTitleRequirement{{MapID: 20051, Name: "Test stage"}}, WavePlans: []persistence.StageWaveConfig{{MapID: 20051, ScriptHash: strings.Repeat("b", 64), RuntimeHash: strings.Repeat("c", 64), Templates: []string{"Monster"}, Variants: []StageWaveVariant{{MinPlayers: 1, MaxPlayers: 8, Waves: []StageWavePlan{{Monsters: map[uint32]uint32{0: 2}}}}}}}}
+	accessData, err := json.Marshal(access)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exec("INSERT INTO stage_access VALUES(1,1,?)", accessData)
+	prepared, err := h.prepareStageBattle(r)
+	if err != nil || prepared.plans[0].Monsters[0] != 2 {
+		t.Fatal("stored wave plan not used", err)
+	}
+	if r.StageWaves.plans[0].Monsters[7] != 1 {
+		t.Fatal("preparation modified active room")
+	}
+	rewards := h.Config.Settlement
+	h.Config.Settlement = persistence.RewardRules{}
+	if _, err = h.prepareStageBattle(r); err == nil {
+		t.Fatal("missing stage rewards accepted")
+	}
+	h.Config.Settlement = rewards
 	profile := make([]byte, protocol.RoleProfileSize)
 	protocol.WriteUint16(profile, persistence.LevelOffset, 1)
 	exec("INSERT INTO counters VALUES('battle',1)")

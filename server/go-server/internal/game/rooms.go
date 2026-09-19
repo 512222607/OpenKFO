@@ -710,7 +710,7 @@ func (hub *Hub) startBattle(room *Room) error {
 	var waves *stageWaves
 	if room.Type() == protocol.StageAssault {
 		var err error
-		waves, err = hub.Config.stagePlan(protocol.ReadUint32(room.Request, protocol.RoomMapOffset), len(room.Members))
+		waves, err = hub.prepareStageBattle(room)
 		if err != nil {
 			return err
 		}
