@@ -31,6 +31,11 @@ func (s *Session) tracePacket(direction string, channel uint32, transport string
 	} else {
 		entry["hex"] = hex.EncodeToString(payload)
 		if transport == "game" {
+			if opcode == protocol.MsgStageWaveControl && strings.HasPrefix(direction, "S->C") {
+				if r, err := protocol.ParseStageWaveControl(payload); err == nil {
+					entry["content"] = fmt.Sprintf("闯关波次控制：波次=%d，-1触发客户端结束流程；不等于通关奖励凭据", r.Wave)
+				}
+			}
 			if opcode == protocol.MsgBattleLoading && strings.HasPrefix(direction, "S->C") {
 				if r, err := protocol.ParseBattleStart(payload); err == nil {
 					entry["content"] = fmt.Sprintf("加载战斗：房间=%d，主控槽位=%d，槽位0–7延迟(ms)=%v；0表示未测量，耗时包含客户端处理和服务器调度", r.RoomID, r.ControllerSlot, r.NetworkDelay)
@@ -116,6 +121,11 @@ func (s *Session) tracePacket(direction string, channel uint32, transport string
 		}
 		if opcode == 8071 && len(payload) >= 4 {
 			entry["subprotocol"] = protocol.ReadUint32(payload, 0)
+			if transport == "game" {
+				if r, err := protocol.ParseStageWaveEnd(payload); err == nil {
+					entry["content"] = fmt.Sprintf("闯关结束子消息20407：申报UID=%d，上下文原值=%d；完整通关业务未接入，不作为发奖授权", r.Sender, r.ContextValue)
+				}
+			}
 		}
 	}
 	var encoded bytes.Buffer

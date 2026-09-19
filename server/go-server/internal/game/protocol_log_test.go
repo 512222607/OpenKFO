@@ -10,6 +10,26 @@ import (
 	"testing"
 )
 
+func TestStageWaveTraceDirectionAndRawPayload(t *testing.T) {
+	_, s, _, _ := waitingRoomFixture()
+	var output bytes.Buffer
+	s.Trace = log.New(&output, "", 0)
+	p := make([]byte, 40)
+	protocol.WriteUint32(p, 8, 0xffffffff)
+	for _, direction := range []string{"C->S", "S->C"} {
+		output.Reset()
+		s.tracePacket(direction, 1, "game", 20572, p, false)
+		var entry map[string]any
+		if err := json.Unmarshal(output.Bytes(), &entry); err != nil {
+			t.Fatal(err)
+		}
+		_, annotated := entry["content"]
+		if annotated != (direction == "S->C") || len(entry["hex"].(string)) != 80 {
+			t.Fatal("direction or original payload lost", entry)
+		}
+	}
+}
+
 func TestProtocolTraceReassemblesAndLogsEveryRecipient(t *testing.T) {
 	hub, a, b, _ := waitingRoomFixture()
 	var output bytes.Buffer

@@ -119,6 +119,20 @@ func (c *client) read() (tunnel.Frame, []protocol.Message, error) {
 	return f, messages, err
 }
 func describe(m protocol.Message) string {
+	if m.ID == protocol.MsgStageWaveControl {
+		r, err := protocol.ParseStageWaveControl(m.Payload)
+		if err != nil {
+			return "闯关波次控制20572长度错误：必须40B"
+		}
+		return fmt.Sprintf("闯关波次=%d；-1触发客户端结束流程，不等于通关凭据", r.Wave)
+	}
+	if m.ID == 8071 && len(m.Payload) >= 4 && protocol.ReadUint32(m.Payload, 0) == protocol.BattleEventStageWaveEnd {
+		r, err := protocol.ParseStageWaveEnd(m.Payload)
+		if err != nil {
+			return "闯关结束子消息20407长度错误：必须47B"
+		}
+		return fmt.Sprintf("闯关结束子消息20407：申报UID=%d，上下文原值=%d；不是已验证通关", r.Sender, r.ContextValue)
+	}
 	if m.ID == protocol.MsgRoomAnimationRequest {
 		return "房间动作请求3410：仅确认Lua名称，请求结构未确认，不按3420布局解释或转发"
 	}
