@@ -214,3 +214,21 @@ func TestRoomMemberTraceDirectionAndRawBytes(t *testing.T) {
 		}
 	}
 }
+
+func TestInputReadyTraceKeepsUntrustedClientValue(t *testing.T) {
+	p := make([]byte, 14)
+	protocol.WriteUint16(p, 0, 7)
+	protocol.WriteUint64(p, 2, 42)
+	protocol.WriteUint32(p, 10, 0xffffffff)
+	var output bytes.Buffer
+	s := &Session{Trace: log.New(&output, "", 0)}
+	s.tracePacket("C->S", 1, "game", protocol.MsgBattleInputReady, p, false)
+	var row map[string]any
+	if err := json.Unmarshal(output.Bytes(), &row); err != nil {
+		t.Fatal(err)
+	}
+	content, _ := row["content"].(string)
+	if !strings.Contains(content, "房间=7，申报UID=42") || !strings.Contains(content, "4294967295") || len(row["hex"].(string)) != 28 {
+		t.Fatal(row)
+	}
+}

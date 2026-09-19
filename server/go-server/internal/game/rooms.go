@@ -631,10 +631,11 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		}
 		hub.broadcast(room, protocol.Message{ID: protocol.MsgAllResourcesReady}, 0)
 	case protocol.MsgBattleInputReady:
-		if len(payload) != 14 || protocol.ReadUint64(payload, 2) != uid {
+		ready, err := protocol.ParseBattleInputReady(payload)
+		if err != nil || ready.UID != uid {
 			return true, protocol.ErrFrame
 		}
-		if room == nil || protocol.ReadUint16(payload, 0) != room.ID {
+		if room == nil || ready.RoomID != room.ID {
 			return true, nil
 		}
 		if room.Members[uid].Input {

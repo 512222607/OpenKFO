@@ -31,6 +31,11 @@ func (s *Session) tracePacket(direction string, channel uint32, transport string
 	} else {
 		entry["hex"] = hex.EncodeToString(payload)
 		if transport == "game" {
+			if opcode == protocol.MsgBattleInputReady && strings.HasPrefix(direction, "C->S") {
+				if r, err := protocol.ParseBattleInputReady(payload); err == nil {
+					entry["content"] = fmt.Sprintf("输入就绪请求：房间=%d，申报UID=%d，客户端尾值=%d（语义未确认，不作为授权）", r.RoomID, r.UID, r.ClientValue)
+				}
+			}
 			if (opcode == 3090 || opcode == 3105) && strings.HasPrefix(direction, "S->C") {
 				if rows, err := protocol.ParseRoomMembers(payload); err == nil && (opcode != 3090 || len(rows) == 1) {
 					var detail strings.Builder
