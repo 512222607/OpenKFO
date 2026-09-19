@@ -49,7 +49,12 @@ func (h *Hub) completeTutorial(s *Session, ch *Channel, payload []byte) error {
 	}
 	result, err := h.Store.RewardManager().CompleteTutorial(s.UID, h.Config.ConfigHash)
 	if err != nil {
-		return err
+		// The completion transaction rolls back on invalid reward definitions or
+		// storage failure. Keep the guide session alive so completion can retry;
+		// propagating this error disconnects a player who sent a valid 4124.
+		log.Printf("tutorial_reward_failed uid=%d error=%v", s.UID, err)
+		s.sendGame(notice("新手奖励结算失败，进度尚未提交。请检查GM新手奖励配置后重试。"))
+		return nil
 	}
 	log.Printf("tutorial_reward uid=%d replay=%t choices=%v automatic_items=%d gold=%d tickets=%d", s.UID, result.Replay, result.Choices, len(result.Items), result.Gold, result.Tickets)
 	// Synchronize BEFORE leaving: otherwise 924010 sees the old title and

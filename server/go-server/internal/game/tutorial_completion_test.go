@@ -158,6 +158,21 @@ func TestTutorialCompletionLocalDatabase(t *testing.T) {
 			exec("INSERT INTO item_definitions VALUES(?,1,?,1)", key, record)
 		}
 		exec("INSERT INTO battle_reward_rules VALUES(1,?)", []byte(`{"tutorial_reward":{"items":[1,2],"gold":0,"tickets":0}}`))
+		// A missing reward definition must not disconnect the valid guide
+		// session, consume completion, or replace the selector with an empty one.
+		exec("UPDATE battle_reward_rules SET rules=? WHERE id=1", []byte(`{"tutorial_reward":{"items":[999]}}`))
+		if err := h.route(s, s.game(), protocol.Message{ID: 4124}); err != nil {
+			t.Fatal("reward configuration failure disconnected player", err)
+		}
+		roomOutputs(t, s, 20150)
+		if s.Room != r || r.Stage != "battle" || s.game().Phase != "battle" {
+			t.Fatal("failed completion lost guide session")
+		}
+		var receipts int
+		if err := db.QueryRow("SELECT COUNT(*) FROM tutorial_rewards").Scan(&receipts); err != nil || receipts != 0 {
+			t.Fatal("failed completion consumed reward", receipts, err)
+		}
+		exec("UPDATE battle_reward_rules SET rules=? WHERE id=1", []byte(`{"tutorial_reward":{"items":[1,2],"gold":0,"tickets":0}}`))
 		if err := h.route(s, s.game(), protocol.Message{ID: 4124}); err != nil {
 			t.Fatal(err)
 		}
