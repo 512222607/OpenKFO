@@ -31,6 +31,16 @@ func (s *Session) tracePacket(direction string, channel uint32, transport string
 	} else {
 		entry["hex"] = hex.EncodeToString(payload)
 		if transport == "game" {
+			if opcode == 4120 && strings.HasPrefix(direction, "S->C") && s.Room != nil && s.Room.Type() == protocol.StageAssault {
+				if rows, err := protocol.ParseStageResults(payload); err == nil {
+					var detail strings.Builder
+					detail.WriteString("PVE结算界面数据（非开战初始化）")
+					for _, row := range rows {
+						fmt.Fprintf(&detail, "；UID=%d 结果原值=%d 波数=%d 用时秒=%d 评级原值=%d 经验=%d 金币=%d 展示物品=%d", row.UID, row.ResultValue, row.Waves, row.ElapsedSeconds, row.GradeValue, row.Experience, row.Gold, row.ItemID)
+					}
+					entry["content"] = detail.String()
+				}
+			}
 			if opcode == protocol.MsgStageWaveReport && strings.HasPrefix(direction, "C->S") {
 				if r, err := protocol.ParseStageWaveReport(payload); err == nil {
 					entry["content"] = fmt.Sprintf("客户端波次结束上报：波次=%d，上下文原值=%d，报告字段=%d（已确认发送器写1）；不是通关或发奖凭据", r.Wave, r.ContextValue, r.ReportValue)

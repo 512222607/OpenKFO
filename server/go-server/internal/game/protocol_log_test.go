@@ -10,6 +10,37 @@ import (
 	"testing"
 )
 
+func TestStageResultTraceUsesRoomMode(t *testing.T) {
+	_, s, _, _ := combatFixture()
+	var output bytes.Buffer
+	s.Trace = log.New(&output, "", 0)
+	p := make([]byte, 500)
+	protocol.WriteUint64(p, 0, s.UID)
+	protocol.WriteUint32(p, 92, 25)
+	protocol.WriteUint32(p, 96, 125)
+	for _, mode := range []protocol.RoomType{protocol.StageAssault, protocol.FreePractice} {
+		s.Room.Request[46] = byte(mode)
+		for _, direction := range []string{"S->C queued", "C->S"} {
+			output.Reset()
+			s.tracePacket(direction, 1, "game", 4120, p, false)
+			var entry map[string]any
+			if err := json.Unmarshal(output.Bytes(), &entry); err != nil {
+				t.Fatal(err)
+			}
+			text, annotated := entry["content"].(string)
+			if annotated != (mode == protocol.StageAssault && direction == "S->C queued") {
+				t.Fatal("misclassified result", entry)
+			}
+			if annotated && (!strings.Contains(text, "波数=25") || !strings.Contains(text, "用时秒=125")) {
+				t.Fatal(text)
+			}
+			if len(entry["hex"].(string)) != 1000 {
+				t.Fatal("raw result lost")
+			}
+		}
+	}
+}
+
 func TestStageWaveTraceDirectionAndRawPayload(t *testing.T) {
 	_, s, _, _ := waitingRoomFixture()
 	var output bytes.Buffer
