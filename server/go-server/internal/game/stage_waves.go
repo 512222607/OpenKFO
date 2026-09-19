@@ -8,7 +8,51 @@ import (
 // Counts must come from the matching map's script/template catalogue. No
 // default wave count is inferred from another map (such as zombie defence).
 type StageWavePlan struct {
+	// Native 938E10 returns the monster name's index in mode+12C, not its
+	// model/item ID. An importer must reproduce that catalogue ordering.
 	Monsters map[uint32]uint32 `json:"monsters"`
+}
+
+// Map scripts may select different spawn groups for the current player count.
+// Ranges come from that script; no universal 2/4-player thresholds are assumed.
+type StageWaveVariant struct {
+	MinPlayers int             `json:"min_players"`
+	MaxPlayers int             `json:"max_players"`
+	Waves      []StageWavePlan `json:"waves"`
+}
+
+func (c Config) stagePlan(mapID uint32, players int) (*stageWaves, error) {
+	if players < 1 || players > 8 {
+		return nil, fmt.Errorf("PVE player count must be 1–8")
+	}
+	variants, configured := c.StageWaveVariants[mapID]
+	if !configured {
+		return newStageWaves(c.StageWaves[mapID])
+	}
+	var selected *stageWaves
+	var occupied [9]bool
+	for _, variant := range variants {
+		if variant.MinPlayers < 1 || variant.MaxPlayers > 8 || variant.MinPlayers > variant.MaxPlayers {
+			return nil, fmt.Errorf("invalid PVE player range")
+		}
+		for n := variant.MinPlayers; n <= variant.MaxPlayers; n++ {
+			if occupied[n] {
+				return nil, fmt.Errorf("overlapping PVE player ranges")
+			}
+			occupied[n] = true
+		}
+		plan, err := newStageWaves(variant.Waves)
+		if err != nil {
+			return nil, err
+		}
+		if players >= variant.MinPlayers && players <= variant.MaxPlayers {
+			selected = plan
+		}
+	}
+	if selected == nil {
+		return nil, fmt.Errorf("PVE map has no verified plan for %d players", players)
+	}
+	return selected, nil
 }
 
 type stageWaves struct {

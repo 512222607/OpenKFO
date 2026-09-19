@@ -12,6 +12,7 @@ import (
 )
 
 type Config struct {
+	StageWaveVariants map[uint32][]StageWaveVariant    `json:"stage_wave_variants,omitempty"`
 	StageWaves        map[uint32][]StageWavePlan       `json:"stage_waves,omitempty"`
 	TitleLevels       []byte                           `json:"title_levels,omitempty"` // Verified roletitle.xml levels; empty disables announcements.
 	TalismanUses      []TalismanUseRule                `json:"talisman_uses,omitempty"`
@@ -709,7 +710,7 @@ func (hub *Hub) startBattle(room *Room) error {
 	var waves *stageWaves
 	if room.Type() == protocol.StageAssault {
 		var err error
-		waves, err = newStageWaves(hub.Config.StageWaves[protocol.ReadUint32(room.Request, protocol.RoomMapOffset)])
+		waves, err = hub.Config.stagePlan(protocol.ReadUint32(room.Request, protocol.RoomMapOffset), len(room.Members))
 		if err != nil {
 			return err
 		}
