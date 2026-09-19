@@ -37,22 +37,24 @@ type Member struct {
 	BattleEvents         map[battleEventKey]battleSequence
 }
 type Room struct {
-	StageWaves      *stageWaves
-	PVEActors       map[uint64]pveActor
-	NetworkProbe    *roomNetworkProbe
-	TutorialPending bool
-	Reliable        map[reliableActor]*reliableExchange
-	ReliableSerial  uint32
-	Exchange        *seatExchange
-	LobbyID         uint32
-	LoadTimer       *time.Timer
-	Reports         map[uint64][]byte
-	ID              uint16
-	Owner           uint64
-	Request         []byte
-	Stage           string
-	Serial          uint32
-	Members         map[uint64]*Member
+	BattleStartedAt     time.Time
+	StageElapsedSeconds uint32
+	StageWaves          *stageWaves
+	PVEActors           map[uint64]pveActor
+	NetworkProbe        *roomNetworkProbe
+	TutorialPending     bool
+	Reliable            map[reliableActor]*reliableExchange
+	ReliableSerial      uint32
+	Exchange            *seatExchange
+	LobbyID             uint32
+	LoadTimer           *time.Timer
+	Reports             map[uint64][]byte
+	ID                  uint16
+	Owner               uint64
+	Request             []byte
+	Stage               string
+	Serial              uint32
+	Members             map[uint64]*Member
 }
 
 // The first settlement return sets Stage to room; other clients may still
@@ -678,6 +680,8 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 			}
 		}
 		room.Stage = "battle"
+		room.BattleStartedAt = time.Now()
+		room.StageElapsedSeconds = 0
 		if room.LoadTimer != nil {
 			room.LoadTimer.Stop()
 			room.LoadTimer = nil

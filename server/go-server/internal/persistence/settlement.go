@@ -39,6 +39,7 @@ func AdvanceLevel(level uint16, experience uint64, rules RewardRules) (uint16, u
 }
 
 type BattleReward struct {
+	TicketBalance  uint32   `json:"ticket_balance,omitempty"`
 	StageMapID     uint32   `json:"stage_map_id,omitempty"`
 	TaskClientHash string   `json:"-"` // Server archive identity, never client supplied.
 	BattleMode     *byte    `json:"battle_mode,omitempty"`
@@ -227,6 +228,11 @@ func (m *BattleManager) settleBattle(serial uint32, reports []byte, rewards []Ba
 		}
 		if _, err = tx.Exec("UPDATE accounts SET gold=?,profile=? WHERE uid=?", r.GoldBalance, r.Profile, r.UID); err != nil {
 			return nil, err
+		}
+		if stage {
+			if err = tx.QueryRow("SELECT tickets FROM accounts WHERE uid=?", r.UID).Scan(&r.TicketBalance); err != nil {
+				return nil, err
+			}
 		}
 		if err = addHonour(tx, *r); err != nil {
 			return nil, err

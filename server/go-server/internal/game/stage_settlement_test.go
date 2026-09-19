@@ -37,7 +37,7 @@ func TestStageFinishRequiresServerProgress(t *testing.T) {
 	if _, err := validateStageFinish(r, bad); err == nil {
 		t.Fatal("stale report accepted")
 	}
-	if err := h.route(owner, owner.game(), protocol.Message{ID: 4110, Payload: p}); err != nil {
+	if _, err := recordStageFinish(owner, p); err != nil {
 		t.Fatal(err)
 	}
 	if r.Stage != "finishing" || !bytes.Equal(r.Reports[owner.UID], p) {
@@ -47,7 +47,7 @@ func TestStageFinishRequiresServerProgress(t *testing.T) {
 	if bytes.Equal(r.Reports[owner.UID], p) {
 		t.Fatal("stored report aliases input")
 	}
-	if err := h.settleReport(owner, p); err != nil {
+	if _, err := recordStageFinish(owner, p); err != nil {
 		t.Fatal(err)
 	}
 	if bytes.Equal(r.Reports[owner.UID], p) {
