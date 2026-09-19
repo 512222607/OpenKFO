@@ -119,6 +119,20 @@ func (c *client) read() (tunnel.Frame, []protocol.Message, error) {
 	return f, messages, err
 }
 func describe(m protocol.Message) string {
+	if m.ID == 4110 {
+		rows, err := protocol.ParseBattleReport(m.Payload)
+		if err != nil {
+			return "客户端结算报告4110长度错误：必须696B"
+		}
+		var detail strings.Builder
+		detail.WriteString("客户端结算报告（不是服务端发奖结果）")
+		for slot, r := range rows {
+			if r.UID != 0 {
+				fmt.Fprintf(&detail, "；槽位%d UID=%d 血量=%d 结束原因码=%d 房间=%d 场次=%d", slot, r.UID, r.Health, r.FinishCode, r.RoomID, r.Serial)
+			}
+		}
+		return detail.String()
+	}
 	if m.ID == protocol.MsgStageWaveControl {
 		r, err := protocol.ParseStageWaveControl(m.Payload)
 		if err != nil {

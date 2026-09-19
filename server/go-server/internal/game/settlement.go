@@ -16,13 +16,13 @@ import (
 type SettlementRewards = persistence.RewardRules
 
 func validateBattleReport(room *Room, payload []byte) (map[uint64]uint16, error) {
-	if len(payload) != 696 {
-		return nil, protocol.ErrFrame
+	rows, err := protocol.ParseBattleReport(payload)
+	if err != nil {
+		return nil, err
 	}
 	health := map[uint64]uint16{}
-	for slot := 0; slot < 8; slot++ {
-		r := payload[slot*87 : (slot+1)*87]
-		uid := protocol.ReadUint64(r, 29)
+	for slot, r := range rows {
+		uid := r.UID
 		if uid == 0 {
 			continue
 		}
@@ -30,16 +30,16 @@ func validateBattleReport(room *Room, payload []byte) (map[uint64]uint16, error)
 			return nil, fmt.Errorf("%w: battle report slot=%d unknown uid=%d", protocol.ErrFrame, slot, uid)
 		}
 		// Native 987E40 copies the room context pair to +67/+71.
-		if id := protocol.ReadUint32(r, 67); id != uint32(room.ID) {
+		if id := r.RoomID; id != uint32(room.ID) {
 			return nil, fmt.Errorf("%w: battle report uid=%d room=%d want=%d", protocol.ErrFrame, uid, id, room.ID)
 		}
-		if serial := protocol.ReadUint32(r, 71); serial != room.Serial {
+		if serial := r.Serial; serial != room.Serial {
 			return nil, fmt.Errorf("%w: battle report uid=%d serial=%d want=%d", protocol.ErrFrame, uid, serial, room.Serial)
 		}
 		if _, duplicate := health[uid]; duplicate {
 			return nil, protocol.ErrFrame
 		}
-		health[uid] = protocol.ReadUint16(r, 2)
+		health[uid] = r.Health
 	}
 	if len(health) != len(room.Members) {
 		return nil, protocol.ErrFrame

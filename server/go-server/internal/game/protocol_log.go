@@ -31,6 +31,18 @@ func (s *Session) tracePacket(direction string, channel uint32, transport string
 	} else {
 		entry["hex"] = hex.EncodeToString(payload)
 		if transport == "game" {
+			if opcode == 4110 && strings.HasPrefix(direction, "C->S") {
+				if rows, err := protocol.ParseBattleReport(payload); err == nil {
+					var detail strings.Builder
+					detail.WriteString("客户端结算报告（仍需服务器验证）")
+					for slot, r := range rows {
+						if r.UID != 0 {
+							fmt.Fprintf(&detail, "；槽位%d UID=%d 血量=%d 结束原因码=%d 房间=%d 场次=%d", slot, r.UID, r.Health, r.FinishCode, r.RoomID, r.Serial)
+						}
+					}
+					entry["content"] = detail.String()
+				}
+			}
 			if opcode == protocol.MsgCreateRoom && strings.HasPrefix(direction, "C->S") && len(payload) == protocol.RoomRequestSize {
 				mode := protocol.RoomTypeFromRequest(payload)
 				entry["content"] = fmt.Sprintf("创建房间：类型=%s（%d），地图=%d，容量=%d；请求不代表已获准", mode, byte(mode), protocol.ReadUint32(payload, protocol.RoomMapOffset), payload[protocol.RoomCapacityOffset])
