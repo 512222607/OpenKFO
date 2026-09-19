@@ -291,6 +291,19 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 	room := session.Room
 	uid := session.UID
 	switch message.ID {
+	case protocol.MsgRoomDetailRequest:
+		id, err := protocol.ParseRoomDetailRequest(payload)
+		if err != nil {
+			return true, err
+		}
+		if channel.Phase != "lobby" || room != nil {
+			return true, nil
+		}
+		target := hub.Rooms[uint16(id)]
+		available := id != 0 && target != nil && target.LobbyID == session.LobbyID && target.Stage == "room" && !tutorialRoom(target)
+		// This opens a password dialog, not a room. 3070 still checks password,
+		// capacity, map policy and current membership when the player confirms.
+		session.send(channel.ID, protocol.Message{ID: protocol.MsgRoomDetail, Payload: protocol.EncodeRoomDetail(id, available)})
 	case protocol.MsgRoomListRequest:
 		// A lobby refresh can be sent while 3070 is still awaiting 3100.
 		// Joining must not invalidate that read-only request once it is dequeued.

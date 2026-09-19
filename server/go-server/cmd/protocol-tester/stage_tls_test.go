@@ -160,6 +160,7 @@ func TestStageGateTLS(t *testing.T) {
 	}
 	req := make([]byte, 81)
 	copy(req, "TLS stage")
+	copy(req[21:32], "roomsecret")
 	req[37] = 2
 	protocol.WriteUint32(req, 38, 104)
 	protocol.WriteUint16(req, 47, 180)
@@ -171,6 +172,21 @@ func TestStageGateTLS(t *testing.T) {
 	entry := find(drain(host), 3100).Payload
 	join := make([]byte, 14)
 	protocol.WriteUint16(join, 0, protocol.ReadUint16(entry, 0))
+	for attempt := 0; attempt < 2; attempt++ {
+		send(peer, protocol.MsgRoomDetailRequest, []byte{byte(protocol.ReadUint16(entry, 0))})
+		messages := drain(peer)
+		detail := find(messages, protocol.MsgRoomDetail).Payload
+		if len(detail) != protocol.RoomDetailSize || detail[0] != entry[0] || detail[4] != 1 {
+			t.Fatal("password preflight", detail)
+		}
+		for i, value := range detail {
+			if i != 0 && i != 4 && value != 0 {
+				t.Fatal("preflight leaked room fields", i)
+			}
+		}
+		absent(messages, 3100)
+	}
+	copy(join[3:14], "roomsecret")
 	send(peer, 3070, join)
 	denied = drain(peer)
 	find(denied, 3080)
@@ -178,6 +194,15 @@ func TestStageGateTLS(t *testing.T) {
 	// Turning off only the title gate retains the catalogue and permits joining.
 	access.RequirementsEnabled = false
 	save()
+	wrongPassword := append([]byte(nil), join...)
+	wrongPassword[3] ^= 1
+	send(peer, 3070, wrongPassword)
+	denied = drain(peer)
+	failure := find(denied, 3080).Payload
+	if len(failure) != 18 || protocol.ReadUint32(failure, 14) != 31 {
+		t.Fatal("preflight bypassed password verification", failure)
+	}
+	absent(denied, 3100)
 	send(peer, 3070, join)
 	find(drain(peer), 3100)
 	drain(host)
