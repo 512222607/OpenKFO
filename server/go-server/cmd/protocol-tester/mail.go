@@ -11,11 +11,19 @@ import (
 func describeMail(m protocol.Message) string {
 	p := m.Payload
 	switch m.ID {
-	case 1310, 1410:
-		size := 339
-		if m.ID == 1410 {
-			size = 124
+	case 1410:
+		rows, err := protocol.ParseRenewalRecords(p)
+		if err != nil {
+			return "续费候选列表1410长度错误：应为124字节整条数组"
 		}
+		var out strings.Builder
+		fmt.Fprintf(&out, "续费候选列表1410：%d条，每条124字节；不是收件箱，不能据此确认已续费", len(rows))
+		for i, r := range rows {
+			fmt.Fprintf(&out, "\n记录%d 首DWORD=%d 库存实例=%d 库存状态=%d 物品ID=%d 折扣原值=%d", i, protocol.ReadUint32(r.Raw[:], 0), r.InventoryInstance(), r.InventoryState(), r.ItemID(), r.DiscountRaw())
+		}
+		return out.String()
+	case 1310:
+		size := 339
 		if len(p)%size != 0 {
 			return fmt.Sprintf("邮件相关列表%d长度错误：应为%d字节整条数组", m.ID, size)
 		}
