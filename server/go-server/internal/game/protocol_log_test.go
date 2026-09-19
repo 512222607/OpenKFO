@@ -191,3 +191,26 @@ func TestJoinTraceDistinguishesSpectatorFromPlayer(t *testing.T) {
 		}
 	}
 }
+
+func TestRoomMemberTraceDirectionAndRawBytes(t *testing.T) {
+	p := make([]byte, 149)
+	p[0] = 42
+	p[8] = 8
+	p[76] = 1
+	for _, tc := range []struct {
+		direction, transport string
+		want                 bool
+	}{{"S->C queued", "game", true}, {"C->S", "game", false}, {"S->C", "sdk", false}} {
+		var output bytes.Buffer
+		s := &Session{Trace: log.New(&output, "", 0)}
+		s.tracePacket(tc.direction, 1, tc.transport, 3090, p, false)
+		var row map[string]any
+		if err := json.Unmarshal(output.Bytes(), &row); err != nil {
+			t.Fatal(err)
+		}
+		content, ok := row["content"].(string)
+		if ok != tc.want || len(row["hex"].(string)) != 298 || (tc.want && !strings.Contains(content, "UID=42 观战")) {
+			t.Fatal(row)
+		}
+	}
+}

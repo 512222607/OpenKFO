@@ -113,6 +113,9 @@ func (c *client) read() (tunnel.Frame, []protocol.Message, error) {
 	return f, messages, err
 }
 func describe(m protocol.Message) string {
+	if m.ID == 3090 || m.ID == 3105 || m.ID == 3130 {
+		return describeRoomMembers(m)
+	}
 	if m.ID == 4126 {
 		key, err := protocol.ParseTitleRewardClaim(m.Payload)
 		if err != nil {

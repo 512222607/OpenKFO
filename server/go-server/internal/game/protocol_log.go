@@ -31,6 +31,23 @@ func (s *Session) tracePacket(direction string, channel uint32, transport string
 	} else {
 		entry["hex"] = hex.EncodeToString(payload)
 		if transport == "game" {
+			if (opcode == 3090 || opcode == 3105) && strings.HasPrefix(direction, "S->C") {
+				if rows, err := protocol.ParseRoomMembers(payload); err == nil && (opcode != 3090 || len(rows) == 1) {
+					var detail strings.Builder
+					fmt.Fprintf(&detail, "房间成员：%d条", len(rows))
+					for _, r := range rows {
+						kind := "参战"
+						if r.Spectator() {
+							kind = "观战"
+						}
+						fmt.Fprintf(&detail, "；UID=%d %s 槽位=%d 装备=%d", r.UID(), kind, r.Slot(), r.EquipmentCount())
+					}
+					entry["content"] = detail.String()
+				}
+			}
+			if opcode == protocol.MsgPlayerLeftRoom && len(payload) == 8 && strings.HasPrefix(direction, "S->C") {
+				entry["content"] = fmt.Sprintf("玩家离开房间：UID=%d", protocol.ReadUint64(payload, 0))
+			}
 			if opcode == protocol.MsgJoinRoom && strings.HasPrefix(direction, "C->S") {
 				if r, err := protocol.ParseRoomJoinRequest(payload); err == nil {
 					mode := fmt.Sprintf("未确认模式%d", r.Mode)
