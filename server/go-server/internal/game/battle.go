@@ -25,6 +25,9 @@ type battleEventKey struct {
 // Do not infer that an unknown packet is safe to broadcast from its size alone.
 func (hub *Hub) battleMessage(session *Session, channel *Channel, message protocol.Message) error {
 	room, payload := session.Room, message.Payload
+	if len(payload) >= 4 && protocol.ReadUint32(payload, 0) == protocol.BattleEventFosterPositions {
+		return hub.fosterPositions(session, channel, payload)
+	}
 	if room == nil || room.Stage != "battle" || channel.Phase != "battle" {
 		return nil
 	}

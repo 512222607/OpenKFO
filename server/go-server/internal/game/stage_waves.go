@@ -89,6 +89,7 @@ func (h *Hub) abortStageRoom(r *Room) {
 	r.Stage, r.Reports = "room", nil
 	r.PVEActors, r.StageWaves, r.Reliable = nil, nil, nil
 	r.PVEBlocks = nil
+	r.FosterPositions = nil
 	for _, member := range r.Members {
 		s := member.Session
 		h.leave(s, true)

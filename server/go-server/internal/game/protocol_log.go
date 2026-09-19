@@ -165,6 +165,9 @@ func (s *Session) tracePacket(direction string, channel uint32, transport string
 		if opcode == 8071 && len(payload) >= 4 {
 			entry["subprotocol"] = protocol.ReadUint32(payload, 0)
 			if transport == "game" {
+				if sender, rows, err := protocol.ParseFosterPositions(payload); err == nil {
+					entry["content"] = fmt.Sprintf("模式10初始位置：申报UID=%d，六条记录=%v；加载期位置表，不是普通移动", sender, rows)
+				}
 				if r, err := protocol.ParsePVEBlockCreate(payload); err == nil {
 					entry["content"] = fmt.Sprintf("PVE创建地图阻挡：申报UID=%d，阻挡ID=%d，布尔原值=%t，四角=%v", r.Sender, r.ID, r.Flag, r.Corners)
 				}

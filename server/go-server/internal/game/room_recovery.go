@@ -54,6 +54,7 @@ func (hub *Hub) restoreRoom(room *Room, peers []roomPeer, reason string) {
 	room.Stage, room.Reports = "room", nil
 	room.PVEActors, room.StageWaves = nil, nil
 	room.PVEBlocks = nil
+	room.FosterPositions = nil
 	room.Reliable = nil
 	sort.Slice(peers, func(i, j int) bool { return peers[i].member.Slot < peers[j].member.Slot })
 	for _, peer := range peers {

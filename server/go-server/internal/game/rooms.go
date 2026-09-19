@@ -43,6 +43,7 @@ type Room struct {
 	StageWaves          *stageWaves
 	PVEActors           map[uint64]pveActor
 	PVEBlocks           map[uint32]pveBlock
+	FosterPositions     []byte
 	NetworkProbe        *roomNetworkProbe
 	TutorialPending     bool
 	Reliable            map[reliableActor]*reliableExchange
@@ -674,6 +675,10 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 			}
 		}
 		room.Stage = "wait_ready"
+		if room.FosterPositions != nil {
+			// 941A90 only constructs/sends; include the controller as a recipient.
+			hub.broadcast(room, protocol.Message{ID: protocol.MsgBattleEvent, Payload: room.FosterPositions}, 0)
+		}
 		for _, member := range room.Members {
 			member.Session.game().Phase = "wait_ready"
 		}
@@ -748,6 +753,7 @@ func (hub *Hub) startBattle(room *Room) error {
 	room.StageWaves = waves
 	room.PVEActors = nil
 	room.PVEBlocks = nil
+	room.FosterPositions = nil
 	room.Reliable = nil
 	room.ReliableSerial = serial
 	room.Reports = nil
