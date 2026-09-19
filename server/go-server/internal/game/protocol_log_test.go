@@ -143,3 +143,29 @@ func TestRenewalTraceIsDiagnosticAndPreservesRawPacket(t *testing.T) {
 		}
 	}
 }
+
+func TestWatchTracePreservesUnknownPayload(t *testing.T) {
+	for _, tc := range []struct {
+		id                   uint32
+		direction, transport string
+		want                 bool
+	}{
+		{protocol.MsgWatchGameRequest, "C->S", "game", true},
+		{protocol.MsgWatchGameAck, "S->C queued", "game", true},
+		{protocol.MsgWatchGameRequest, "S->C", "game", false},
+		{protocol.MsgWatchGameAck, "C->S", "game", false},
+		{protocol.MsgWatchGameRequest, "C->S", "sdk", false},
+	} {
+		var output bytes.Buffer
+		s := &Session{Trace: log.New(&output, "", 0)}
+		s.tracePacket(tc.direction, 1, tc.transport, tc.id, []byte{0, 255, 3}, false)
+		var row map[string]any
+		if err := json.Unmarshal(output.Bytes(), &row); err != nil {
+			t.Fatal(err)
+		}
+		_, ok := row["content"]
+		if ok != tc.want || row["hex"] != "00ff03" {
+			t.Fatal(row)
+		}
+	}
+}

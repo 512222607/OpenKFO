@@ -84,6 +84,8 @@ const (
 	MsgRoomCreated          = 3020
 	MsgRoomCreateError      = 3030
 	MsgJoinRoom             = 3070
+	MsgWatchGameRequest     = 3071 // A_WATCH_GAME_REQ; payload layout not yet confirmed
+	MsgWatchGameAck         = 3072 // A_WATCH_GAME_ACK; result layout not yet confirmed
 	MsgRoomEntered          = 3100 // 进入房间数据
 	MsgLeaveRoom            = 3110
 	MsgRoomLeft             = 3115

@@ -31,6 +31,12 @@ func (s *Session) tracePacket(direction string, channel uint32, transport string
 	} else {
 		entry["hex"] = hex.EncodeToString(payload)
 		if transport == "game" {
+			if opcode == protocol.MsgWatchGameRequest && strings.HasPrefix(direction, "C->S") {
+				entry["content"] = "观战请求（A_WATCH_GAME_REQ）；字段尚未确认，请查看原始数据"
+			}
+			if opcode == protocol.MsgWatchGameAck && strings.HasPrefix(direction, "S->C") {
+				entry["content"] = "观战应答（A_WATCH_GAME_ACK）；结果字段尚未确认，不能据此判断成功"
+			}
 			if opcode == protocol.MsgRenewItemResult && strings.HasPrefix(direction, "S->C") {
 				if r, err := protocol.ParseRenewalResult(payload); err == nil {
 					if r.Succeeded {
