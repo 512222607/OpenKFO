@@ -46,7 +46,7 @@ func (h *Hub) completeTutorial(s *Session, ch *Channel, payload []byte) error {
 		r.Members[s.UID].Session != s || !r.Members[s.UID].Input {
 		return nil
 	}
-	result, err := h.Store.RewardManager().CompleteTutorial(s.UID)
+	result, err := h.Store.RewardManager().CompleteTutorial(s.UID, h.Config.ConfigHash)
 	if err != nil {
 		return err
 	}
@@ -69,6 +69,11 @@ func (h *Hub) completeTutorial(s *Session, ch *Channel, payload []byte) error {
 	s.sendGame(protocol.Message{ID: 1240, Payload: protocol.Uint32Bytes(result.Gold)})
 	s.sendGame(protocol.Message{ID: 1230, Payload: protocol.Uint32Bytes(result.Tickets)})
 	h.leave(s, true)
+	// Reuse native full-list/status notifications after returning to the lobby.
+	// Rewards remain claimed through the existing task protocol, not this event.
+	if err := h.extendedTaskLists(s); err != nil {
+		s.sendGame(notice("新手引导已完成，任务列表暂未刷新，请重新打开任务面板。"))
+	}
 	if announced {
 		s.sendGame(notice("新手引导已完成，请选择一件武器并确认领取；其他奖励已发放。"))
 	} else {

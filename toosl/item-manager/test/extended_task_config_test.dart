@@ -18,7 +18,7 @@ void main() {
           'kind': 'daily',
           'id': 2001,
           'conditions': [
-            {...conditions[0], 'event': 'battle_win'},
+            {...conditions[0], 'event': 'tutorial_complete'},
             conditions[1],
             conditions[2],
           ],
@@ -89,7 +89,7 @@ void main() {
     final eventField = find.byKey(const ValueKey('extended_event_0'));
     expect(
       tester.widget<DropdownButtonFormField<String>>(eventField).initialValue,
-      'battle_win',
+      'tutorial_complete',
     );
     await tester.ensureVisible(eventField);
     await tester.tap(eventField);
@@ -118,7 +118,7 @@ void main() {
     );
     expect(
       (initial['catalogue'] as List).first['conditions'][0]['event'],
-      'battle_win',
+      'tutorial_complete',
     );
   });
   testWidgets('wrong client version preserves draft', (tester) async {

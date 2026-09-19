@@ -14,7 +14,7 @@ type TutorialReward struct {
 	Choices       []uint32
 }
 
-func (m *RewardManager) CompleteTutorial(uid uint64) (r TutorialReward, err error) {
+func (m *RewardManager) CompleteTutorial(uid uint64, clientHash string) (r TutorialReward, err error) {
 	if uid == 0 {
 		return r, ErrDenied
 	}
@@ -79,6 +79,15 @@ func (m *RewardManager) CompleteTutorial(uid uint64) (r TutorialReward, err erro
 			return r, err
 		}
 		r.Tickets += rules.Tutorial.Tickets
+	}
+	// Advance only configured, accepted tasks, in this same completion transaction.
+	// The receipt above prevents replay; native condition numbers are not event IDs.
+	if clientHash != "" {
+		if err = advanceExtendedTasksTx(tx, uid, clientHash, func(state *ExtendedTaskState) bool {
+			return advanceExtendedTaskConditions(state, func(event string) bool { return event == "tutorial_complete" })
+		}); err != nil {
+			return r, err
+		}
 	}
 	r.Profile[TitleLevelOffset] = 2
 	if _, err = tx.Exec("UPDATE accounts SET profile=?,gold=? WHERE uid=?", r.Profile, r.Gold, uid); err != nil {

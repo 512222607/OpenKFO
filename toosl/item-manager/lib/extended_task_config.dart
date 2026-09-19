@@ -21,6 +21,7 @@ class ExtendedTaskConfigPage extends StatefulWidget {
 class _ExtendedTaskConfigPageState extends State<ExtendedTaskConfigPage> {
   static const events = {
     '': '未绑定（不自动完成）',
+    'tutorial_complete': '首次完成新手引导（需提前接取）',
     'battle_play': '有效对战：参加一场',
     'battle_win': '有效对战：胜利一场',
     'survival_solo_play': '生存大乱斗：参加一场',
