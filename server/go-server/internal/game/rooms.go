@@ -106,6 +106,20 @@ func (hub *Hub) resolveWithPolicy(request []byte, allows func(uint32) bool, acce
 		return bytes.Clone(request), nil
 	}
 	mode, capacity := protocol.RoomTypeFromRequest(request), request[protocol.RoomCapacityOffset]
+	if mode == protocol.StageAssault {
+		chosen := protocol.ReadUint32(request, protocol.RoomMapOffset)
+		suggested := protocol.ReadUint32(request, protocol.RoomSuggestedMapOffset)
+		if capacity < 1 || capacity > 8 || chosen == 0 || chosen == 0xffffffff ||
+			!allows(chosen) || (suggested != 0 && suggested != 0xffffffff && suggested != chosen) {
+			return nil, protocol.ErrFrame
+		}
+		if _, err := hub.Config.persistedStagePlan(access, chosen, int(capacity)); err != nil {
+			return nil, err
+		}
+		resolved := bytes.Clone(request)
+		protocol.WriteUint32(resolved, protocol.RoomSuggestedMapOffset, chosen)
+		return resolved, nil
+	}
 	if (!mode.IsCompetitive() && mode != protocol.FreePractice) || (capacity != 2 && capacity != 4 && capacity != 6 && capacity != 8) {
 		return nil, protocol.ErrFrame
 	}
@@ -593,7 +607,7 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 			hub.broadcast(room, protocol.Message{ID: protocol.MsgPlayerNotReady, Payload: protocol.Uint64Bytes(uid)}, 0)
 			return true, nil
 		}
-		if uid == room.Owner && room.Type() != protocol.FreePractice && !tutorialRoom(room) {
+		if uid == room.Owner && room.Type() != protocol.FreePractice && room.Type() != protocol.StageAssault && !tutorialRoom(room) {
 			if len(room.Members) < 2 {
 				return true, nil
 			}
