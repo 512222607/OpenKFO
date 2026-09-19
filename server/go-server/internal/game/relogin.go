@@ -75,6 +75,7 @@ func (hub *Hub) resetNativeSession(s *Session, sdk uint32) {
 	s.ExtendedTaskNotified = nil
 	s.WeaponRevision = 0
 	s.TalismanQuote = nil
+	s.RenewalQuote = nil
 	s.MailPreview, s.MailAttachment, s.MailClaimFailed = 0, 0, false
 	s.Bound = false
 	s.UDPRelayed = 0

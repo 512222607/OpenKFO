@@ -23,6 +23,41 @@ type ItemRenewal struct {
 	Replay  bool
 }
 
+func validRenewalOffer(catalog, grant []byte, days uint32) bool {
+	if len(catalog) != 108 || len(grant) != 68 || days == 0 || days > 3650 {
+		return false
+	}
+	key, cost := protocol.ReadUint32(catalog, 0), protocol.ReadUint32(catalog, 38)
+	return key != 0 && catalog[4] == protocol.ItemWeapon && protocol.ReadUint32(catalog, 9) == key && cost > 0 && cost <= 2147483647 && protocol.ReadUint32(catalog, 42) == cost && protocol.ReadUint32(catalog, 30) == 0 && protocol.ReadUint32(catalog, 34) == 0 && catalog[48] != 0 && catalog[46] == 0 && catalog[49] == 0 && catalog[13] == 0 && catalog[83] == 1 && protocol.ReadUint32(catalog, 77) == 0 && protocol.ReadUint32(catalog, 88) == 0 && grant[4] == catalog[4] && bytes.Equal(grant[5:9], catalog[5:9])
+}
+
+// Read display and duration together; RenewItem revalidates both under lock.
+func (m *ShopManager) RenewalQuotes(kind byte, itemID uint32) ([]RenewalQuote, error) {
+	if kind != protocol.ItemWeapon || itemID == 0 {
+		return nil, nil
+	}
+	rows, err := m.store.DB.Query(`SELECT o.record,o.grant_record,l.days FROM offers o JOIN offer_lifetimes l ON l.catalog_key=o.catalog_key WHERE o.enabled=TRUE ORDER BY o.catalog_key LIMIT 4000`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []RenewalQuote
+	for rows.Next() {
+		var catalog, grant []byte
+		var days uint32
+		if err = rows.Scan(&catalog, &grant, &days); err != nil {
+			return nil, err
+		}
+		if !validRenewalOffer(catalog, grant, days) || protocol.ReadUint32(catalog, 5) != itemID {
+			continue
+		}
+		q := RenewalQuote{Days: days}
+		copy(q.Catalog[:], catalog)
+		result = append(result, q)
+	}
+	return result, rows.Err()
+}
+
 func (m *ShopManager) RenewItem(uid uint64, operation string, payload []byte, quote RenewalQuote) (out ItemRenewal, err error) {
 	r, err := protocol.ParseRenewalRequest(payload)
 	if err != nil || uid == 0 || len(operation) == 0 || len(operation) > 128 || r.Operation() != 105 || r.SenderUID() != uid || r.RecipientUID() != uid || r.InventoryInstance() == 0 {
@@ -69,7 +104,7 @@ func (m *ShopManager) RenewItem(uid uint64, operation string, payload []byte, qu
 		return out, ErrDenied
 	}
 	cost := protocol.ReadUint32(catalog, 38)
-	if catalog[4] != protocol.ItemWeapon || protocol.ReadUint32(catalog, 0) != r.CatalogKey() || protocol.ReadUint32(catalog, 9) != r.CatalogKey() || cost == 0 || cost > 2147483647 || protocol.ReadUint32(catalog, 42) != cost || protocol.ReadUint32(catalog, 30) != 0 || protocol.ReadUint32(catalog, 34) != 0 || catalog[48] == 0 || catalog[46] != 0 || catalog[49] != 0 || catalog[13] != 0 || catalog[83] != 1 || protocol.ReadUint32(catalog, 77) != 0 || protocol.ReadUint32(catalog, 88) != 0 || grant[4] != catalog[4] || !bytes.Equal(grant[5:9], catalog[5:9]) {
+	if !validRenewalOffer(catalog, grant, days) || protocol.ReadUint32(catalog, 0) != r.CatalogKey() {
 		return out, ErrDenied
 	}
 	if cost != r.QuotedAmount() || out.Tickets < cost {

@@ -77,6 +77,7 @@ type Session struct {
 	VIPShopPercent       uint32
 	WeaponRevision       uint64
 	TalismanQuote        *talismanQuote
+	RenewalQuote         *renewalQuote
 	LoggedOut            bool
 	MailPreview          uint32
 	MailAttachment       uint32
@@ -585,6 +586,9 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 			session.sendGame(protocol.Message{ID: 20566, Payload: make([]byte, 48)})
 		}
 	case 9070, 1540, 1500:
+		if message.ID == 1500 && len(payload) == 9 && protocol.ReadUint32(payload, 5) == 1 {
+			return hub.renewalPrices(session, payload)
+		}
 		if err := hub.refreshVIPShop(session); err != nil {
 			session.sendGame(notice("VIP价格读取失败，请稍后重试。"))
 			return nil
@@ -618,6 +622,8 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 			records = append(header, records...)
 		}
 		session.sendGame(protocol.Message{ID: message.ID + 10, Payload: records})
+	case protocol.MsgRenewItem:
+		return hub.renewItem(session, payload)
 	case 9090:
 		if err := hub.refreshVIPShop(session); err != nil {
 			session.sendGame(notice("VIP价格读取失败，请稍后重试。"))
