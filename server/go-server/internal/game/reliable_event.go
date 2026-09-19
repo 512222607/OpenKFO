@@ -25,7 +25,10 @@ func (h *Hub) reliableBattleEvent(s *Session, m protocol.Message) error {
 	if r.Sender != s.UID || r.Flag51 > 1 {
 		return protocol.ErrFrame
 	}
-	if room.Members[r.Actor] == nil {
+	if room.Members[r.Actor] == nil && !room.hasPVEActor(r.Actor) {
+		return nil
+	}
+	if room.stalePVEEvent(s, r.Actor, protocol.ReadUint32(m.Payload, 19)) {
 		return nil
 	}
 	if r.HasContext && r.Context != [2]uint32{uint32(room.ID), room.Serial} {
@@ -36,7 +39,7 @@ func (h *Hub) reliableBattleEvent(s *Session, m protocol.Message) error {
 		family = 9500
 	}
 	phase := r.Kind - family
-	if (phase == 1 && s.UID != room.Owner) || (phase != 1 && s.UID != r.Actor) {
+	if (phase == 1 && s.UID != room.Owner) || (phase != 1 && !room.controlsBattleActor(s, r.Actor)) {
 		return nil
 	}
 	if room.ReliableSerial != room.Serial {

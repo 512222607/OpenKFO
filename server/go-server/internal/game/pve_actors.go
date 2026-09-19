@@ -12,6 +12,20 @@ type pveActor struct {
 	active   bool
 }
 
+func (r *Room) hasPVEActor(uid uint64) bool {
+	return r.Type() == protocol.StageAssault && r.PVEActors[uid].active
+}
+
+func (r *Room) controlsBattleActor(s *Session, uid uint64) bool {
+	return uid == s.UID || (s.UID == r.Owner && r.hasPVEActor(uid))
+}
+
+func (r *Room) stalePVEEvent(s *Session, uid uint64, sequence uint32) bool {
+	a, known := r.PVEActors[uid]
+	return r.Type() == protocol.StageAssault && known &&
+		(!a.active || (s.UID == r.Owner && int32(sequence-a.sequence) <= 0))
+}
+
 // Called after battleMessage validates the authenticated room membership and
 // phase. Owner-only control is server policy, not a claim about native trust.
 // This does not enable PVE room admission or turn removals into rewards.
@@ -59,6 +73,8 @@ func (h *Hub) pveActorMessage(s *Session, message protocol.Message) error {
 		r.PVEActors = make(map[uint64]pveActor)
 	}
 	r.PVEActors[actor] = pveActor{sequence: sequence, active: create}
+	delete(r.Reliable, reliableActor{actor, 9000})
+	delete(r.Reliable, reliableActor{actor, 9500})
 	h.broadcast(r, message, s.UID)
 	return nil
 }

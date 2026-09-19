@@ -14,6 +14,11 @@ type battleSequence struct {
 	Payload  string
 }
 
+type battleEventKey struct {
+	Kind  uint32
+	Actor uint64
+}
+
 // Layouts verified against gfld.dat's native dispatch handlers. In particular,
 // 8121 carries damage/healing (82A9D0); 8122 carries an integer state 0..7
 // consumed by 82A8B0 -> 9F2DC0, not an absolute HP float.
@@ -119,16 +124,22 @@ func (hub *Hub) battleMessage(session *Session, channel *Channel, message protoc
 	}
 	if id != 8120 && id != 8155 {
 		actor := protocol.ReadUint64(payload, actorOffset)
+		if room.stalePVEEvent(session, actor, protocol.ReadUint32(payload, 19)) {
+			return nil
+		}
 		// Practice and tutorial NPCs are local objects, not authenticated players. Ignore
 		// their events without disconnecting an otherwise valid player session.
 		if room.Members[actor] == nil && (tutorialRoom(room) || (len(room.Request) > 46 && room.Type() == protocol.FreePractice)) {
 			return nil
 		}
-		if room.Members[actor] == nil {
+		if room.Members[actor] == nil && !room.hasPVEActor(actor) {
 			return fmt.Errorf("battle unknown actor id=%d actor=%d", id, actor)
 		}
 		if id == 8121 || id == 8126 || id == 8150 {
 			attacker := protocol.ReadUint64(payload, 47)
+			if attacker != 0 && room.stalePVEEvent(session, attacker, protocol.ReadUint32(payload, 19)) {
+				return nil
+			}
 			// Native replicas also report expiration of a remote actor's buff.
 			// Cleanup clears the source and parameters; it is not a new attack.
 			cleanup := id == 8150 && attacker == 0 && protocol.ReadUint32(payload, 55) != 0
@@ -140,25 +151,29 @@ func (hub *Hub) battleMessage(session *Session, channel *Channel, message protoc
 			if attacker != 0 && room.Members[attacker] == nil && (tutorialRoom(room) || (len(room.Request) > 46 && room.Type() == protocol.FreePractice)) {
 				return nil
 			}
-			if (attacker != 0 && room.Members[attacker] == nil) || (!cleanup && actor != session.UID && attacker != session.UID) {
+			if (attacker != 0 && room.Members[attacker] == nil && !room.hasPVEActor(attacker)) ||
+				(!cleanup && !room.controlsBattleActor(session, actor) && !room.controlsBattleActor(session, attacker)) {
 				return fmt.Errorf("battle effect ownership id=%d uid=%d target=%d source=%d", id, session.UID, actor, attacker)
 			}
-		} else if actor != session.UID {
+		} else if !room.controlsBattleActor(session, actor) {
 			return fmt.Errorf("battle actor id=%d actor=%d expected=%d", id, actor, session.UID)
 		}
 	}
-	// A movement packet must not suppress a damage/HP packet with the same
-	// sequence. Track each native message kind separately, and compare the
-	// complete payload so distinct state changes are not mistaken for retries.
+	// A controller can report the same event kind for several PVE entities.
+	// Track targets independently so reordering one entity cannot drop another.
+	key := battleEventKey{Kind: id}
+	if id != protocol.BattleEventMovement && id != protocol.BattleEventScoreboard {
+		key.Actor = protocol.ReadUint64(payload, actorOffset)
+	}
 	sequence := protocol.ReadUint32(payload, 19)
 	if member.BattleEvents == nil {
-		member.BattleEvents = make(map[uint32]battleSequence)
+		member.BattleEvents = make(map[battleEventKey]battleSequence)
 	}
-	previous, seen := member.BattleEvents[id]
+	previous, seen := member.BattleEvents[key]
 	if seen && ((sequence == previous.Sequence && string(payload) == previous.Payload) || int32(sequence-previous.Sequence) < 0) {
 		return nil
 	}
-	member.BattleEvents[id] = battleSequence{sequence, string(payload)}
+	member.BattleEvents[key] = battleSequence{sequence, string(payload)}
 	hub.broadcast(room, message, session.UID)
 	if id == 8121 || id == 8122 {
 		if time.Since(session.LastBattleNotice) > time.Second {

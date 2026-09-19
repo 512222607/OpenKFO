@@ -33,7 +33,7 @@ type Member struct {
 	Session              *Session
 	Slot, Spawn, Team    byte
 	Ready, Loaded, Input bool
-	BattleEvents         map[uint32]battleSequence
+	BattleEvents         map[battleEventKey]battleSequence
 }
 type Room struct {
 	PVEActors       map[uint64]pveActor
