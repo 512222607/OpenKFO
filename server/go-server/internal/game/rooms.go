@@ -491,6 +491,8 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		hub.clearRoomReady(room)
 	case protocol.MsgKickRoomPlayer:
 		return true, hub.kickRoomPlayer(session, payload)
+	case protocol.MsgChangeRoomOwner:
+		return true, hub.changeRoomOwner(session, payload)
 	case 3200:
 		if len(payload) != 48 {
 			return true, protocol.ErrFrame
