@@ -106,6 +106,10 @@ func (hub *Hub) settleReport(session *Session, payload []byte) error {
 	if err != nil {
 		return fmt.Errorf("settlement rules: %w", err)
 	}
+	honour, err := hub.honourRules()
+	if err != nil {
+		return fmt.Errorf("honour rules: %w", err)
+	}
 	for uid, member := range room.Members {
 		rules := settings.Rules.AtLevel(member.BattleLevel)
 		outcome, gold := "draw", rules.DrawGold
@@ -122,7 +126,9 @@ func (hub *Hub) settleReport(session *Session, payload []byte) error {
 			outcome, gold = "unconfirmed", 0
 			experience = 0
 		}
-		rewards = append(rewards, persistence.BattleReward{UID: uid, Outcome: outcome, Gold: gold, Experience: experience, StartLevel: member.BattleLevel})
+		period, points := honour.Award(room.Request[46], outcome, len(room.Members))
+		mode := room.Request[46]
+		rewards = append(rewards, persistence.BattleReward{TaskClientHash: hub.Config.ConfigHash, BattleMode: &mode, UID: uid, Outcome: outcome, Gold: gold, Experience: experience, StartLevel: member.BattleLevel, HonourPeriod: period, HonourPoints: points})
 	}
 	reports, err := json.Marshal(room.Reports)
 	if err != nil {
@@ -211,5 +217,10 @@ func (hub *Hub) returnFromSettlement(session *Session) error {
 	session.sendGame(protocol.Message{ID: 3115})
 	room.Stage = "room"
 	hub.completeRoomJoin(room, room.Members[session.UID], fighter(account, room.Members[session.UID], false), peers)
+	if err := hub.extendedTaskLists(session); err != nil {
+		session.sendGame(notice("任务进度刷新失败，请稍后打开任务列表。"))
+	}
+	session.syncUnequippedInventory(account.Inventory)
+	session.syncUnequippedInventory(account.Inventory)
 	return nil
 }

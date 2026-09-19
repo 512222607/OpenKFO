@@ -7,37 +7,52 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"kungfu.local/server/internal/protocol"
 )
 
 type AdminOffer struct {
+	// nil preserves an existing policy for older GM clients; zero is permanent.
+	ServerExpiryDays *uint32 `json:"server_expiry_days,omitempty"`
 	Offer
 	Enabled bool `json:"enabled"`
 }
 type AdminRequest struct {
-	Keys           []string     `json:"keys,omitempty"`
-	Currency       string       `json:"currency,omitempty"`
-	Price          int64        `json:"price,omitempty"`
-	Rewards        *RewardRules `json:"rewards,omitempty"`
-	RewardRevision uint64       `json:"reward_revision"`
-	Operation      string       `json:"operation"`
-	ID             string       `json:"id"`
-	UID            uint64       `json:"uid"`
-	Mode           string       `json:"mode"`
-	Amount         uint32       `json:"amount"`
-	Records        [][]byte     `json:"records"`
-	Offers         []AdminOffer `json:"offers"`
-	Enabled        bool         `json:"enabled"`
-	All            bool         `json:"all"`
-	Preserve       bool         `json:"preserve"`
+	StageUnlocks     *StagePlayerUnlocks `json:"stage_unlocks,omitempty"`
+	WeaponSettings   *WeaponSettings     `json:"weapon_settings,omitempty"`
+	VIPShopSettings  *VIPShopSettings    `json:"vip_shop_settings,omitempty"`
+	TalismanSettings *TalismanSettings   `json:"talisman_settings,omitempty"`
+	Titles           *TitleSettings      `json:"titles,omitempty"`
+	Tasks            *TaskSettings       `json:"tasks,omitempty"`
+	Training         *TrainingSettings   `json:"training,omitempty"`
+	VIPKind          uint32              `json:"vip_kind,omitempty"`
+	Honour           *HonourSettings     `json:"honour,omitempty"`
+	StageAccess      *StageAccess        `json:"stage_access,omitempty"`
+	Instance         uint32              `json:"instance"`
+	ExpiresAt        *int64              `json:"expires_at,omitempty"`
+	Keys             []string            `json:"keys,omitempty"`
+	Currency         string              `json:"currency,omitempty"`
+	Price            int64               `json:"price,omitempty"`
+	Rewards          *RewardRules        `json:"rewards,omitempty"`
+	RewardRevision   uint64              `json:"reward_revision"`
+	Operation        string              `json:"operation"`
+	ID               string              `json:"id"`
+	UID              uint64              `json:"uid"`
+	Mode             string              `json:"mode"`
+	Amount           uint32              `json:"amount"`
+	Records          [][]byte            `json:"records"`
+	Offers           []AdminOffer        `json:"offers"`
+	Enabled          bool                `json:"enabled"`
+	All              bool                `json:"all"`
+	Preserve         bool                `json:"preserve"`
 }
 
 func itemKey(record []byte) string {
 	return fmt.Sprintf("%d:%d", record[4], protocol.ReadUint32(record, 5))
 }
 func (store *Store) adminOffers() ([]AdminOffer, error) {
-	rows, err := store.DB.Query(`SELECT catalog_key,category,variant,record,grant_record,enabled FROM offers ORDER BY catalog_key`)
+	rows, err := store.DB.Query(`SELECT o.catalog_key,o.category,o.variant,o.record,o.grant_record,o.enabled,COALESCE(l.days,0) FROM offers o LEFT JOIN offer_lifetimes l ON l.catalog_key=o.catalog_key ORDER BY o.catalog_key`)
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +60,7 @@ func (store *Store) adminOffers() ([]AdminOffer, error) {
 	result := []AdminOffer{}
 	for rows.Next() {
 		var offer AdminOffer
-		if err = rows.Scan(&offer.Key, &offer.Category, &offer.Variant, &offer.Record, &offer.Grant, &offer.Enabled); err != nil {
+		if err = rows.Scan(&offer.Key, &offer.Category, &offer.Variant, &offer.Record, &offer.Grant, &offer.Enabled, &offer.ServerExpiryDays); err != nil {
 			return nil, err
 		}
 		result = append(result, offer)
@@ -54,6 +69,89 @@ func (store *Store) adminOffers() ([]AdminOffer, error) {
 }
 func (store *Store) Admin(request AdminRequest) (any, error) {
 	switch request.Operation {
+	case "titles_get":
+		return store.TitleSettings()
+	case "titles_save":
+		if request.Titles == nil {
+			return nil, ErrDenied
+		}
+		return store.SaveTitleSettings(*request.Titles)
+	case "tasks_get":
+		return store.TaskSettings()
+	case "tasks_save":
+		if request.Tasks == nil {
+			return nil, ErrDenied
+		}
+		return store.SaveTaskSettings(*request.Tasks)
+	case "vip_get":
+		if request.UID == 0 {
+			return nil, ErrDenied
+		}
+		var uid uint64
+		if err := store.DB.QueryRow("SELECT uid FROM accounts WHERE uid=?", request.UID).Scan(&uid); err != nil {
+			return nil, err
+		}
+		return store.VIPMembership(uid)
+	case "training_get":
+		return store.TrainingSettings()
+	case "weapon_settings_get":
+		return store.WeaponSettings()
+	case "vip_shop_settings_get":
+		return store.VIPShopSettings()
+	case "vip_shop_settings_save":
+		if request.VIPShopSettings == nil {
+			return nil, ErrDenied
+		}
+		return store.SaveVIPShopSettings(*request.VIPShopSettings)
+	case "weapon_settings_save":
+		if request.WeaponSettings == nil {
+			return nil, ErrDenied
+		}
+		return store.SaveWeaponSettings(*request.WeaponSettings)
+	case "talisman_settings_get":
+		return store.TalismanSettings()
+	case "talisman_settings_save":
+		if request.TalismanSettings == nil {
+			return nil, ErrDenied
+		}
+		return store.SaveTalismanSettings(*request.TalismanSettings)
+	case "training_save":
+		if request.Training == nil {
+			return nil, ErrDenied
+		}
+		return store.SaveTrainingSettings(*request.Training)
+	case "honour_get":
+		settings, err := store.HonourSettings(HonourRules{})
+		if err == nil && settings.Revision == 0 {
+			return nil, fmt.Errorf("请先启动新版服务器导入原荣誉配置")
+		}
+		return settings, err
+	case "honour_save":
+		if request.Honour == nil {
+			return nil, ErrDenied
+		}
+		return store.SaveHonourSettings(*request.Honour)
+	case "stages_get":
+		return store.StageAccess()
+	case "stage_unlocks_get":
+		if _, err := store.AccountTitle(request.UID); err != nil {
+			return nil, err
+		}
+		access, err := store.StageAccess()
+		if err != nil {
+			return nil, err
+		}
+		return store.StagePlayerUnlocks(request.UID, access.ClientHash)
+	case "stage_unlocks_save":
+		if request.StageUnlocks == nil || request.UID == 0 || request.StageUnlocks.UID != request.UID {
+			return nil, ErrDenied
+		}
+		return store.SaveStagePlayerUnlocks(*request.StageUnlocks)
+	case "stages_save":
+		if request.StageAccess == nil {
+			return nil, ErrDenied
+		}
+		return store.SaveStageAccess(*request.StageAccess)
 	case "rewards_get":
 		return store.BattleRewards(RewardRules{})
 	case "rewards_save":
@@ -84,8 +182,27 @@ func (store *Store) Admin(request AdminRequest) (any, error) {
 			return nil, err
 		}
 		result := []map[string]any{}
+		deadlines := map[uint32]int64{}
+		rows, err := store.DB.Query(`SELECT instance,expires_at FROM inventory_expirations WHERE uid=?`, request.UID)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var id uint32
+			var deadline int64
+			if err = rows.Scan(&id, &deadline); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			deadlines[id] = deadline
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return nil, err
+		}
 		for _, record := range account.Inventory {
-			result = append(result, map[string]any{"instance": protocol.ReadUint32(record, 0), "key": itemKey(record), "slot": protocol.ReadUint16(record, 17), "quantity": protocol.ReadUint16(record, 23), "duration_hours": protocol.ReadUint32(record, 13), "duration_state": protocol.ReadUint32(record, 19)})
+			result = append(result, map[string]any{"instance": protocol.ReadUint32(record, 0), "expires_at": deadlines[protocol.ReadUint32(record, 0)], "key": itemKey(record), "slot": protocol.ReadUint16(record, 17), "quantity": protocol.ReadUint16(record, 23), "duration_hours": protocol.ReadUint32(record, 13), "duration_state": protocol.ReadUint32(record, 19)})
 		}
 		return result, nil
 	case "shop_catalog":
@@ -93,7 +210,7 @@ func (store *Store) Admin(request AdminRequest) (any, error) {
 	case "wallet_update":
 		before, after, err := store.Wallet(request.UID, request.Mode, request.Amount, request.ID)
 		return map[string]any{"before": before, "after": after, "backup": "线上 wallet_operations 审计记录：" + request.ID, "message": fmt.Sprintf("线上点券：%d → %d；重新登录游戏刷新", before, after)}, err
-	case "grant", "shop_save", "shop_batch", "shop_prices":
+	case "grant", "shop_save", "shop_batch", "shop_prices", "inventory_expiry", "vip_grant":
 	default:
 		return nil, ErrDenied
 	}
@@ -137,7 +254,58 @@ func (store *Store) Admin(request AdminRequest) (any, error) {
 	}
 	result := map[string]any{"backup": "线上事务前快照：desktop_admin_operations / " + request.ID}
 	var before any
-	if request.Operation == "grant" {
+	if request.Operation == "vip_grant" {
+		if request.ExpiresAt == nil {
+			return nil, ErrDenied
+		}
+		var instance uint32
+		instance, err = grantVIP(tx, request.UID, request.VIPKind, *request.ExpiresAt, time.Now().Unix())
+		if err != nil {
+			return nil, err
+		}
+		before = map[string]any{"uid": request.UID, "instance": instance, "existed": false}
+		result["uid"], result["instance"], result["vip_kind"], result["expires_at"] = request.UID, instance, request.VIPKind, *request.ExpiresAt
+		result["message"] = "会员卡已保存；需要配套新版服务器同步资格与权益。"
+	} else if request.Operation == "inventory_expiry" {
+		if request.UID == 0 || request.Instance == 0 || request.ExpiresAt == nil {
+			return nil, ErrDenied
+		}
+		deadline := *request.ExpiresAt
+		now := time.Now().Unix()
+		if deadline != 0 && (deadline <= now || deadline > now+10*366*24*3600) {
+			return nil, ErrDenied
+		}
+		var uid uint64
+		if err = tx.QueryRow(`SELECT uid FROM accounts WHERE uid=? FOR UPDATE`, request.UID).Scan(&uid); err != nil {
+			return nil, err
+		}
+		var record []byte
+		if err = tx.QueryRow(`SELECT record FROM inventory WHERE uid=? AND instance=?`, uid, request.Instance).Scan(&record); err != nil {
+			return nil, ErrDenied
+		}
+		if !usableItem(record) {
+			return nil, fmt.Errorf("已失效物品不能通过修改期限恢复")
+		}
+		var previous int64
+		err = tx.QueryRow(`SELECT expires_at FROM inventory_expirations WHERE uid=? AND instance=?`, uid, request.Instance).Scan(&previous)
+		if err != nil && err != sql.ErrNoRows {
+			return nil, err
+		}
+		if err == nil && previous <= now {
+			return nil, fmt.Errorf("物品已到期，不能修改期限")
+		}
+		before = map[string]any{"uid": uid, "instance": request.Instance, "expires_at": previous}
+		if deadline == 0 {
+			_, err = tx.Exec(`DELETE FROM inventory_expirations WHERE uid=? AND instance=?`, uid, request.Instance)
+		} else {
+			_, err = tx.Exec(`INSERT INTO inventory_expirations(uid,instance,expires_at) VALUES(?,?,?) ON DUPLICATE KEY UPDATE expires_at=VALUES(expires_at),processed=FALSE`, uid, request.Instance, deadline)
+		}
+		if err != nil {
+			return nil, err
+		}
+		result["uid"], result["instance"], result["expires_at"] = uid, request.Instance, deadline
+		result["message"] = "服务器期限已保存；到期后自动失效。客户端期限文字暂不随此设置改变。"
+	} else if request.Operation == "grant" {
 		if len(request.Records) == 0 {
 			return nil, ErrDenied
 		}
@@ -221,7 +389,7 @@ func (store *Store) Admin(request AdminRequest) (any, error) {
 		}
 		result["uid"], result["added"], result["updated"], result["skipped"] = uid, added, updated, skipped
 	} else {
-		rows, readErr := tx.Query(`SELECT catalog_key,category,variant,record,grant_record,enabled FROM offers ORDER BY catalog_key FOR UPDATE`)
+		rows, readErr := tx.Query(`SELECT o.catalog_key,o.category,o.variant,o.record,o.grant_record,o.enabled,COALESCE(l.days,0) FROM offers o LEFT JOIN offer_lifetimes l ON l.catalog_key=o.catalog_key ORDER BY o.catalog_key FOR UPDATE`)
 		if readErr != nil {
 			return nil, readErr
 		}
@@ -230,7 +398,7 @@ func (store *Store) Admin(request AdminRequest) (any, error) {
 		byKey := map[uint32]AdminOffer{}
 		for rows.Next() {
 			var offer AdminOffer
-			if err = rows.Scan(&offer.Key, &offer.Category, &offer.Variant, &offer.Record, &offer.Grant, &offer.Enabled); err != nil {
+			if err = rows.Scan(&offer.Key, &offer.Category, &offer.Variant, &offer.Record, &offer.Grant, &offer.Enabled, &offer.ServerExpiryDays); err != nil {
 				rows.Close()
 				return nil, err
 			}
@@ -344,6 +512,12 @@ func (store *Store) Admin(request AdminRequest) (any, error) {
 				if _, err = tx.Exec(`INSERT INTO offers(catalog_key,category,variant,record,grant_record,enabled) VALUES(?,?,?,?,?,?) ON DUPLICATE KEY UPDATE record=VALUES(record),grant_record=VALUES(grant_record),enabled=VALUES(enabled)`, offer.Key, offer.Category, offer.Variant, offer.Record, offer.Grant, offer.Enabled); err != nil {
 					return nil, err
 				}
+				if offer.ServerExpiryDays != nil {
+					if _, err = tx.Exec(`INSERT INTO offer_lifetimes(catalog_key,days) VALUES(?,?) ON DUPLICATE KEY UPDATE days=VALUES(days)`, offer.Key, *offer.ServerExpiryDays); err != nil {
+						return nil, err
+					}
+					result["expiry_policy_saved"] = true
+				}
 				changed++
 			}
 		}
@@ -370,6 +544,9 @@ func (store *Store) Admin(request AdminRequest) (any, error) {
 }
 
 func validateAdminOffer(offer AdminOffer) error {
+	if offer.ServerExpiryDays != nil && *offer.ServerExpiryDays > 3650 {
+		return ErrDenied
+	}
 	if len(offer.Record) != 108 || len(offer.Grant) != 68 || offer.Key == 0 || offer.Category != 10 || offer.Variant != offer.Grant[4] || offer.Record[4] != offer.Grant[4] || protocol.ReadUint32(offer.Record, 5) != protocol.ReadUint32(offer.Grant, 5) || protocol.ReadUint32(offer.Record, 9) != offer.Key {
 		return ErrDenied
 	}

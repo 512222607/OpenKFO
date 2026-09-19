@@ -40,34 +40,46 @@ type Channel struct {
 }
 
 type Session struct {
-	Trace            *log.Logger
-	UID              uint64
-	Account          string
-	Nickname         string
-	Namespace        string
-	Channels         map[uint32]*Channel
-	Output           chan tunnel.Frame
-	Done             chan struct{}
-	closeOnce        sync.Once
-	queuedBytes      atomic.Int64
-	GameChannel      uint32
-	BootstrapChannel uint32
-	HandoffUntil     time.Time
-	GrantUntil       time.Time
-	TablesReady      bool
-	Room             *Room
-	P2P              uint32
-	P2PUntil         time.Time
-	Bound            bool
-	Port             uint16
-	LastChat         time.Time
-	ConsumeIntents   map[uint32]bool
-	LastBattleNotice time.Time
-	UDPPort          uint16
-	LastUDPNotice    time.Time
-	UDPRelayed       uint64
-	Inventory        map[uint32][]byte
-	LoggedOut        bool
+	TitleOffer           byte              // Server-announced title; retained after claim to bind retries.
+	ExtendedTaskNotified map[uint16]string // Client hash + cycle, scoped to this login.
+	TalismanPending      map[uint32]pendingTalisman
+	LobbyID              uint32 // Native 2010 selected lobby, distinct from tunnel channel ID.
+	Trace                *log.Logger
+	UID                  uint64
+	Account              string
+	Nickname             string
+	Namespace            string
+	Channels             map[uint32]*Channel
+	Output               chan tunnel.Frame
+	Done                 chan struct{}
+	closeOnce            sync.Once
+	queuedBytes          atomic.Int64
+	GameChannel          uint32
+	BootstrapChannel     uint32
+	HandoffUntil         time.Time
+	GrantUntil           time.Time
+	TablesReady          bool
+	Room                 *Room
+	P2P                  uint32
+	P2PUntil             time.Time
+	Bound                bool
+	Port                 uint16
+	LastChat             time.Time
+	ConsumeIntents       map[uint32]bool
+	LastBattleNotice     time.Time
+	UDPPort              uint16
+	LastUDPNotice        time.Time
+	UDPRelayed           uint64
+	Inventory            map[uint32][]byte
+	VIPKind              uint32
+	VIPShopPercent       uint32
+	WeaponRevision       uint64
+	TalismanQuote        *talismanQuote
+	LoggedOut            bool
+	MailPreview          uint32
+	MailAttachment       uint32
+	MailClaimFailed      bool
+	MailDirty            bool
 }
 
 func NewHub(store *persistence.Store, config Config) *Hub {
@@ -208,6 +220,7 @@ func (hub *Hub) Handle(session *Session, frame tunnel.Frame) error {
 		if frame.Channel == session.GameChannel {
 			hub.leave(session, false)
 			session.GameChannel = 0
+			session.LobbyID = 0
 			session.Bound = false
 		}
 		if frame.Channel == session.BootstrapChannel {
@@ -306,19 +319,56 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 			if err != nil {
 				return err
 			}
-			for _, reply := range protocol.Bootstrap(account.InventoryBytes(), session.Port, account.Gold, account.Tickets) {
+			catalog, err := hub.Config.lobbyCatalog(session.Port)
+			if err != nil {
+				return err
+			}
+			replies := protocol.Bootstrap(account.InventoryBytes(), session.Port, account.Gold, account.Tickets)
+			session.VIPKind = account.VIPKind()
+			session.VIPShopPercent = 0
+			if session.VIPKind >= 2 {
+				session.VIPShopPercent, err = hub.Store.VIPShopPercent(session.UID)
+				if err != nil {
+					return err
+				}
+			}
+			for i := range replies {
+				if replies[i].ID == 1020 {
+					protocol.WriteUint32(replies[i].Payload, 33, session.VIPKind)
+				}
+			}
+			honour, err := hub.honourRules()
+			if err != nil {
+				return err
+			}
+			for i := range replies {
+				if replies[i].ID == 1035 {
+					protocol.WriteUint32(replies[i].Payload, 0, uint32(len(honour.Periods)))
+				}
+			}
+			replies = append(replies[:len(replies)-2], catalog...)
+			for _, reply := range replies {
 				session.send(channel.ID, reply)
 			}
+			session.send(channel.ID, vipIdentityPacket(session.VIPKind, session.VIPShopPercent))
 			return hub.profileReady(session)
 		}
 		if time.Now().After(session.HandoffUntil) || session.GameChannel != 0 {
 			return persistence.ErrDenied
 		}
+		lobbyID, err := hub.admitLobby(protocol.ReadUint32(payload, 8))
+		if err != nil {
+			return err
+		}
+		session.LobbyID = lobbyID
 		session.HandoffUntil = time.Time{}
 		session.GrantUntil = time.Time{}
 		session.GameChannel = channel.ID
 		channel.Phase = "lobby"
-		session.send(channel.ID, protocol.Lobby(session.Port))
+		reply := protocol.Lobby(session.Port)
+		protocol.WriteUint32(reply.Payload, 0, lobbyID)
+		protocol.WriteUint32(reply.Payload, 26, lobbyID)
+		session.send(channel.ID, reply)
 		log.Printf("lobby uid=%d", session.UID)
 		return nil
 	}
@@ -344,7 +394,11 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		if len(payload) != 0 {
 			return protocol.ErrFrame
 		}
-		for _, reply := range protocol.Catalog(session.Port) {
+		catalog, err := hub.Config.lobbyCatalog(session.Port)
+		if err != nil {
+			return err
+		}
+		for _, reply := range catalog {
 			session.send(channel.ID, reply)
 		}
 		return nil
@@ -361,9 +415,11 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		session.send(channel.ID, protocol.Message{ID: 2070})
 		hub.leave(session, false)
 		session.GameChannel, session.BootstrapChannel = 0, 0
+		session.LobbyID = 0
 		session.Bound = false
 		session.UDPRelayed = 0
 		session.ConsumeIntents, session.Inventory = nil, nil
+		session.TalismanPending = nil
 		session.GrantUntil = time.Now().Add(2 * time.Minute)
 		session.HandoffUntil = session.GrantUntil
 		for _, old := range session.Channels {
@@ -383,6 +439,9 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		session.Bound = true
 		return nil
 	}
+	if message.ID == 4201 || (message.ID == 8071 && len(payload) >= 4 && (protocol.ReadUint32(payload, 0) == 8291 || protocol.ReadUint32(payload, 0) == 8292)) {
+		return hub.useTalisman(session, channel, message)
+	}
 	if message.ID == 4200 || (message.ID == 8071 && len(payload) >= 4 && protocol.ReadUint32(payload, 0) == 8289) {
 		return hub.consume(session, channel, message)
 	}
@@ -400,6 +459,39 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		return nil
 	}
 	switch message.ID {
+	case 21370:
+		return hub.stageSelection(session, payload)
+	case 4126:
+		return hub.claimTitleReward(session, payload)
+	case 6000, 6050, 6080:
+		return hub.tasks(session, message)
+	case 6051, 6052, 6081, 6082, 6311, 6312:
+		return hub.extendedTaskAction(session, message)
+	case 4202, 4204:
+		return hub.repairTalisman(session, channel, message)
+	case 21410:
+		if len(payload) != 0 {
+			return protocol.ErrFrame
+		}
+		config, revision, err := hub.weaponConfig()
+		if err != nil {
+			return err
+		}
+		session.WeaponRevision = 0
+		data, err := config.weaponLevelPayload()
+		if err != nil {
+			return err
+		}
+		if len(data) == 0 {
+			session.sendGame(notice("尚未配置武器升级表。"))
+			return nil
+		}
+		session.sendGame(protocol.Message{ID: 21411, Payload: data})
+		session.WeaponRevision = revision
+	case 21412:
+		return hub.upgradeWeapon(session, channel, payload)
+	case 2250:
+		return hub.playerDirectory(session, payload)
 	case 2420:
 		if len(payload) != 8 {
 			return protocol.ErrFrame
@@ -489,6 +581,10 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 			session.sendGame(protocol.Message{ID: 20566, Payload: make([]byte, 48)})
 		}
 	case 9070, 1540, 1500:
+		if err := hub.refreshVIPShop(session); err != nil {
+			session.sendGame(notice("VIP价格读取失败，请稍后重试。"))
+			return nil
+		}
 		category, variant := -1, 0
 		if message.ID == 9070 {
 			if len(payload) != 2 {
@@ -518,7 +614,47 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 			records = append(header, records...)
 		}
 		session.sendGame(protocol.Message{ID: message.ID + 10, Payload: records})
+	case 9090:
+		if err := hub.refreshVIPShop(session); err != nil {
+			session.sendGame(notice("VIP价格读取失败，请稍后重试。"))
+			return nil
+		}
+		gift, err := protocol.ParseGiftRequest(payload)
+		if err != nil {
+			session.sendGame(notice("赠送请求格式不正确。"))
+			return nil
+		}
+		if gift.Currency != 109 {
+			// Native A2A120 explicitly maps 56 to tickets-only gifting.
+			session.sendGame(protocol.Message{ID: 9110, Payload: []byte{56, 0}})
+			return nil
+		}
+		operationID := fmt.Sprintf("%s:%d:%d", session.Namespace, channel.ID, channel.Sequence)
+		result, err := hub.Store.Gift(session.UID, operationID, payload)
+		if err != nil {
+			// Unknown native 9110 codes index a client string table directly.
+			// Use the established notice path rather than inventing an error code.
+			session.sendGame(notice("赠送未完成，请刷新余额及邮件后核对收件人、商品和价格。"))
+			log.Printf("gift_failed uid=%d", session.UID)
+			return nil
+		}
+		session.sendGame(protocol.Message{ID: 1230, Payload: protocol.Uint32Bytes(result.Balance)})
+		// A2D550 requires nonempty data but reads no result fields.
+		session.sendGame(protocol.Message{ID: 9100, Payload: []byte{1}})
+		if result.Created {
+			if recipient := hub.Sessions[result.Recipient]; recipient != nil {
+				recipient.MailDirty = true
+				if e := hub.refreshMail(recipient); e != nil {
+					log.Printf("mail_refresh_failed uid=%d", recipient.UID)
+				}
+			}
+		}
+		log.Printf("gift_delivered uid=%d recipient=%d mail=%d", session.UID, result.Recipient, result.MailID)
 	case 9040, 9041:
+		if err := hub.refreshVIPShop(session); err != nil {
+			session.sendGame(notice("VIP价格读取失败，请稍后重试。"))
+			return nil
+		}
 		if len(payload) != 169 {
 			return protocol.ErrFrame
 		}
@@ -609,19 +745,17 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		} else {
 			session.sendGame(protocol.Message{ID: 20547, Payload: account.Profile[352:356]})
 		}
-	case 1300, 1400:
+	case 1300, 1320, 1340, 2171:
+		return hub.mail(session, message)
+	case 1400:
 		if len(payload) != 0 {
 			return protocol.ErrFrame
 		}
 		session.sendGame(protocol.Message{ID: message.ID + 10})
 	case 20360:
-		// The profile statistics tab queries the selected player's UID,
-		// not necessarily the authenticated viewer. The trailing word is
-		// client query state; the placeholder response does not consume it.
-		if len(payload) != 12 {
-			return protocol.ErrFrame
-		}
-		session.sendGame(protocol.Message{ID: 20370, Payload: append(make([]byte, 36), []byte("No ranked season configured.\x00")...)})
+		return hub.honourProfile(session, payload)
+	case 21006:
+		return hub.claimTraining(session, channel, payload)
 	case 21000, 21002:
 		if (message.ID == 21000 && len(payload) != 8) || (message.ID == 21002 && len(payload) != 0) {
 			return protocol.ErrFrame
@@ -640,11 +774,17 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 			}
 			return err
 		}
-		status := make([]byte, 56)
-		protocol.WriteUint64(status, 0, target)
-		protocol.WriteUint32(status, 20, minutes)
-		if active {
-			protocol.WriteUint32(status, 28, 1)
+		rank, err := hub.Store.TrainingRank(target)
+		if err != nil {
+			return err
+		}
+		rules, err := hub.Store.TrainingSettings()
+		if err != nil {
+			return err
+		}
+		status, err := trainingStatus(target, rank, minutes, active, rules)
+		if err != nil {
+			return err
 		}
 		replyID := uint32(21001)
 		if message.ID == 21002 {
@@ -856,7 +996,7 @@ func (hub *Hub) chat(session *Session, message protocol.Message) error {
 			hub.broadcast(session.Room, message, 0)
 		} else {
 			for _, peer := range hub.Sessions {
-				if peer.game() != nil && peer.game().Phase == "lobby" {
+				if peer.LobbyID == session.LobbyID && peer.game() != nil && peer.game().Phase == "lobby" {
 					peer.sendGame(message)
 				}
 			}

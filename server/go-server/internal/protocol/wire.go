@@ -187,7 +187,13 @@ func Bootstrap(inventory []byte, port uint16, gold, tickets uint32) []Message {
 	core := make([]byte, 37)
 	WriteUint32(core, 12, 1)
 	WriteUint32(core, 16, gold)
-	messages := []Message{{1131, settings}, {1020, core}, {1230, Uint32Bytes(tickets)}, {1120, inventory}}
+	// A2B930 requires 57 bytes and copies them into the world directory.
+	// RoleInfo initializes its history selection from the first DWORD; 1
+	// represents a single local period, with no honour record configured yet.
+	// This is directory initialization, not invented player statistics.
+	honourDirectory := make([]byte, 57)
+	WriteUint32(honourDirectory, 0, 1)
+	messages := []Message{{1131, settings}, {1020, core}, {1230, Uint32Bytes(tickets)}, {1120, inventory}, {1035, honourDirectory}}
 	return append(messages, Catalog(port)...)
 }
 func Lobby(port uint16) Message {

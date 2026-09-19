@@ -30,7 +30,7 @@ void main() {
       }
       expect(request['operation'], 'shop_save');
       saved = request;
-      return {'message': '商城配置已保存'};
+      return {'message': '商城配置已保存', 'expiry_policy_saved': true};
     }
 
     await tester.pumpWidget(MaterialApp(home: ShopConfigPage(api: api)));
@@ -40,7 +40,7 @@ void main() {
     await tester.tap(find.byType(SwitchListTile));
     await tester.enterText(find.widgetWithText(TextFormField, '售价'), '88');
     await tester.enterText(
-      find.widgetWithText(TextFormField, '装备期限（天）'),
+      find.widgetWithText(TextFormField, '装备显示天数'),
       '365',
     );
     await tester.tap(find.text('保存商城配置'));
@@ -48,6 +48,7 @@ void main() {
     expect(saved?['currency'], 'ticket');
     expect(saved?['price'], 88);
     expect(saved?['days'], 365);
+    expect(saved?['server_expiry_days'], 0);
     expect(saved?['enabled'], true);
     expect(
       catalogReads,
@@ -56,6 +57,14 @@ void main() {
     );
     expect(find.text('253905 · 已上架'), findsOneWidget);
     expect(find.byType(LinearProgressIndicator), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.text('购买后按上述天数到期'));
+    await tester.enterText(find.widgetWithText(TextFormField, '装备显示天数'), '2');
+    await tester.ensureVisible(find.text('保存商城配置'));
+    await tester.tap(find.text('保存商城配置'));
+    await tester.pumpAndSettle();
+    expect(saved?['server_expiry_days'], 2);
+    expect(saved?['days'], 2);
     expect(tester.takeException(), isNull);
   });
 

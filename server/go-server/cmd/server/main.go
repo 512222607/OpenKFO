@@ -113,7 +113,31 @@ func main() {
 		if err = json.Unmarshal(encoded, &config); err != nil || len(config.ConfigHash) != 64 || len(config.Pools) == 0 {
 			log.Fatal("invalid game configuration")
 		}
+		if err = config.ValidateLobbies(); err != nil {
+			log.Fatal(err)
+		}
+		if err = config.ValidateWeaponLevels(); err != nil {
+			log.Fatal(err)
+		}
+		if err = config.ValidateHonour(); err != nil {
+			log.Fatal(err)
+		}
+		if err = config.ValidateTalismanUses(); err != nil {
+			log.Fatal(err)
+		}
+		if err = config.ValidateTalismanRepairs(); err != nil {
+			log.Fatal(err)
+		}
 		if err = store.SeedBattleRewards(config.Settlement); err != nil {
+			log.Fatal(err)
+		}
+		if err = store.SeedHonourSettings(persistence.HonourRules(config.Honour)); err != nil {
+			log.Fatal(err)
+		}
+		if err = store.SeedTalismanSettings(persistence.TalismanRules{Enabled: len(config.TalismanUses)+len(config.TalismanRepairs) > 0, Uses: config.TalismanUses, Repairs: config.TalismanRepairs}); err != nil {
+			log.Fatal(err)
+		}
+		if err = store.SeedWeaponSettings(persistence.WeaponRules{Enabled: config.WeaponUpgradeMode != "", Levels: config.WeaponLevels}); err != nil {
 			log.Fatal(err)
 		}
 		certificate, certErr := tunnel.Certificate(*certificateDirectory)

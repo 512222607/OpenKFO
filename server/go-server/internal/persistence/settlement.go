@@ -39,14 +39,18 @@ func AdvanceLevel(level uint16, experience uint64, rules RewardRules) (uint16, u
 }
 
 type BattleReward struct {
-	StartLevel  uint16   `json:"start_level,omitempty"`
-	Items       [][]byte `json:"items,omitempty"`
-	UID         uint64   `json:"uid"`
-	Outcome     string   `json:"outcome"`
-	Gold        uint32   `json:"gold"`
-	GoldBalance uint32   `json:"gold_balance"`
-	Experience  uint32   `json:"experience"`
-	Profile     []byte   `json:"profile"`
+	TaskClientHash string   `json:"-"` // Server archive identity, never client supplied.
+	BattleMode     *byte    `json:"battle_mode,omitempty"`
+	HonourPeriod   uint32   `json:"honour_period,omitempty"`
+	HonourPoints   uint32   `json:"honour_points,omitempty"`
+	StartLevel     uint16   `json:"start_level,omitempty"`
+	Items          [][]byte `json:"items,omitempty"`
+	UID            uint64   `json:"uid"`
+	Outcome        string   `json:"outcome"`
+	Gold           uint32   `json:"gold"`
+	GoldBalance    uint32   `json:"gold_balance"`
+	Experience     uint32   `json:"experience"`
+	Profile        []byte   `json:"profile"`
 }
 
 // Commit the entire room once. The persisted response makes retries independent
@@ -87,17 +91,30 @@ func (store *Store) SettleBattle(serial uint32, reports []byte, rewards []Battle
 	if err != sql.ErrNoRows {
 		return nil, err
 	}
-	for i := range rewards {
-		r := &rewards[i]
+	// Lock every participant before the shared task rules. Otherwise a task
+	// action on a later participant can hold its account while waiting for
+	// rules already held by this settlement, creating a lock-order cycle.
+	for i, r := range rewards {
 		if r.UID == 0 || (i > 0 && rewards[i-1].UID == r.UID) {
 			return nil, ErrDenied
 		}
+		var owner uint64
+		if err = tx.QueryRow("SELECT uid FROM accounts WHERE uid=? FOR UPDATE", r.UID).Scan(&owner); err != nil {
+			return nil, err
+		}
+	}
+	for i := range rewards {
+		r := &rewards[i]
 		var gold uint64
 		if err = tx.QueryRow("SELECT profile,gold FROM accounts WHERE uid=? FOR UPDATE", r.UID).Scan(&r.Profile, &gold); err != nil {
 			return nil, err
 		}
 		if len(r.Profile) != 360 || gold+uint64(r.Gold) > math.MaxUint32 {
 			return nil, ErrDenied
+		}
+		addTaskBattleCounters(r.Profile, r.BattleMode, r.Outcome, len(rewards))
+		if err = advanceExtendedTaskBattleTx(tx, *r, len(rewards)); err != nil {
+			return nil, err
 		}
 		startLevel := ProfileLevel(r.Profile)
 		if r.StartLevel != 0 {
@@ -112,26 +129,24 @@ func (store *Store) SettleBattle(serial uint32, reports []byte, rewards []Battle
 				return nil, err
 			}
 		}
-		experience := uint64(protocol.ReadUint32(r.Profile, ExperienceOffset)) + uint64(r.Experience)
 		if r.Gold > math.MaxInt32 {
 			return nil, ErrDenied
 		}
-		if len(growth) > 0 && growth[0].GrowthEnabled && r.Outcome != "unconfirmed" {
-			level, xp := AdvanceLevel(ProfileLevel(r.Profile), experience, growth[0])
-			protocol.WriteUint16(r.Profile, LevelOffset, level)
-			experience = uint64(xp)
+		rules := RewardRules{}
+		if len(growth) > 0 {
+			rules = growth[0]
 		}
-		total := uint64(protocol.ReadUint32(r.Profile, ExperienceOffset+4)) + uint64(r.Experience)
-		if total > math.MaxInt32 {
-			total = math.MaxInt32
+		if r.Outcome == "unconfirmed" {
+			rules.GrowthEnabled = false
 		}
-		protocol.WriteUint32(r.Profile, ExperienceOffset+4, uint32(total))
-		if experience > math.MaxInt32 {
-			return nil, ErrDenied
+		r.GoldBalance, err = creditRewardProgress(r.Profile, gold, r.Experience, r.Gold, rules)
+		if err != nil {
+			return nil, err
 		}
-		protocol.WriteUint32(r.Profile, ExperienceOffset, uint32(experience))
-		r.GoldBalance = uint32(gold + uint64(r.Gold))
 		if _, err = tx.Exec("UPDATE accounts SET gold=?,profile=? WHERE uid=?", r.GoldBalance, r.Profile, r.UID); err != nil {
+			return nil, err
+		}
+		if err = addHonour(tx, *r); err != nil {
 			return nil, err
 		}
 	}

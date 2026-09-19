@@ -12,13 +12,22 @@ import (
 )
 
 type Config struct {
-	CharacterChoices []persistence.CharacterChoice `json:"character_choices"`
-	Settlement       SettlementRewards             `json:"settlement"`
-	ConfigHash       string                        `json:"config_hash"`
-	Pools            map[string][]uint32           `json:"pools"`
-	Groups           map[string][]uint32           `json:"groups"`
+	TitleLevels       []byte                           `json:"title_levels,omitempty"` // Verified roletitle.xml levels; empty disables announcements.
+	TalismanUses      []TalismanUseRule                `json:"talisman_uses,omitempty"`
+	TalismanRepairs   []persistence.TalismanRepairRule `json:"talisman_repairs,omitempty"`
+	Honour            HonourRules                      `json:"honour,omitempty"`
+	WeaponUpgradeMode string                           `json:"weapon_upgrade_mode,omitempty"`
+	WeaponLevels      []WeaponLevel                    `json:"weapon_levels,omitempty"`
+	LobbyNames        map[uint32]string                `json:"lobby_names,omitempty"`
+	LobbyIDs          []uint32                         `json:"lobby_ids,omitempty"`
+	CharacterChoices  []persistence.CharacterChoice    `json:"character_choices"`
+	Settlement        SettlementRewards                `json:"settlement"`
+	ConfigHash        string                           `json:"config_hash"`
+	Pools             map[string][]uint32              `json:"pools"`
+	Groups            map[string][]uint32              `json:"groups"`
 }
 type Member struct {
+	TalismanEvents       map[uint64]uint32
 	BattleLevel          uint16
 	Session              *Session
 	Slot, Spawn, Team    byte
@@ -26,19 +35,46 @@ type Member struct {
 	BattleEvents         map[uint32]battleSequence
 }
 type Room struct {
-	LoadTimer *time.Timer
-	Reports   map[uint64][]byte
-	ID        uint16
-	Owner     uint64
-	Request   []byte
-	Stage     string
-	Serial    uint32
-	Members   map[uint64]*Member
+	TutorialPending bool
+	Reliable        map[reliableActor]*reliableExchange
+	ReliableSerial  uint32
+	Exchange        *seatExchange
+	LobbyID         uint32
+	LoadTimer       *time.Timer
+	Reports         map[uint64][]byte
+	ID              uint16
+	Owner           uint64
+	Request         []byte
+	Stage           string
+	Serial          uint32
+	Members         map[uint64]*Member
 }
 
 func (hub *Hub) resolve(request []byte) ([]byte, error) {
+	access, err := hub.stageAccess()
+	if err != nil {
+		return nil, err
+	}
+	return hub.resolveWithAccess(request, access)
+}
+
+func (hub *Hub) stageAccess() (persistence.StageAccess, error) {
+	if hub.Store == nil {
+		return persistence.StageAccess{}, nil
+	}
+	return hub.Store.StageAccess()
+}
+
+func (hub *Hub) resolveWithAccess(request []byte, access persistence.StageAccess) ([]byte, error) {
+	return hub.resolveWithAllowed(request, access.Allows)
+}
+
+func (hub *Hub) resolveWithAllowed(request []byte, allows func(uint32) bool) ([]byte, error) {
 	if len(request) != 81 {
 		return nil, protocol.ErrFrame
+	}
+	if tutorialRequest(request) && allows(1201) {
+		return bytes.Clone(request), nil
 	}
 	mode, capacity := request[46], request[37]
 	if (mode > 3 && mode != 5) || (capacity != 2 && capacity != 4 && capacity != 6 && capacity != 8) {
@@ -58,6 +94,9 @@ func (hub *Hub) resolve(request []byte) ([]byte, error) {
 	var target uint32
 	if chosen == 0 || chosen == 0xffffffff || isGroup {
 		for _, mapID := range pool {
+			if !allows(mapID) {
+				continue
+			}
 			if isGroup && !contains(group, mapID) {
 				continue
 			}
@@ -69,7 +108,7 @@ func (hub *Hub) resolve(request []byte) ([]byte, error) {
 				break
 			}
 		}
-	} else if contains(pool, chosen) && (suggested == 0 || suggested == 0xffffffff || suggested == chosen) {
+	} else if allows(chosen) && contains(pool, chosen) && (suggested == 0 || suggested == 0xffffffff || suggested == chosen) {
 		target = chosen
 	}
 	if target == 0 {
@@ -88,7 +127,8 @@ func (hub *Hub) broadcast(room *Room, message protocol.Message, exclude uint64) 
 	}
 }
 func (hub *Hub) install(room *Room, session *Session) error {
-	if room.Stage != "room" || len(room.Members) >= int(room.Request[37]) || !session.Bound || time.Now().After(session.P2PUntil) {
+	if room.LobbyID != session.LobbyID || room.Stage != "room" || len(room.Members) >= int(room.Request[37]) ||
+		(!tutorialRoom(room) && (!session.Bound || time.Now().After(session.P2PUntil))) {
 		return protocol.ErrFrame
 	}
 	slot := byte(0)
@@ -132,6 +172,16 @@ func (hub *Hub) completeRoomJoin(room *Room, member *Member, own []byte, peers [
 	room.Members[session.UID] = member
 	session.Room = room
 	session.game().Phase = "room"
+	if tutorialRoom(room) {
+		// 8253A0 initializes the native mode/map from the 83B creation reply;
+		// the client then sends 3550 and 3070 before receiving its 3100 roster.
+		room.TutorialPending = true
+		p := make([]byte, 83)
+		protocol.WriteUint16(p, 0, room.ID)
+		copy(p[2:], room.Request)
+		session.sendGame(protocol.Message{ID: 3020, Payload: p})
+		return
+	}
 	session.sendGame(protocol.Message{ID: 3100, Payload: roomEntryForMember(room, member, own)})
 	session.sendGame(protocol.Message{ID: 3160, Payload: protocol.Uint64Bytes(room.Owner)})
 	// 3105 consumes consecutive variable-length records, without a count prefix.
@@ -151,6 +201,7 @@ func (hub *Hub) completeRoomJoin(room *Room, member *Member, own []byte, peers [
 }
 
 func (hub *Hub) clearRoomReady(room *Room) {
+	hub.cancelSeatExchange(room)
 	for uid, member := range room.Members {
 		if member.Ready {
 			member.Ready = false
@@ -167,9 +218,13 @@ func (hub *Hub) leave(session *Session, acknowledge bool) {
 		}
 		return
 	}
+	hub.cancelSeatExchange(room)
 	delete(room.Members, session.UID)
+	delete(room.Reliable, reliableActor{session.UID, 9000})
+	delete(room.Reliable, reliableActor{session.UID, 9500})
 	session.Room = nil
 	session.ConsumeIntents = nil
+	session.TalismanPending = nil
 	if channel := session.game(); channel != nil {
 		channel.Phase = "lobby"
 	}
@@ -228,7 +283,7 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		// The old adapter mistook the page for a mode and hid mode-0 rooms.
 		ids := []int{}
 		for id, room := range hub.Rooms {
-			if payload[2] == 0x88 || payload[2] == room.Request[46] {
+			if !tutorialRoom(room) && room.LobbyID == session.LobbyID && (payload[2] == 0x88 || payload[2] == room.Request[46]) {
 				ids = append(ids, int(id))
 			}
 		}
@@ -255,10 +310,10 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 				return true, nil
 			}
 		}
-		if channel.Phase != "lobby" || room != nil || !session.Bound {
+		if channel.Phase != "lobby" || room != nil || (!session.Bound && !tutorialRequest(payload)) {
 			return true, protocol.ErrFrame
 		}
-		resolvedRequest, err := hub.resolve(payload)
+		resolvedRequest, err := hub.resolveForPlayers(payload, session)
 		if err != nil {
 			session.send(channel.ID, protocol.Message{ID: 3030, Payload: []byte{44, 0}})
 			return true, nil
@@ -270,7 +325,7 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		if id >= 256 {
 			return true, protocol.ErrFrame
 		}
-		newRoom := &Room{ID: id, Owner: uid, Request: resolvedRequest, Stage: "room", Members: map[uint64]*Member{}}
+		newRoom := &Room{LobbyID: session.LobbyID, ID: id, Owner: uid, Request: resolvedRequest, Stage: "room", Members: map[uint64]*Member{}}
 		if err = hub.install(newRoom, session); err != nil {
 			return true, err
 		}
@@ -282,6 +337,9 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		}
 		id := protocol.ReadUint16(payload, 0)
 		if room != nil && room.ID == id && channel.Phase == "room" {
+			if tutorialRoom(room) && room.TutorialPending {
+				return true, hub.acknowledgeTutorialJoin(session, room)
+			}
 			return true, nil
 		}
 		if channel.Phase != "lobby" || room != nil {
@@ -292,7 +350,7 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		switch {
 		case payload[2] != 0:
 			code = 130
-		case target == nil:
+		case target == nil || target.LobbyID != session.LobbyID:
 			code = 29
 		case target.Stage != "room":
 			code = 30
@@ -305,10 +363,21 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 			session.send(channel.ID, protocol.Message{ID: 3080, Payload: append(bytes.Clone(payload), protocol.Uint32Bytes(code)...)})
 			return true, nil
 		}
+		allows, err := hub.stageGate(session)
+		if err != nil || !allows(protocol.ReadUint32(target.Request, 38)) {
+			session.send(channel.ID, protocol.Message{ID: 3080, Payload: append(bytes.Clone(payload), protocol.Uint32Bytes(130)...)})
+			session.sendGame(notice("无法加入：地图已关闭、称号条件未满足或目录版本不匹配。"))
+			return true, nil
+		}
 		return true, hub.install(target, session)
 	case 3075:
 		if len(payload) != 1 || channel.Phase != "lobby" || room != nil {
 			return true, protocol.ErrFrame
+		}
+		allows, err := hub.stageGate(session)
+		if err != nil {
+			session.sendGame(notice("无法查询可加入地图，请核对关卡条件和客户端版本。"))
+			return true, nil
 		}
 		ids := []int{}
 		for id := range hub.Rooms {
@@ -317,11 +386,13 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		sort.Ints(ids)
 		for _, id := range ids {
 			target := hub.Rooms[uint16(id)]
-			if target.Stage == "room" && target.Request[21] == 0 && len(target.Members) < int(target.Request[37]) && (payload[0] == 0 || payload[0] == target.Request[46]) {
+			if target.LobbyID == session.LobbyID && target.Stage == "room" && target.Request[21] == 0 && len(target.Members) < int(target.Request[37]) && allows(protocol.ReadUint32(target.Request, 38)) && (payload[0] == 0 || payload[0] == target.Request[46]) {
 				return true, hub.install(target, session)
 			}
 		}
 		session.sendGame(notice("暂无可加入的房间，请创建房间或稍后重试。"))
+	case 4124:
+		return true, hub.completeTutorial(session, channel, payload)
 	case 3110:
 		if len(payload) != 0 {
 			return true, protocol.ErrFrame
@@ -345,13 +416,32 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 			if state == 0 && (room.Stage == "settlement" || room.Stage == "room") {
 				// Native result confirmation returns in place via 3550(0),
 				// without 3110. Clear the icon for every peer and unlock ready.
+				var returned *persistence.Account
+				if channel.Phase == "settlement" {
+					a, err := hub.Store.Snapshot(uid)
+					if err != nil {
+						return true, err
+					}
+					returned = &a
+				}
 				channel.Phase = "room"
 				room.Stage = "room"
 				hub.broadcast(room, message, 0)
+				if returned != nil && session.syncUnequippedInventory(returned.Inventory) {
+					hub.clearRoomReady(room)
+					hub.broadcast(room, protocol.Message{ID: 3090, Payload: fighter(*returned, room.Members[uid], true)}, uid)
+				}
+				if returned != nil {
+					if err := hub.extendedTaskLists(session); err != nil {
+						session.sendGame(notice("任务进度刷新失败，请稍后打开任务列表。"))
+					}
+				}
 			} else if state == 3 && channel.Phase == "settlement" {
 				hub.broadcast(room, message, 0)
 			}
 		}
+	case 3260, 3262, 3263:
+		return true, hub.exchangeSeat(session, message)
 	case 3230:
 		if len(payload) != 1 || payload[0] > 1 || room == nil || room.Stage != "room" {
 			return true, protocol.ErrFrame
@@ -389,7 +479,7 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		if err != nil {
 			return true, nil
 		}
-		resolved, err := hub.resolve(candidate)
+		resolved, err := hub.resolveForPlayers(candidate, roomPlayers(room)...)
 		if err != nil {
 			session.sendGame(notice("房间设置或地图不可用。"))
 			return true, nil
@@ -414,15 +504,19 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 			}
 		}
 		member := room.Members[uid]
-		if time.Now().After(session.P2PUntil) {
+		if room.TutorialPending {
+			return true, nil
+		}
+		if !tutorialRoom(room) && time.Now().After(session.P2PUntil) {
 			return true, protocol.ErrFrame
 		}
 		if message.ID == 4060 {
+			hub.cancelSeatExchange(room)
 			member.Ready = false
 			hub.broadcast(room, protocol.Message{ID: 4070, Payload: protocol.Uint64Bytes(uid)}, 0)
 			return true, nil
 		}
-		if uid == room.Owner && room.Request[46] != 5 {
+		if uid == room.Owner && room.Request[46] != 5 && !tutorialRoom(room) {
 			if len(room.Members) < 2 {
 				return true, nil
 			}
@@ -437,17 +531,23 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 			}
 		}
 		if uid == room.Owner {
+			allows, err := hub.stageGate(roomPlayers(room)...)
+			if err != nil || !allows(protocol.ReadUint32(room.Request, 38)) {
+				session.sendGame(notice("当前地图不可开战，请检查地图开关、全员称号条件和客户端版本。"))
+				return true, nil
+			}
 			for other, member := range room.Members {
 				if other != uid && !member.Ready {
 					return true, nil
 				}
 			}
 		}
+		hub.cancelSeatExchange(room)
 		member.Ready = true
 		hub.broadcast(room, protocol.Message{ID: 4050, Payload: protocol.Uint64Bytes(uid)}, 0)
 		if uid == room.Owner {
 			for _, member := range room.Members {
-				if !member.Ready || time.Now().After(member.Session.P2PUntil) {
+				if !member.Ready || (!tutorialRoom(room) && time.Now().After(member.Session.P2PUntil)) {
 					return true, nil
 				}
 			}
@@ -463,22 +563,18 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 				return true, err
 			}
 			room.Serial = serial
+			room.Reliable = nil
+			room.ReliableSerial = serial
 			room.Reports = nil
 			room.Stage = "loading"
 			hub.watchLoading(room)
 			for _, member := range room.Members {
 				member.Loaded, member.Input = false, false
 				member.BattleEvents = nil
+				member.TalismanEvents = nil
 				member.Session.ConsumeIntents = nil
-				response := make([]byte, 53)
-				protocol.WriteUint32(response, 0, uint32(room.ID))
-				protocol.WriteUint32(response, 5, serial)
-				protocol.WriteUint16(response, 11, uint16(member.Slot))
-				for _, peer := range room.Members {
-					protocol.WriteUint32(response, 13+int(peer.Slot)*4, peer.Session.P2P)
-				}
-				protocol.WriteUint32(response, 45, uint32(room.ID))
-				protocol.WriteUint32(response, 49, serial)
+				member.Session.TalismanPending = nil
+				response := battleStartPayload(room)
 				member.Session.game().Phase = "loading"
 				member.Session.sendGame(protocol.Message{ID: 4080, Payload: response})
 			}
@@ -547,4 +643,20 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		return false, nil
 	}
 	return true, nil
+}
+
+// Native 81E1A0 passes +11 to 818910, which enables entity+1B74 only
+// for that slot. Every recipient must select the same battle controller.
+// The server chooses the room owner; +11 is not the recipient's own slot.
+func battleStartPayload(room *Room) []byte {
+	response := make([]byte, 53)
+	protocol.WriteUint32(response, 0, uint32(room.ID))
+	protocol.WriteUint32(response, 5, room.Serial)
+	protocol.WriteUint16(response, 11, uint16(room.Members[room.Owner].Slot))
+	for _, peer := range room.Members {
+		protocol.WriteUint32(response, 13+int(peer.Slot)*4, peer.Session.P2P)
+	}
+	protocol.WriteUint32(response, 45, uint32(room.ID))
+	protocol.WriteUint32(response, 49, room.Serial)
+	return response
 }

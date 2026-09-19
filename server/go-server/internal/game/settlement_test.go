@@ -97,6 +97,7 @@ func TestSettlementCapturedReport(t *testing.T) {
 
 func TestSettlementReturnStatus(t *testing.T) {
 	hub, host, peer, _ := combatFixture()
+	hub.Store = recoveryStore(t)
 	room := host.Room
 	room.Stage = "settlement"
 	host.game().Phase, peer.game().Phase = "settlement", "settlement"

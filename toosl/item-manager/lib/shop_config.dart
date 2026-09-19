@@ -20,7 +20,7 @@ class ShopConfigPage extends StatefulWidget {
 class _ShopConfigPageState extends State<ShopConfigPage> {
   Map<String, dynamic>? data, item;
   String query = '', message = '', currency = 'ticket';
-  bool busy = true, enabled = false, dirty = false;
+  bool busy = true, enabled = false, dirty = false, serverExpiry = false;
   final price = TextEditingController(text: '100');
   final days = TextEditingController(text: '365');
   final quantity = TextEditingController(text: '1');
@@ -151,7 +151,8 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
     currency = config?['currency'] ?? 'ticket';
     enabled = config?['enabled'] ?? false;
     price.text = '${config?['price'] ?? 100}';
-    days.text = '${config?['days'] ?? 365}';
+    serverExpiry = (config?['server_expiry_days'] ?? 0) > 0;
+    days.text = '${serverExpiry ? config!['server_expiry_days'] : config?['days'] ?? 365}';
     quantity.text = '${config?['quantity'] ?? 1}';
     dirty = false;
   }
@@ -214,10 +215,15 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
         'currency': currency,
         'price': int.parse(price.text),
         'days': int.parse(days.text),
+        if (item!['stackable'] != true)
+          'server_expiry_days': serverExpiry ? int.parse(days.text) : 0,
         'quantity': int.parse(quantity.text),
         'enabled': enabled,
       };
       final result = await widget.api({...request, 'id': operationId(request)});
+      if (request.containsKey('server_expiry_days') && result['expiry_policy_saved'] != true) {
+        throw StateError('服务端未确认期限策略，请更新对应环境的管理接口。其他商品设置可能已保存，请刷新核对。');
+      }
       if (!mounted) return;
       setState(() {
         final offers = data!['offers'] as Map;
@@ -226,6 +232,7 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
             'currency',
             'price',
             'days',
+            'server_expiry_days',
             'quantity',
             'enabled',
           ])
@@ -720,7 +727,18 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
                                   if (item!['stackable'] == true)
                                     number(quantity, '每次购买数量', 999)
                                   else
-                                    number(days, '装备期限（天）', 3650),
+                                    number(days, '装备显示天数', 3650),
+                                  if (item!['stackable'] != true)
+                                    CheckboxListTile(
+                                      contentPadding: EdgeInsets.zero,
+                                      title: const Text('购买后按上述天数到期'),
+                                      subtitle: const Text('仅影响之后购买的物品；不勾选则服务器永久有效。已有物品期限不变。'),
+                                      value: serverExpiry,
+                                      onChanged: busy ? null : (value) => setState(() {
+                                        serverExpiry = value ?? false;
+                                        dirty = true;
+                                      }),
+                                    ),
                                   const SizedBox(height: 24),
                                   FilledButton(
                                     onPressed: busy ? null : save,

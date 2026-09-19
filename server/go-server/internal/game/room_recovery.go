@@ -52,12 +52,15 @@ func (hub *Hub) restoreRoom(room *Room, peers []roomPeer, reason string) {
 		room.LoadTimer = nil
 	}
 	room.Stage, room.Reports = "room", nil
+	room.Reliable = nil
 	sort.Slice(peers, func(i, j int) bool { return peers[i].member.Slot < peers[j].member.Slot })
 	for _, peer := range peers {
 		m := peer.member
 		m.Ready, m.Loaded, m.Input = false, false, false
 		m.BattleEvents = nil
+		m.TalismanEvents = nil
 		m.Session.ConsumeIntents = nil
+		m.Session.TalismanPending = nil
 		m.Session.sendGame(protocol.Message{ID: 3115})
 	}
 	for _, peer := range peers {

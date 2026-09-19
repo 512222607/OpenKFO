@@ -53,15 +53,8 @@ func awardDrops(tx *sql.Tx, reward *BattleReward, level uint16, rules []DropRule
 		if !validDropItem(item) {
 			return ErrDenied
 		}
-		var instance uint64
-		if err = tx.QueryRow("SELECT COALESCE(MAX(instance),1048575)+1 FROM inventory WHERE uid=?", reward.UID).Scan(&instance); err != nil {
-			return err
-		}
-		if instance > 0xffffffff {
-			return ErrDenied
-		}
-		protocol.WriteUint32(item, 0, uint32(instance))
-		if _, err = tx.Exec("INSERT INTO inventory(uid,instance,record) VALUES(?,?,?)", reward.UID, instance, item); err != nil {
+		item, err = deliverInventoryItem(tx, reward.UID, item, 0)
+		if err != nil {
 			return err
 		}
 		reward.Items = append(reward.Items, item)

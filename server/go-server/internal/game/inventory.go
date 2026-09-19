@@ -14,8 +14,24 @@ func (s *Session) rememberInventory(records [][]byte) {
 	}
 }
 
+// Apply equipment removals only after returning to a safe lobby/room phase.
+func (s *Session) syncUnequippedInventory(records [][]byte) bool {
+	changedEquipment := false
+	for _, record := range records {
+		old := s.Inventory[protocol.ReadUint32(record, 0)]
+		if len(old) == 68 && protocol.ReadUint16(old, 17) != 0 && protocol.ReadUint16(record, 17) == 0 {
+			// Same 2310 form as successful native unequip: instance + item.
+			s.sendGame(protocol.Message{ID: 2310, Payload: append(protocol.Uint32Bytes(protocol.ReadUint32(record, 0)), record...)})
+			changedEquipment = true
+		}
+	}
+	s.syncInventory(records)
+	return changedEquipment
+}
+
 func (s *Session) syncInventory(records [][]byte) {
 	seen := make(map[uint32]bool, len(records))
+	var expired []uint32
 	for _, r := range records {
 		id := protocol.ReadUint32(r, 0)
 		seen[id] = true
@@ -26,17 +42,77 @@ func (s *Session) syncInventory(records [][]byte) {
 		messageID := uint32(2160)
 		if exists {
 			messageID = 2161
+			if protocol.ReadUint32(r, 19) == 2 && protocol.ReadUint32(old, 19) != 2 {
+				expired = append(expired, id)
+			}
 		}
 		s.sendGame(protocol.Message{ID: messageID, Payload: bytes.Clone(r)})
 	}
-	// Deletion's incremental layout is unverified; use the existing full snapshot.
+	if len(expired) > 0 {
+		sort.Slice(expired, func(i, j int) bool { return expired[i] < expired[j] })
+		payload := protocol.Uint32Bytes(uint32(len(expired)))
+		for _, id := range expired {
+			payload = append(payload, protocol.Uint32Bytes(id)...)
+		}
+		// 8266E0 expects count + instance IDs. Update records first so its
+		// item lookup finds the authoritative inactive, unequipped state.
+		s.sendGame(protocol.Message{ID: 2121, Payload: payload})
+	}
+	// Current A2C2C0 accepts exactly one DWORD instance, calls 9CE160 to
+	// erase that inventory entry and refreshes warehouse UI. It is not an
+	// expiry list (2120/2121) and takes no count prefix.
+	var deleted []uint32
 	for id := range s.Inventory {
 		if !seen[id] {
-			s.sendGame(protocol.Message{ID: 1120, Payload: bytes.Join(records, nil)})
-			break
+			deleted = append(deleted, id)
 		}
 	}
+	sort.Slice(deleted, func(i, j int) bool { return deleted[i] < deleted[j] })
+	for _, id := range deleted {
+		s.sendGame(protocol.Message{ID: 2162, Payload: protocol.Uint32Bytes(id)})
+	}
 	s.rememberInventory(records)
+	s.syncVIPIdentity(records)
+}
+
+// Unknown perks remain zero. Shop percentage is independently verified against
+// persisted membership and rules, then rechecked inside the purchase transaction.
+func vipIdentityPacket(kind uint32, percent ...uint32) protocol.Message {
+	p := make([]byte, 28)
+	protocol.WriteUint32(p, 0, kind)
+	if len(percent) > 0 {
+		protocol.WriteUint32(p, 20, percent[0])
+	}
+	return protocol.Message{ID: 1038, Payload: p}
+}
+
+func (h *Hub) refreshVIPShop(s *Session) error {
+	rate := uint32(0)
+	if s.VIPKind >= 2 {
+		var err error
+		rate, err = h.Store.VIPShopPercent(s.UID)
+		if err != nil {
+			return err
+		}
+	}
+	if rate != s.VIPShopPercent {
+		s.VIPShopPercent = rate
+		s.sendGame(vipIdentityPacket(s.VIPKind, rate))
+	}
+	return nil
+}
+
+func (s *Session) syncVIPIdentity(records [][]byte) {
+	kind := (persistence.Account{Inventory: records}).VIPKind()
+	old := s.VIPKind
+	if old == 0 {
+		old = 1
+	}
+	s.VIPKind = kind
+	if old != kind {
+		s.VIPShopPercent = 0
+		s.sendGame(vipIdentityPacket(kind))
+	}
 }
 
 func weaponCollection(account persistence.Account) protocol.Message {

@@ -1,0 +1,78 @@
+package game
+
+import (
+	"bytes"
+	"kungfu.local/server/internal/protocol"
+	"slices"
+)
+
+func (h *Hub) announceTitleReward(s *Session) error {
+	supported := h.Config.TitleLevels
+	if h.Config.ConfigHash != "" {
+		settings, err := h.Store.TitleSettings()
+		if err != nil {
+			return err
+		}
+		if settings.Rules.ClientHash != "" {
+			supported = settings.Rules.SupportedLevels(h.Config.ConfigHash)
+		}
+	}
+	if len(supported) == 0 {
+		return nil
+	}
+	if s.TitleOffer == 0 {
+		if _, err := h.Store.AdvanceTitle(s.UID, supported, h.Config.ConfigHash); err != nil {
+			return err
+		}
+	}
+	level, choices, err := h.Store.PendingTitleReward(s.UID)
+	if err != nil {
+		return err
+	}
+	if level == 0 || !slices.Contains(supported, level) {
+		return nil
+	}
+	// Resend the same pending offer after response loss. Never replace an
+	// already bound title with a new one: old 4126 requests have no title ID.
+	if s.TitleOffer != 0 && s.TitleOffer != level {
+		return nil
+	}
+	p, err := protocol.EncodeTitleAward(level, choices)
+	if err != nil {
+		return err
+	}
+	s.TitleOffer = level
+	s.sendGame(protocol.Message{ID: 4125, Payload: p})
+	return nil
+}
+
+func (h *Hub) claimTitleReward(s *Session, payload []byte) error {
+	key, err := protocol.ParseTitleRewardClaim(payload)
+	if err != nil || key == 0 || s.TitleOffer == 0 {
+		s.sendGame(notice("称号领奖未完成，请先取得并打开本人的奖励资格。"))
+		return nil
+	}
+	item, err := h.Store.ClaimTitleReward(s.UID, s.TitleOffer, key)
+	if err != nil {
+		s.sendGame(notice("称号领奖未完成，请核对奖励资格及所选商品。"))
+		return nil
+	}
+	// Do not clear TitleOffer or replace it with the next pending title: 4126
+	// carries no title ID, so a delayed retry could otherwise claim a new award.
+	if len(item) != 0 {
+		instance := protocol.ReadUint32(item, 0)
+		id := uint32(2160)
+		if _, exists := s.Inventory[instance]; exists {
+			id = 2161
+		}
+		s.sendGame(protocol.Message{ID: id, Payload: bytes.Clone(item)})
+		if s.Inventory == nil {
+			s.Inventory = map[uint32][]byte{}
+		}
+		s.Inventory[instance] = bytes.Clone(item)
+	}
+	// Native 957280 closes its selection panel after sending 4126. 4127
+	// opens another selector and must not be invented as a success ACK.
+	s.sendGame(notice("称号奖励已领取，请在背包中查看。"))
+	return nil
+}

@@ -34,7 +34,11 @@ internal sealed partial class TesterForm
         var peer=new Button{Text="新增测试账号窗口",AutoSize=true};
         peer.Click+=(_,_)=>{var form=new TesterForm();form.account.Text="";form.password.Text="";form.Show();};
         var cancel=new Button{Text="取消等待",AutoSize=true};cancel.Click+=(_,_)=>{pending=0;Add("状态",0,0,"仅取消回包等待，不撤销已发送操作","");};
-        top.Controls.AddRange([scenarios,preview,send,peer,cancel,stateLabel]);
+        var catalogue=new Button{Text="读取客户端关卡目录",AutoSize=true};
+        catalogue.Click+=async(_,_)=>{using var dialog=new OpenFileDialog{Filter="客户端配置|config.spf2",CheckFileExists=true};if(dialog.ShowDialog(this)!=DialogResult.OK)return;catalogue.Enabled=false;try{await ReadStageCatalogue(dialog.FileName);}catch(Exception e){Add("错误",0,0,e.Message,"");}finally{catalogue.Enabled=true;}};
+        var trainingCatalogue=new Button{Text="读取基础训练任务",AutoSize=true};
+        trainingCatalogue.Click+=async(_,_)=>{using var dialog=new OpenFileDialog{Filter="客户端配置|config.spf2",CheckFileExists=true};if(dialog.ShowDialog(this)!=DialogResult.OK)return;trainingCatalogue.Enabled=false;try{await ReadStageCatalogue(dialog.FileName,true);}catch(Exception e){Add("错误",0,0,e.Message,"");}finally{trainingCatalogue.Enabled=true;}};
+        top.Controls.AddRange([scenarios,preview,send,peer,cancel,catalogue,trainingCatalogue,stateLabel]);
         panel.Controls.Add(top,0,0);panel.Controls.Add(scenarioHelp,0,1);panel.Controls.Add(fields,0,2);
         scenarios.Items.AddRange(Cases().Cast<object>().ToArray());
         scenarios.SelectedIndexChanged+=(_,_)=>{
@@ -51,7 +55,13 @@ internal sealed partial class TesterForm
             if(transmit&&c.State!=""&&!c.State.Split('|').Contains(phase))throw new Exception($"需要状态：{c.State}；当前：{phase}");
             var args=editors.ToDictionary(x=>x.Key,x=>x.Value.Text.Trim());
             var p=c.Build(args);protocol.Text=c.Id.ToString();expected.Text=c.Reply.ToString();payload.Text=Convert.ToHexString(p);
-            if(transmit){Send(c.Id,p,c.Reply,c.Timeout);Add("用例",c.Id,p.Length,c.Name+"；"+c.Help,Convert.ToHexString(p));}
+            byte[]? followup=null;
+            if(c.Id==8071&&p.Length==75&&BinaryPrimitives.ReadUInt32LittleEndian(p) is 8291 or 8292&&args.ContainsKey("实例号")){
+                var instance=N(args,"实例号");if(instance==0)throw new Exception("实例号必须来自本人已装备法宝");
+                followup=Packet(8,(0,U32(instance)));
+            }
+            if(transmit){Send(c.Id,p,c.Reply,c.Timeout);if(followup!=null)Send(4201,followup,4206,c.Timeout);Add("用例",c.Id,p.Length,c.Name+"；"+c.Help,Convert.ToHexString(p));}
+            else if(followup!=null){Add("配对预览",4201,followup.Length,"执行时自动接续4201",Convert.ToHexString(followup));}
         }catch(Exception e){Add("错误",0,0,e.Message,"");}}
         preview.Click+=(_,_)=>Execute(false);send.Click+=(_,_)=>Execute(true);
         scenarios.SelectedIndex=0;return panel;
@@ -76,8 +86,21 @@ internal sealed partial class TesterForm
         Add("资料 / 刷新本人库存及兵器库","2430 本人查询触发 2160/2161 差量更新，2431 返回武器收藏。完整库存可在登录的1151日志查看。",2430,2431,"",lobby,a=>Self(8));
         Add("资料 / 排行榜","2540→2550；排行类型按服务器支持值填写。",2540,2550,"排行类型=0",lobby,a=>[(byte)N(a,"排行类型",255)]);
         Add("资料 / 本人排行","2560 查本人，不是查他人资料。",2560,2570,"排行类型=0",lobby,a=>Packet(9,(0,[(byte)N(a,"排行类型",255)]),(1,U64(ownUid))));
-        Add("资料 / 战报赛季（占位）","20370 当前只有未配置提示；收到包不表示已有赛季战绩。",20360,20370,"",lobby,a=>Self(12));
+        Add("资料 / 荣誉挑战战绩","20360指定目标及历史页。20370显示荣誉排名/等级/值、挑战场次和胜场；服务端按配置的期数查询真实累计数据；无记录时清空页面。荣誉等级按服务器level_points阈值计算，范围0–10；未配置时为0。这是本服规则，不代表原版分级。",20360,20370,"玩家UID=0;历史页=1",lobby,a=>Packet(12,(0,U64(N(a,"玩家UID",ulong.MaxValue)==0?ownUid:N(a,"玩家UID",ulong.MaxValue))),(8,U32(N(a,"历史页")))));
         Add("资料 / 训练状态","21000→21001；查看资料后客户端自动查询同一目标，允许查看他人，只读且不启动训练。",21000,21001,"玩家UID=10001",lobby,a=>U64(N(a,"玩家UID",ulong.MaxValue)));
+        Add("名侠 / 开始训练","21002→21005；只开始当前账号训练，重复开始不重置时间。",21002,21005,"",lobby,a=>Array.Empty<byte>());
+        Add("任务 / 查询基础任务","6000→4300/1240→6020；刷新会自动发放已达标参赛/胜场任务的经验金币，重复不发奖。需GM配置；匹配客户端目录时可追加6030完成与6040后续任务通知，后续任务不与6020重复。连击、歼敌统计仍未完成；物品奖励支持商品编号。",6000,6020,"角色ID=1",lobby,a=>U32(N(a,"角色ID")));
+        foreach (var task in new[] { (Name: "每日", Key: 2001, Offset: 0u), (Name: "新手", Key: 3002, Offset: 1u) })
+        {
+            Add($"任务 / 接取{task.Name}任务", "19字节请求；使用GM目录中的任务ID。重复接取不重置计数；完成事件由服务器结算统计。", 6051+task.Offset,6061+task.Offset,$"任务ID={task.Key}",lobby,a=>Packet(19,(0,U16(N(a,"任务ID",65535))),(2,new byte[]{2})));
+            Add($"任务 / 放弃{task.Name}任务", "只允许尚未完成的已接任务；已完成或已领取时拒绝。", 6081+task.Offset,6091+task.Offset,$"任务ID={task.Key}",lobby,a=>Packet(19,(0,U16(N(a,"任务ID",65535))),(2,new byte[]{1})));
+            Add($"任务 / 领取{task.Name}奖励", "需要服务器保存的完成状态及满足条件的计数。真实发放冻结配置中的奖励，重复点击不再次发放；失败返回提示。可用基础任务查询刷新6041/6042列表。", 6311+task.Offset,6301+task.Offset,$"任务ID={task.Key}",lobby,a=>Packet(19,(0,U16(N(a,"任务ID",65535))),(2,new byte[]{3})));
+        }
+        Add("称号 / 查询待领奖励","6000查询任务并检查称号条件；有资格时额外返回4125。须配置称号规则与匹配客户端的title_levels；已领取后同会话不会切到下一称号。",6000,6020,"角色ID=1",lobby,a=>U32(N(a,"角色ID")));
+        Add("称号 / 领取候选奖励","4126/149，+145商品编号须来自本人4125候选。首次成功2160，重试已有实例2161；资格错误20150。会修改本人库存，勿填写普通物品ID。",4126,2160,"商品编号=7",lobby,a=>Packet(149,(145,U32(N(a,"商品编号")))));
+        Add("任务 / 接取基础任务","6050→6060；保存服务器统计与奖励规则快照，重复接取只提示，不重置进度。",6050,6060,"任务ID=1001;角色ID=1",lobby,a=>Packet(14,(0,U64(ownUid)),(8,U32(N(a,"角色ID"))),(12,U16(N(a,"任务ID",65535)))));
+        Add("任务 / 取消基础任务","6080→6090；取消后重新接取会建立新进度快照，已完成任务不能取消。",6080,6090,"任务ID=1001;角色ID=1",lobby,a=>Packet(14,(0,U64(ownUid)),(8,U32(N(a,"角色ID"))),(12,U16(N(a,"任务ID",65535)))));
+        Add("名侠 / 领取经验","21006→4300→21007；需服务器开放并满一小时，会真实增加经验。每次点击是新请求；成功后可再次开始训练。等级即时显示与宝箱仍未完成。",21006,21007,"",lobby,a=>Array.Empty<byte>());
         Add("登录 / 重新登录","发送游戏实际请求2060；释放旧账号后由自动重连重新进入大厅。勾选自动重连。",2060,0,"", "",a=>[]);
         Add("登录 / 异常断线恢复","用“断开”再“连接”可重进；关闭另一个测试账号窗口可测试掉线、房主转移。不会顶掉仍在线账号。",0,0,"","",null);
         Add("登录 / 创建角色（待实现）","1125/1150/1130/1151：缺创建角色完整字段和新账号入口。当前自动登录只支持已有角色，不能发零包冒充创建。",1150,1151,"","",null);
@@ -85,22 +108,33 @@ internal sealed partial class TesterForm
         Add("商城 / 分类商品","9070→9080，分类和变体由实际商品记录确定；可查宠物/法宝分类，但不代表购买装备效果已完成。",9070,9080,"分类=0;变体=0",lobby,a=>[(byte)N(a,"分类",255),(byte)N(a,"变体",255)]);
         Add("商城 / 查询指定商品","1500→1510；用商品记录中的类型和模板ID，不是库存实例号。",1500,1510,"类型=25;商品ID=0",lobby,a=>Packet(9,(0,[(byte)N(a,"类型",255)]),(1,U32(N(a,"商品ID")))));
         Add("商城 / 购买（扣款）","会实际扣测试账号货币并发货。先查询商品，把商品键和实际价格填入；成功9050、失败9060。重复点击是再次购买。",9040,9050,"商品键=0;金币价格=0;点券价格=0",lobby,a=>Purchase(a));
-        Add("商城 / 赠送（拒绝验证）","9041 当前固定9060失败；此入口仅验证拒绝，不表示已实现赠送。",9041,9060,"",lobby,a=>new byte[169]);
+        Add("商城 / 赠送9090","会实际扣点券并投递单件商品邮件；1230更新余额，9100表示投递成功。收件人用角色昵称，UID为0时按昵称查询。收件账号通过邮件列表、详情、领取核对库存。新点击是新交易，不要反复点击。",9090,9100,"收件人=;收件UID=0;商品键=0;点券价格=0;留言=测试",lobby,a=>Packet(426,(0,U32(109)),(54,U64(N(a,"收件UID",ulong.MaxValue))),(83,FixedText(a["收件人"],21)),(145,U32(N(a,"商品键"))),(157,U32(N(a,"点券价格"))),(170,FixedText(a["留言"],201))));
+        Add("邮件 / 收件列表","1300→1310；仅查询本人未删除邮件，每条339字节。空列表不是投递成功证据。",1300,1310,"",lobby,a=>[]);
+        Add("邮件 / 查看详情","1320→1330；标记已读，只预览附件，不领取。邮件键来自1310每条首DWORD。",1320,1330,"邮件键=0",lobby,a=>Packet(12,(0,U64(ownUid)),(8,U32(N(a,"邮件键")))));
+        Add("邮件 / 领取附件","先查看详情，再填1330中的附件键（不是邮件键）。2171成功同步库存，重复领取不重复发货；本入口不自动删除邮件。",2171,0,"附件键=0",lobby,a=>Packet(12,(0,U64(ownUid)),(8,U32(N(a,"附件键")))));
+        Add("邮件 / 删除","1340→1350；隐藏本人邮件。领取失败后的第一次删除会被保护拦下，后续显式删除可继续。谨慎用于临时测试邮件。",1340,1350,"邮件键=0",lobby,a=>Packet(12,(0,U64(ownUid)),(8,U32(N(a,"邮件键")))));
         Add("商城 / 推荐优惠（暂缓）","按你的要求暂缓，暂不猜测专用请求。可以通过全部商品查看现有数据。",0,0,"","",null);
-        Add("商城 / 宠物法宝完整流程（待确认）","分类商品入口可读取；独立库存类型、购买发放与装备效果字段仍需实包确认。",0,0,"","",null);
+        Add("装备 / 宠物法宝","type30使用2080槽37或38；实例号必须来自本人库存。同槽替换，卸下用2300；战斗使用由8291/8292与4201配对。",2080,2090,"实例号=0;槽位=37",lobby,a=>{var slot=N(a,"槽位",38);if(slot is not (37 or 38))throw new Exception("法宝槽位只能为37或38");return Packet(16,(0,U32(N(a,"实例号"))),(4,U32(slot)));});
+        Add("法宝 / 修理报价","4202→4203：查询本人法宝的材料配置、数量及额度；新版服务器读取GM宠物／法宝规则，并绑定此报价版本。",4202,4203,"实例号=0",lobby,a=>U32(N(a,"实例号")));
+        Add("法宝 / 确认修理（扣材料）","4204→4205：材料配置取自4203报价。必须先查4202报价；改价后旧报价拒绝，需重新查询。成功同步库存；会实际消耗材料。",4204,4205,"实例号=0;材料配置=0",lobby,a=>Packet(12,(0,U32(N(a,"实例号"))),(4,U32(N(a,"材料配置")))));
         Add("装备 / 装备及默认槽","2080→2090；实例号来自本人库存；槽0由服务器按物品类型解析。失败2100。准备后服务器可能忽略。",2080,2090,"实例号=0;槽位=0",lobby,a=>Packet(16,(0,U32(N(a,"实例号"))),(4,U32(N(a,"槽位",65535)))));
         Add("装备 / 失败应答验证","使用不存在的实例号，应返回2100，连接应保持。",2080,2100,"实例号=4294967295;槽位=0",lobby,a=>Packet(16,(0,U32(N(a,"实例号"))),(4,U32(N(a,"槽位",65535)))));
         Add("装备 / 卸下","2300→2310；会改变测试账号装备。",2300,2310,"实例号=0",lobby,a=>U32(N(a,"实例号")));
-        Add("装备 / 武器升级配置（未实现）","21410/0→21411，服务端当前未接。预期超时；不能以全零21字节配置当成功。",21410,21411,"",lobby,a=>[]);
+        Add("装备 / 武器升级配置","21410/0→21411；新版服务器读取GM武器升级表，并为当前登录会话记录报价版本。改价后须重新读取，未配置仅返回提示。",21410,21411,"",lobby,a=>[]);
+        Add("装备 / 尝试武器升级","先执行“武器升级配置”读取当前报价，再发送21412→21413。GM修改配置后旧报价会拒绝，不扣款。实际消耗金币和熟练度，失败保留等级；先收到1240及2161/2160，再收到结果。每次点击是新尝试。",21412,21413,"实例号=0",lobby,a=>U32(N(a,"实例号")));
         Add("装备 / 到期删除（待实现）","2121/2162 是通知链，缺到期调度及客户端请求证据。日志会记录这些下行；不向服务器倒发下行包。",0,0,"","",null);
         Add("房间 / 列表翻页","2260→2280；模式136表示全部，每页最多9间。",2260,2280,"页码=1;刷新选项=1;模式=136",lobby,a=>[(byte)N(a,"页码",255),(byte)N(a,"刷新选项",255),(byte)N(a,"模式",255)]);
         Add("房间 / 建房","3010→3100；地图0让服务器从可用池选择。模式0个人、1团队、2/3其他模式、5训练；容量2/4/6/8。",3010,3100,"名称=协议测试;密码=;模式=0;容量=2;地图=0;时长秒=180","大厅",a=>RoomRequest(a));
         Add("房间 / 加入","3070→3100；失败3080会显示错误码。用另一测试窗口建房后填写房号。",3070,3100,"房号=1;密码=","大厅",a=>Packet(14,(0,U16(N(a,"房号",65535))),(3,FixedText(a["密码"],11))));
         Add("房间 / 快速加入","3075→3100；无合适房间会收到通知。模式0为不限制。",3075,3100,"模式=0","大厅",a=>[(byte)N(a,"模式",5)]);
         Add("房间 / 换队","3230→3250；0/1两队，会清除准备状态。",3230,3250,"队伍=1","房间",a=>[(byte)N(a,"队伍",1)]);
+        Add("房间 / 申请交换座位","3260；本人UID自动填入。座位从0开始，目标UID为0表示空位；有人时对方收到3261，同意后双方收到3265。不是移交房主。",3260,0,"目标UID=0;原座位=0;目标座位=1","房间",a=>Packet(24,(0,U64(ownUid)),(8,U64(N(a,"目标UID",ulong.MaxValue))),(16,U32(N(a,"原座位",7))),(20,U32(N(a,"目标座位",7)))));
+        Add("房间 / 同意交换座位","3262；原样回复最近收到的3261，不能代替另一玩家同意。",3262,3265,"","房间",a=>SeatReply());
+        Add("房间 / 拒绝交换座位","3263；原样回复最近收到的3261，申请者收到3264。",3263,0,"","房间",a=>SeatReply());
         Add("房间 / 修改设置","3200→3220；仅房主，名称/密码/地图/时长及开关一次提交，权限不足可能不回包。",3200,3220,"名称=协议测试;密码=;地图=0;时长秒=180;开关1=0;开关2=0;开关3=0;开关4=0","房间",a=>RoomSettings(a));
         Add("房间 / 踢出玩家","3140→3150；仅等待房房主可踢其他成员；非房主或踢自己不应成功。",3140,3150,"玩家UID=10009","房间",a=>Packet(9,(0,U64(N(a,"玩家UID",ulong.MaxValue)))));
         Add("房间 / 离房或战斗离场","3110→3115；房主离开会转移，战斗离场会中止且保留其他玩家房间。结算阶段该包返回房间。",3110,0,"","房间|加载|等待输入|战斗|结算",a=>[]);
+        Add("房间 / 设置面板初始化（待实现）","原生21370空请求；观察21372/21373/21374相关数据，完整响应关系待核验。21371进入物品兑换面板，不能据包号相邻将它作为本项成功应答。服务器业务尚未接入。",21370,0,"",lobby,a=>[]);
         Add("房间 / 指定房主、观战、锁位（待确认）","没有确认对应请求与完整实现；自动房主转移可通过房主离房测试3160。",0,0,"","",null);
         Add("战斗 / 准备或房主开始","4030→4050；先让其他账号准备，再由房主开始。4080自动记录房号/战斗序号。",4030,4050,"","房间",a=>[]);
         Add("战斗 / 取消准备","4060→4070。",4060,4070,"","房间",a=>[]);
@@ -109,7 +143,11 @@ internal sealed partial class TesterForm
         Add("战斗 / 等待加载超时（观察）","开始后故意不点资源加载/输入就绪；发送合法空心跳，最多等100秒观察3115→3100恢复房间，不替服务器生成超时事件。",0,3100,"","加载|等待输入",a=>[],100);
         Add("战斗 / BUFF添加或删除8150","只验证服务器转发；在另一窗口看8071/8150。毫秒默认3000；不会证明真实客户端3秒自动解冻。序号每次递增。",8071,0,"目标UID=10009;效果类型=0;效果等级=1;持续毫秒=3000;添加1删除0=1;序号=1","战斗",a=>Buff(a));
         Add("战斗 / 技能效果8126","来源为本人，目标属于本房；技能键须从实包/配置取得。另一窗口观察转发；未确认字段用实包值。",8071,0,"目标UID=10009;技能键=0;参数=0;序号=1","战斗",a=>{var p=Envelope(71,8126,a);U64(ownUid).CopyTo(p,39);U64(ownUid).CopyTo(p,47);U64(N(a,"目标UID",ulong.MaxValue)).CopyTo(p,55);U32(N(a,"技能键")).CopyTo(p,63);U32(N(a,"参数")).CopyTo(p,67);return p;});
-        Add("战斗 / 事件原包重放","填8071内容HEX（含子命令）；只替换已确认的发送UID/房号/序号上下文字段，目标UID保留，需属于本房。用于动作伤害换装、未知8127/8155及重复序号验证。",8071,0,"HEX=","战斗",a=>RebindEvent(Raw(a)));
+        Add("战斗 / 本人MP同步8127","63字节；发送本人MP状态到同房其他玩家。测试值不是服务器权威伤害计算。",8071,0,"变化=-25;最终MP=75;序号=1","战斗",a=>{var p=Envelope(63,8127,a);U64(ownUid).CopyTo(p,39);foreach(var entry in new[]{("变化",47),("最终MP",51)}){var v=float.Parse(a[entry.Item1],System.Globalization.CultureInfo.InvariantCulture);if(!float.IsFinite(v))throw new Exception("MP必须是有限数值");BitConverter.GetBytes(v).CopyTo(p,entry.Item2);}U32(roomId).CopyTo(p,55);U32(battleSerial).CopyTo(p,59);return p;});
+        Add("战斗 / 事件原包重放","填8071内容HEX（含子命令）；只替换已确认的发送UID/房号/序号上下文字段，目标UID保留，需属于本房。8127是本人MP同步（63字节）；8155计分同步为334字节，仅房主发送，8个槽位UID须与当前房间一致；没有已确认的房间尾字段，不重写其计分数据。",8071,0,"HEX=","战斗",a=>RebindEvent(Raw(a)));
+        Add("法宝 / 使用（自动配对）","自动连续发送8291被动或8292主动及4201。新版服务器读取GM使用规则；额度不足4207，不转发。改价不重复扣除已完成事件。",8071,0,"实例号=0;被动1主动0=0;槽位=37;序号=1","战斗",a=>{var slot=N(a,"槽位",38);if(slot is not (37 or 38))throw new Exception("仅支持槽37/38");var p=Envelope(75,N(a,"被动1主动0",1)==1?8291u:8292u,a);U32(slot).CopyTo(p,39);U64(ownUid).CopyTo(p,59);U32(roomId).CopyTo(p,67);U32(battleSerial).CopyTo(p,71);return p;});
+        Add("法宝 / 确认使用","4201与刚才法宝事件配对，实例必须是该槽装备。费用字段不用于服务器扣费；成功4206，额度不足4207。",4201,4206,"实例号=0;自报费用=0","战斗",a=>Packet(8,(0,U32(N(a,"实例号"))),(4,U32(N(a,"自报费用")))));
+        Add("战斗 / 对象申请与回复","9000/9500申请（状态1）或取消（状态0）；9001/9501由房主控制者回复；9002/9502本人完成。实体UID=0表示本人。对象键需来自实际场景，测试器不创造游戏物件。",8071,0,"子命令=9000;实体UID=0;对象键=0;状态=1;序号=1","战斗",a=>ReliableEvent(a));
         Add("战斗 / 消耗品使用意图","4200/4仅登记意图，无立即回包；还需真实8071/8289配套事件，数量通知4210。",4200,0,"实例号=0","战斗",a=>U32(N(a,"实例号")));
         Add("结算 / 上报胜负平及奖励","所有窗口填相同 UID:剩余HP 清单，例如10009:0,10010:100。只剩一方活为胜，其余败；均活/均死为平。会实际结算金币经验及配置掉落。",4110,4120,"成员HP=10009:0,10010:100","战斗|结算",a=>Report(a),100);
         Add("结算 / 回房与关闭查看结果","3550状态0，UID自动填本人；结果页其他人应同步取消查看结果标志。",3550,3550,"","结算|房间",a=>Self(12));
@@ -122,15 +160,24 @@ internal sealed partial class TesterForm
     static void Duration(Dictionary<string,string>a){if(N(a,"时长秒") is not (120 or 180 or 240 or 300))throw new Exception("时长支持120/180/240/300秒");}
     static byte[] RoomRequest(Dictionary<string,string>a){Duration(a);var m=N(a,"模式",5);var cap=N(a,"容量",8);if(m==4||cap is not (2 or 4 or 6 or 8)||a["名称"].Length==0)throw new Exception("模式、容量或名称无效");return Packet(81,(0,FixedText(a["名称"],21)),(21,FixedText(a["密码"],11)),(37,[(byte)cap]),(38,U32(N(a,"地图"))),(46,[(byte)m]),(47,U16(N(a,"时长秒"))));}
     static byte[] RoomSettings(Dictionary<string,string>a){Duration(a);if(a["名称"].Length==0)throw new Exception("名称不能为空");return Packet(48,(0,U32(N(a,"地图"))),(9,[(byte)N(a,"开关1",1),(byte)N(a,"开关2",1)]),(12,[(byte)N(a,"开关3",1),(byte)N(a,"开关4",1)]),(14,FixedText(a["名称"],21)),(35,FixedText(a["密码"],11)),(46,U16(N(a,"时长秒"))));}
+    byte[] ReliableEvent(Dictionary<string,string>a){var sub=checked((uint)N(a,"子命令"));if(sub is not (9000 or 9001 or 9002 or 9500 or 9501 or 9502))throw new Exception("仅支持9000–9002或9500–9502");var p=Envelope(sub<9500?63:55,sub,a);var uid=N(a,"实体UID",ulong.MaxValue);U64(uid==0?ownUid:uid).CopyTo(p,39);U32(N(a,"对象键")).CopyTo(p,47);U32(N(a,"状态",1)).CopyTo(p,51);if(sub<9500){U32(roomId).CopyTo(p,55);U32(battleSerial).CopyTo(p,59);}return p;}
     byte[] Envelope(int size,uint sub,Dictionary<string,string>a)=>Packet(size,(0,U32(sub)),(4,U64(ownUid)),(12,[1,1]),(19,U32(N(a,"序号"))));
     byte[] Buff(Dictionary<string,string>a){var p=Envelope(87,8150,a);U64(N(a,"目标UID",ulong.MaxValue)).CopyTo(p,39);U64(ownUid).CopyTo(p,47);U32(N(a,"效果类型")).CopyTo(p,55);U32(N(a,"效果等级")).CopyTo(p,59);U32(N(a,"持续毫秒")).CopyTo(p,63);U32(N(a,"添加1删除0",1)).CopyTo(p,75);U32(roomId).CopyTo(p,79);U32(battleSerial).CopyTo(p,83);return p;}
-    byte[] RebindEvent(byte[] p){if(p.Length<39)throw new Exception("8071内容至少39字节；必须来自已抓取的实包");var sub=BinaryPrimitives.ReadUInt32LittleEndian(p);U64(ownUid).CopyTo(p,4);int offset=sub switch{8121=>86,8140=>95,8150=>79,8450=>51,8289=>67,_=>0};if(offset>0){if(p.Length<offset+8)throw new Exception("事件长度不足");U32(roomId).CopyTo(p,offset);U32(battleSerial).CopyTo(p,offset+4);}return p;}
+    byte[] RebindEvent(byte[] p){if(p.Length<39)throw new Exception("8071内容至少39字节；必须来自已抓取的实包");var sub=BinaryPrimitives.ReadUInt32LittleEndian(p);U64(ownUid).CopyTo(p,4);int offset=sub switch{8121=>86,8127=>55,8140=>95,8150=>79,8450=>51,8289 or 8291 or 8292=>67,_=>0};if(offset>0){if(p.Length<offset+8)throw new Exception("事件长度不足");U32(roomId).CopyTo(p,offset);U32(battleSerial).CopyTo(p,offset+4);}return p;}
     byte[] Report(Dictionary<string,string>a){var pairs=a["成员HP"].Split(',',StringSplitOptions.RemoveEmptyEntries);if(pairs.Length is <1 or >8)throw new Exception("需要1–8位本房成员");var p=new byte[696];var seen=new HashSet<ulong>();for(int i=0;i<pairs.Length;i++){var s=pairs[i].Split(':');if(s.Length!=2||!ulong.TryParse(s[0],out var uid)||uid==0||!ushort.TryParse(s[1],out var hp)||!seen.Add(uid))throw new Exception("成员格式应为不重复 UID:HP，HP为0–65535");U16(hp).CopyTo(p,i*87+2);U64(uid).CopyTo(p,i*87+29);U32(roomId).CopyTo(p,i*87+67);U32(battleSerial).CopyTo(p,i*87+71);}return p;}
+
+    byte[] SeatReply()
+    {
+        if(!lastPackets.TryGetValue(3261,out var p)||p.Length!=24||BitConverter.ToUInt64(p,8)!=ownUid)
+            throw new Exception("没有发给本人的有效换座申请。");
+        return (byte[])p.Clone();
+    }
 
     void Observe(uint id,byte[] p)
     {
         received[id]=received.GetValueOrDefault(id)+1;
         lastPackets[id]=p;
+        if(id is 3264 or 3265 or 3115 or 2070 or 3100)lastPackets.Remove(3261);
         if(id==3100&&p.Length>=245){roomId=BinaryPrimitives.ReadUInt16LittleEndian(p);phase="房间";}
         if(id==3115){roomId=0;phase="大厅";}
         if(id==3150&&p.Length>=8&&BitConverter.ToUInt64(p)==ownUid){roomId=0;phase="大厅";}

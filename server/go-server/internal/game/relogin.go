@@ -68,8 +68,15 @@ func (hub *Hub) resetNativeSession(s *Session, sdk uint32) {
 		}
 	}
 	s.GameChannel, s.BootstrapChannel = 0, 0
+	s.LobbyID = 0
+	s.TitleOffer = 0
+	s.ExtendedTaskNotified = nil
+	s.WeaponRevision = 0
+	s.TalismanQuote = nil
+	s.MailPreview, s.MailAttachment, s.MailClaimFailed = 0, 0, false
 	s.Bound = false
 	s.UDPRelayed = 0
 	s.HandoffUntil = time.Time{}
 	s.ConsumeIntents, s.Inventory = nil, nil
+	s.TalismanPending = nil
 }

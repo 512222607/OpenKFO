@@ -28,6 +28,9 @@ func (hub *Hub) battleMessage(session *Session, channel *Channel, message protoc
 		return protocol.ErrFrame
 	}
 	id := protocol.ReadUint32(payload, 0)
+	if (id >= 9000 && id <= 9002) || (id >= 9500 && id <= 9502) {
+		return hub.reliableBattleEvent(session, message)
+	}
 	length, contextOffset := 0, 0
 	actorOffset := 39
 	var floats []int
@@ -38,6 +41,10 @@ func (hub *Hub) battleMessage(session *Session, channel *Channel, message protoc
 		length, contextOffset, floats = 94, 86, []int{67, 72, 76, 80}
 	case 8122:
 		length = 51
+	case 8127:
+		// AddMP (9DA2F0) sends delta +47 and resulting MP +51. Native
+		// 827D00 checks the +55 context and applies +51 via 9E4470.
+		length, contextOffset, floats = 63, 55, []int{47, 51}
 	case 8286:
 		length = 55
 	case 8126:
@@ -48,6 +55,13 @@ func (hub *Hub) battleMessage(session *Session, channel *Channel, message protoc
 		length, contextOffset, floats = 103, 95, []int{63, 67, 71}
 	case 8150:
 		length, contextOffset, floats = 87, 79, []int{67}
+	case 8155:
+		// Server authority policy: only the room owner may publish the whole
+		// scoreboard. Native local control flag is not an authentication grant.
+		if room.Owner != session.UID {
+			return nil
+		}
+		length = 334
 	case 8440:
 		length = 71
 	case 8441, 8451:
@@ -64,6 +78,30 @@ func (hub *Hub) battleMessage(session *Session, channel *Channel, message protoc
 	if len(payload) != length || protocol.ReadUint64(payload, 4) != session.UID {
 		return fmt.Errorf("battle envelope id=%d uid=%d bytes=%d", id, session.UID, len(payload))
 	}
+	if id == 8155 {
+		var slots [8]uint64
+		for uid, m := range room.Members {
+			if m.Slot >= 8 || slots[m.Slot] != 0 {
+				return protocol.ErrFrame
+			}
+			slots[m.Slot] = uid
+		}
+		for slot, uid := range slots {
+			record := payload[46+slot*36 : 46+(slot+1)*36]
+			if protocol.ReadUint64(record, 0) != uid {
+				return fmt.Errorf("battle scoreboard roster slot=%d", slot)
+			}
+			// The native producer zeroes empty slots. Do not forward stale
+			// counters for a vacant slot into the recipient's local score array.
+			if uid == 0 {
+				for _, value := range record {
+					if value != 0 {
+						return protocol.ErrFrame
+					}
+				}
+			}
+		}
+	}
 	if contextOffset != 0 && (protocol.ReadUint32(payload, contextOffset) != uint32(room.ID) || protocol.ReadUint32(payload, contextOffset+4) != room.Serial) {
 		return fmt.Errorf("battle context id=%d uid=%d", id, session.UID)
 	}
@@ -76,11 +114,11 @@ func (hub *Hub) battleMessage(session *Session, channel *Channel, message protoc
 	if id == 8122 && protocol.ReadUint32(payload, 47) > 7 {
 		return protocol.ErrFrame
 	}
-	if id != 8120 {
+	if id != 8120 && id != 8155 {
 		actor := protocol.ReadUint64(payload, actorOffset)
-		// Practice NPCs are local objects, not authenticated players. Ignore
+		// Practice and tutorial NPCs are local objects, not authenticated players. Ignore
 		// their events without disconnecting an otherwise valid player session.
-		if room.Members[actor] == nil && len(room.Request) > 46 && room.Request[46] == 5 {
+		if room.Members[actor] == nil && (tutorialRoom(room) || (len(room.Request) > 46 && room.Request[46] == 5)) {
 			return nil
 		}
 		if room.Members[actor] == nil {
@@ -96,7 +134,7 @@ func (hub *Hub) battleMessage(session *Session, channel *Channel, message protoc
 					cleanup = cleanup && protocol.ReadUint32(payload, offset) == 0
 				}
 			}
-			if attacker != 0 && room.Members[attacker] == nil && len(room.Request) > 46 && room.Request[46] == 5 {
+			if attacker != 0 && room.Members[attacker] == nil && (tutorialRoom(room) || (len(room.Request) > 46 && room.Request[46] == 5)) {
 				return nil
 			}
 			if (attacker != 0 && room.Members[attacker] == nil) || (!cleanup && actor != session.UID && attacker != session.UID) {

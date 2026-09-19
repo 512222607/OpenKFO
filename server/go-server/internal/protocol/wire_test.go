@@ -7,6 +7,29 @@ import (
 	"testing"
 )
 
+func TestBootstrapInitializesHonourHistory(t *testing.T) {
+	messages := Bootstrap(nil, 19091, 0, 0)
+	found := false
+	for i, m := range messages {
+		if m.ID != 1035 {
+			continue
+		}
+		if found || len(m.Payload) != 57 || ReadUint32(m.Payload, 0) != 1 {
+			t.Fatal("invalid history directory")
+		}
+		if i >= len(messages)-2 {
+			t.Fatal("directory must precede channel catalog")
+		}
+		if !bytes.Equal(m.Payload[4:], make([]byte, 53)) {
+			t.Fatal("unconfirmed directory data invented")
+		}
+		found = true
+	}
+	if !found {
+		t.Fatal("missing honour history initialization")
+	}
+}
+
 func TestPythonCompatibility(t *testing.T) {
 	encoded, err := os.ReadFile("testdata/python-vectors.json")
 	if err != nil {

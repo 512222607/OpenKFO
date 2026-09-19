@@ -17,11 +17,13 @@ import (
 	"sync"
 	"time"
 
+	"kungfu.local/server/internal/desktop"
 	"kungfu.local/server/internal/protocol"
 	"kungfu.local/server/internal/tunnel"
 )
 
 type command struct {
+	LobbyID       uint32 `json:"lobby_id"`
 	CharacterName string `json:"character_name"`
 	Config        string `json:"config"`
 	Account       string `json:"account"`
@@ -50,6 +52,7 @@ func emit(o output) {
 }
 
 type client struct {
+	observe  func(protocol.Message)
 	conn     net.Conn
 	reader   *bufio.Reader
 	encoder  *json.Encoder
@@ -102,11 +105,110 @@ func (c *client) read() (tunnel.Frame, []protocol.Message, error) {
 	}
 	messages, err := decoder.Feed(f.Data)
 	for _, m := range messages {
+		if c.observe != nil {
+			c.observe(m)
+		}
 		emit(output{Kind: "receive", ID: m.ID, Hex: hex.EncodeToString(m.Payload), Length: len(m.Payload), Text: describe(m)})
 	}
 	return f, messages, err
 }
 func describe(m protocol.Message) string {
+	if m.ID == 4126 {
+		key, err := protocol.ParseTitleRewardClaim(m.Payload)
+		if err != nil {
+			return "称号奖励领取4126长度错误：必须149B，商品编号位于+145；不是普通购买"
+		}
+		return fmt.Sprintf("称号奖励领取4126 商品编号=%d；服务器须验证未领取资格及候选列表，不能按免费购买处理", key)
+	}
+	if m.ID == 4125 {
+		level, _, err := protocol.ParseTitleAward(m.Payload)
+		if err != nil {
+			return "称号通知4125截断：下游复制64B，不能按无载荷或单字节解析"
+		}
+		options, _ := protocol.ParseTitleRewardOptions(m.Payload)
+		return fmt.Sprintf("称号通知4125 等级=%d（角色资料+123）长度=%d 候选商品及未解值=%v；+1至+7未解，64B为已确认读取下界", level, len(m.Payload), options)
+	}
+	switch m.ID {
+	case 20530:
+		rows, err := protocol.ParseExtendedTaskAuxRecords(m.Payload)
+		if err != nil {
+			return "任务附加记录20530截断：每条22B；不向原生客户端重放"
+		}
+		keys := make([]uint16, 0, 8)
+		for i, r := range rows {
+			if i == 8 {
+				break
+			}
+			keys = append(keys, r.Key)
+		}
+		return fmt.Sprintf("任务附加记录20530 共%d条，前8条任务键=%v；当前原生接收循环存在越界风险，仅离线诊断，不向游戏重放", len(rows), keys)
+	case 6031, 6032, 6051, 6052, 6061, 6062, 6081, 6082, 6091, 6092, 6301, 6302, 6311, 6312:
+		return describeExtendedTaskAction(m)
+	}
+	if m.ID == 6010 || m.ID == 6020 || m.ID == 6030 || m.ID == 6040 || m.ID == 6041 || m.ID == 6042 || m.ID == 6050 || m.ID == 6060 || m.ID == 6080 || m.ID == 6090 {
+		return describeTasks(m)
+	}
+	if m.ID == 21001 || m.ID == 21005 || m.ID == 21007 {
+		return describeTraining(m)
+	}
+	if m.ID == 1038 || m.ID == 1020 {
+		return describeVIP(m)
+	}
+	if m.ID == 8071 && len(m.Payload) >= 4 {
+		kind := protocol.ReadUint32(m.Payload, 0)
+		if (kind >= 9000 && kind <= 9002) || (kind >= 9500 && kind <= 9502) {
+			return describeReliableEvent(m.Payload)
+		}
+	}
+	if m.ID >= 21370 && m.ID <= 21374 {
+		return describeRoomSettings(m)
+	}
+	if (m.ID >= 4201 && m.ID <= 4207) || (m.ID == 8071 && len(m.Payload) >= 4 && (protocol.ReadUint32(m.Payload, 0) == 8291 || protocol.ReadUint32(m.Payload, 0) == 8292)) {
+		return describeTalisman(m)
+	}
+	if m.ID == 9100 {
+		if len(m.Payload) == 0 {
+			return "赠送9100空包无效：原生消费者要求非空"
+		}
+		return "赠送邮件已投递；收件人仍需查询邮件并领取附件"
+	}
+	if m.ID == 9110 {
+		if len(m.Payload) != 2 {
+			return "赠送失败9110长度错误：需要2字节错误码"
+		}
+		return fmt.Sprintf("赠送失败，原生错误码=%d（56仅限点券、19收件人不存在）", protocol.ReadUint16(m.Payload, 0))
+	}
+	if m.ID >= 3260 && m.ID <= 3267 {
+		return describeSeatExchange(m)
+	}
+	if m.ID == 1310 || m.ID == 1410 || m.ID == 1330 || m.ID == 1350 {
+		return describeMail(m)
+	}
+	if m.ID == 9090 {
+		r, err := protocol.ParseGiftRequest(m.Payload)
+		if err != nil {
+			return "赠送请求解析失败：" + err.Error()
+		}
+		return fmt.Sprintf("赠送9090 收件人=%q UID提示=%d 商品键=%d 点券报价=%d 货币=%d 未解字段165=%d/169=%d；成功投递后仍需收件人领取", r.RecipientName, r.RecipientUID, r.CatalogKey, r.TicketPrice, r.Currency, r.CatalogField77, r.Flag169)
+	}
+	if m.ID == 8071 && len(m.Payload) >= 4 && protocol.ReadUint32(m.Payload, 0) == 8155 {
+		return describeScoreboard(m.Payload)
+	}
+	if m.ID == 1035 {
+		if len(m.Payload) != 57 {
+			return "荣誉历史目录长度错误：要求57字节"
+		}
+		return fmt.Sprintf("荣誉历史当前期/查询上限=%d；其余目录字段未完整恢复，收到目录不代表已有玩家战绩", protocol.ReadUint32(m.Payload, 0))
+	}
+	if m.ID == 20370 {
+		return describeHonour(m.Payload)
+	}
+	if m.ID == 21411 {
+		return describeWeaponLevels(m.Payload)
+	}
+	if m.ID == 21413 {
+		return describeWeaponUpgradeResult(m.Payload)
+	}
 	if m.ID == 2421 {
 		if len(m.Payload) < 377 {
 			return "资料回包过短"
@@ -139,6 +241,11 @@ func (c *client) wait(ch, id uint32) error {
 	return fmt.Errorf("未收到预期协议 %d", id)
 }
 func connect(cmd command) (*client, error) {
+	return connectObserved(cmd, nil)
+}
+
+// Tests can inspect the bootstrap packets consumed by the regular login chain.
+func connectObserved(cmd command, observe func(protocol.Message)) (*client, error) {
 	data, err := os.ReadFile(cmd.Config)
 	if err != nil {
 		return nil, err
@@ -175,7 +282,7 @@ func connect(cmd command) (*client, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := &client{conn: conn, reader: bufio.NewReader(conn), encoder: json.NewEncoder(conn), decoders: map[uint32]*protocol.Decoder{}}
+	c := &client{conn: conn, reader: bufio.NewReader(conn), encoder: json.NewEncoder(conn), decoders: map[uint32]*protocol.Decoder{}, observe: observe}
 	ok := false
 	defer func() {
 		if !ok {
@@ -234,6 +341,11 @@ func connect(cmd command) (*client, error) {
 	if err = c.send(tunnel.Frame{Op: "open", Channel: 3, Kind: "game"}); err != nil {
 		return nil, err
 	}
+	lobbyID := cmd.LobbyID
+	if lobbyID == 0 {
+		lobbyID = 1
+	}
+	protocol.WriteUint32(hello, 8, lobbyID)
 	if err = c.game(3, 2010, hello); err != nil {
 		return nil, err
 	}
@@ -249,6 +361,24 @@ func connect(cmd command) (*client, error) {
 	return c, nil
 }
 func run() error {
+	if len(os.Args) > 1 {
+		if len(os.Args) != 3 || (os.Args[1] != "--stage-catalog" && os.Args[1] != "--training-catalog") {
+			return fmt.Errorf("usage: --stage-catalog or --training-catalog config.spf2")
+		}
+		if os.Args[1] == "--training-catalog" {
+			missions, err := desktop.ReadTrainingMissions(os.Args[2])
+			if err != nil {
+				return err
+			}
+			return json.NewEncoder(os.Stdout).Encode(missions)
+		}
+		maps, err := desktop.ReadStageMaps(os.Args[2])
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(maps)
+	}
+
 	input := bufio.NewScanner(os.Stdin)
 	input.Buffer(make([]byte, 4096), 140000)
 	if !input.Scan() {

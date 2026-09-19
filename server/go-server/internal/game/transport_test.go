@@ -162,7 +162,7 @@ func testAuthenticatedTransport(t *testing.T, direct bool) {
 		return messages[0]
 	}
 	sendGame(2, 1010, hello)
-	for _, expected := range []uint32{1131, 1020, 1230, 1120, 7080, 7070, 1151} {
+	for _, expected := range []uint32{1131, 1020, 1230, 1120, 1035, 7080, 7070, 1151} {
 		if reply := readGame(2); reply.ID != expected {
 			t.Fatalf("expected %d got %d", expected, reply.ID)
 		}

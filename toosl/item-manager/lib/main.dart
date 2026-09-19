@@ -1,4 +1,14 @@
+import 'talisman_config.dart';
 import 'reward_config.dart';
+import 'stage_config.dart';
+import 'stage_unlocks.dart';
+import 'task_config.dart';
+import 'title_config.dart';
+import 'training_config.dart';
+import 'weapon_levels_config.dart';
+import 'honour_config.dart';
+import 'vip_config.dart';
+import 'vip_shop_config.dart';
 import 'shop_config.dart';
 import 'wallet_config.dart';
 
@@ -226,6 +236,91 @@ class _ManagerState extends State<Manager> {
     if (mounted && uid == target) setState(() => inventory = maps(data));
   }
 
+  String expiryLabel(Map<String, dynamic> item) {
+    if (item['duration_state'] == 2) return '已失效';
+    final deadline = (item['expires_at'] as num? ?? 0).toInt();
+    if (deadline == 0) return '服务器永久有效';
+    return '到期：${DateTime.fromMillisecondsSinceEpoch(deadline * 1000).toLocal()}';
+  }
+
+  Future<void> editExpiry(Map<String, dynamic> item) async {
+    if (busy || uid == null) return;
+    final target = uid, call = api, label = environmentLabel;
+    var expiryDays = '1';
+    setState(() => busy = true);
+    try {
+      final count = await showDialog<int>(
+        context: context,
+        builder: (context) {
+          String? error;
+          return StatefulBuilder(
+            builder: (context, update) => AlertDialog(
+              title: Text('$label · 物品期限'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'UID $target · 实例 ${item['instance']}\n${expiryLabel(item)}\n只修改此实例的服务器期限；不改变客户端原有期限文字。已失效物品不能恢复。',
+                  ),
+                  TextFormField(
+                    initialValue: expiryDays,
+                    onChanged: (value) => expiryDays = value,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: '从现在起有效天数（1–3650）',
+                      errorText: error,
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('取消'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, 0),
+                  child: const Text('设为永久'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    final value = int.tryParse(expiryDays.trim());
+                    if (value == null || value < 1 || value > 3650) {
+                      update(() => error = '请输入1–3650的整数');
+                      return;
+                    }
+                    Navigator.pop(context, value);
+                  },
+                  child: const Text('保存期限'),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+      if (count == null || !mounted) return;
+      final deadline = count == 0
+          ? 0
+          : DateTime.now().add(Duration(days: count)).millisecondsSinceEpoch ~/
+                1000;
+      final result = await call({
+        'operation': 'inventory_expiry',
+        'uid': target,
+        'instance': item['instance'],
+        'expires_at': deadline,
+        'id':
+            'expiry-${DateTime.now().microsecondsSinceEpoch}-$target-${item['instance']}',
+      });
+      if (!mounted) return;
+      setState(() => status = '$label · ${result['message']}');
+      await refreshInventory();
+    } catch (e) {
+      if (mounted) setState(() => status = '期限保存失败：$e');
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
   Set<String> get owned => inventory.map((i) => i['key'] as String).toSet();
   List<Map<String, dynamic>> get filtered {
     final have = owned;
@@ -449,6 +544,185 @@ class _ManagerState extends State<Manager> {
                               ),
                             ),
                     ),
+                  ),
+                  ListTile(
+                    textColor: Colors.white,
+                    iconColor: Colors.white,
+                    leading: const Icon(Icons.school),
+                    title: const Text('任务配置'),
+                    onTap: busy
+                        ? null
+                        : () => Navigator.push(
+                            context,
+                            MaterialPageRoute<void>(
+                              builder: (_) => TaskConfigPage(
+                                api: api,
+                                environment: environmentLabel,
+                                canReadClient: !widget.onlineOnly,
+                              ),
+                            ),
+                          ),
+                  ),
+                  ListTile(
+                    textColor: Colors.white,
+                    iconColor: Colors.white,
+                    leading: const Icon(Icons.workspace_premium),
+                    title: const Text('称号规则'),
+                    onTap: busy
+                        ? null
+                        : () => Navigator.push(
+                            context,
+                            MaterialPageRoute<void>(
+                              builder: (_) => TitleConfigPage(
+                                api: api,
+                                environment: environmentLabel,
+                                canReadClient: !widget.onlineOnly,
+                              ),
+                            ),
+                          ),
+                  ),
+                  ListTile(
+                    textColor: Colors.white,
+                    iconColor: Colors.white,
+                    leading: const Icon(Icons.school),
+                    title: const Text('武器升级'),
+                    onTap: busy
+                        ? null
+                        : () => Navigator.push(
+                            context,
+                            MaterialPageRoute<void>(
+                              builder: (_) => WeaponLevelsConfigPage(
+                                api: api,
+                                environment: environmentLabel,
+                              ),
+                            ),
+                          ),
+                  ),
+                  ListTile(
+                    textColor: Colors.white,
+                    iconColor: Colors.white,
+                    leading: const Icon(Icons.school),
+                    title: const Text('宠物／法宝'),
+                    onTap: busy
+                        ? null
+                        : () => Navigator.push(
+                            context,
+                            MaterialPageRoute<void>(
+                              builder: (_) => TalismanConfigPage(
+                                api: api,
+                                environment: environmentLabel,
+                              ),
+                            ),
+                          ),
+                  ),
+                  ListTile(
+                    textColor: Colors.white,
+                    iconColor: Colors.white,
+                    leading: const Icon(Icons.school),
+                    title: const Text('名侠奖励'),
+                    onTap: busy
+                        ? null
+                        : () => Navigator.push(
+                            context,
+                            MaterialPageRoute<void>(
+                              builder: (_) => TrainingConfigPage(
+                                api: api,
+                                environment: environmentLabel,
+                              ),
+                            ),
+                          ),
+                  ),
+                  ListTile(
+                    textColor: Colors.white,
+                    iconColor: Colors.white,
+                    leading: const Icon(Icons.map),
+                    title: const Text('关卡开关'),
+                    onTap: busy
+                        ? null
+                        : () => Navigator.push(
+                            context,
+                            MaterialPageRoute<void>(
+                              builder: (_) => StageConfigPage(
+                                api: api,
+                                environment: environmentLabel,
+                                canReadClient: !widget.onlineOnly,
+                              ),
+                            ),
+                          ),
+                  ),
+                  ListTile(
+                    textColor: Colors.white,
+                    iconColor: Colors.white,
+                    leading: const Icon(Icons.military_tech),
+                    title: const Text('荣誉规则'),
+                    onTap: busy
+                        ? null
+                        : () => Navigator.push(
+                            context,
+                            MaterialPageRoute<void>(
+                              builder: (_) => HonourConfigPage(
+                                api: api,
+                                environment: environmentLabel,
+                              ),
+                            ),
+                          ),
+                  ),
+                  ListTile(
+                    textColor: Colors.white,
+                    iconColor: Colors.white,
+                    leading: const Icon(Icons.card_membership),
+                    title: const Text('VIP商城折扣'),
+                    onTap: busy
+                        ? null
+                        : () => Navigator.push(
+                            context,
+                            MaterialPageRoute<void>(
+                              builder: (_) => VipShopConfigPage(
+                                api: api,
+                                environment: environmentLabel,
+                              ),
+                            ),
+                          ),
+                  ),
+                  ListTile(
+                    textColor: Colors.white,
+                    iconColor: Colors.white,
+                    leading: const Icon(Icons.card_membership),
+                    title: const Text('VIP管理'),
+                    onTap: busy || uid == null
+                        ? null
+                        : () => Navigator.push(
+                            context,
+                            MaterialPageRoute<void>(
+                              builder: (_) => VipConfigPage(
+                                uid: uid!,
+                                account: accounts
+                                    .firstWhere(
+                                      (a) => a['uid'] == uid,
+                                    )['account']
+                                    .toString(),
+                                api: api,
+                                environment: environmentLabel,
+                              ),
+                            ),
+                          ),
+                  ),
+                  ListTile(
+                    textColor: Colors.white,
+                    leading: const Icon(Icons.lock_open, color: Colors.white),
+                    title: const Text('个人关卡解锁'),
+                    onTap: busy || uid == null
+                        ? null
+                        : () => Navigator.push(
+                            context,
+                            MaterialPageRoute<void>(
+                              builder: (_) => StageUnlocksPage(
+                                api: api,
+                                environment: environmentLabel,
+                                uid: uid!,
+                              ),
+                            ),
+                          ),
                   ),
                   Expanded(
                     child: ListView(
@@ -916,9 +1190,25 @@ class _ManagerState extends State<Manager> {
                                     .map(
                                       (r) => Padding(
                                         padding: const EdgeInsets.only(top: 8),
-                                        child: Text(
-                                          '已拥有 · ${detail!['timed'] == true ? "期限 ${((r['duration_hours'] as num? ?? 0) / (r['duration_state'] == 1 ? 1440 : 24)).ceil()} 天" : "数量 ${r['quantity']}"} · ${r['slot'] == 0 ? "未穿戴" : "已穿戴"}',
-                                          style: const TextStyle(color: teal),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              '已拥有 · ${expiryLabel(r)} · 数量 ${r['quantity']} · ${r['slot'] == 0 ? "未穿戴" : "已穿戴"}',
+                                              style: const TextStyle(
+                                                color: teal,
+                                              ),
+                                            ),
+                                            TextButton(
+                                              onPressed:
+                                                  busy ||
+                                                      r['duration_state'] == 2
+                                                  ? null
+                                                  : () => editExpiry(r),
+                                              child: const Text('修改服务器期限'),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ),

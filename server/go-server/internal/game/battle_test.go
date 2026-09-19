@@ -40,6 +40,54 @@ func combatPacket(id uint32, size int, sender, actor uint64, context int) protoc
 	return protocol.Message{ID: 8071, Payload: payload}
 }
 
+func TestMPRelayAndIsolation(t *testing.T) {
+	h, s, peer, outsider := combatFixture()
+	m := combatPacket(8127, 63, s.UID, s.UID, 55)
+	protocol.WriteUint32(m.Payload, 47, math.Float32bits(-25))
+	protocol.WriteUint32(m.Payload, 51, math.Float32bits(75))
+	if err := h.battleMessage(s, s.game(), m); err != nil {
+		t.Fatal(err)
+	}
+	got := roomOutputs(t, peer, 8071)[0]
+	if !bytes.Equal(got.Payload, m.Payload) {
+		t.Fatal("MP packet changed")
+	}
+	roomOutputs(t, s)
+	roomOutputs(t, outsider)
+	if err := h.battleMessage(s, s.game(), m); err != nil {
+		t.Fatal(err)
+	}
+	roomOutputs(t, peer)
+	for _, mutate := range []func([]byte){
+		func(p []byte) { protocol.WriteUint64(p, 4, peer.UID) },
+		func(p []byte) { protocol.WriteUint64(p, 39, peer.UID) },
+		func(p []byte) { protocol.WriteUint64(p, 39, outsider.UID) },
+		func(p []byte) { protocol.WriteUint32(p, 55, 2) },
+		func(p []byte) { protocol.WriteUint32(p, 59, 8) },
+		func(p []byte) { protocol.WriteUint32(p, 47, math.Float32bits(float32(math.NaN()))) },
+		func(p []byte) { protocol.WriteUint32(p, 51, math.Float32bits(float32(math.Inf(1)))) },
+	} {
+		bad := protocol.Message{ID: 8071, Payload: bytes.Clone(m.Payload)}
+		mutate(bad.Payload)
+		if h.battleMessage(s, s.game(), bad) == nil {
+			t.Fatal("invalid MP packet accepted")
+		}
+		roomOutputs(t, peer)
+	}
+	for _, size := range []int{62, 64} {
+		bad := make([]byte, size)
+		copy(bad, m.Payload)
+		if h.battleMessage(s, s.game(), protocol.Message{ID: 8071, Payload: bad}) == nil {
+			t.Fatal("bad length accepted")
+		}
+	}
+	s.game().Phase = "room"
+	if err := h.battleMessage(s, s.game(), m); err != nil {
+		t.Fatal(err)
+	}
+	roomOutputs(t, peer)
+}
+
 func TestDamageRelayBothDirectionsAndReplay(t *testing.T) {
 	for _, victimReports := range []bool{false, true} {
 		hub, attacker, victim, outsider := combatFixture()

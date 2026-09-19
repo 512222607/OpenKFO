@@ -185,6 +185,20 @@ func (server *Server) serveConnection(connection *tls.Conn) {
 	log.Printf("authenticated uid=%d account=%q player=%q", session.UID, session.Account, session.Nickname)
 	connection.SetDeadline(time.Time{})
 	go func() {
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-session.Done:
+				return
+			case <-ticker.C:
+				if err := server.Hub.RefreshExpiredInventory(session); err != nil {
+					log.Printf("inventory_refresh_failed uid=%d", session.UID)
+				}
+			}
+		}
+	}()
+	go func() {
 		defer session.Close()
 		defer connection.Close()
 		for {

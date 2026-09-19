@@ -11,13 +11,15 @@ internal static class Program
     [STAThread] static void Main(string[] args) { ApplicationConfiguration.Initialize(); var form = new TesterForm(); if(args.Contains("--protocol-regression")||args.Contains("--self-test")||args.Contains("--scenario-test")||args.Contains("--acceptance-test")||args.Contains("--purchase-test"))form.Shown+=async(_,_)=>{form.Hide();try{if(args.Contains("--protocol-regression")||args.Contains("--acceptance-test")||args.Contains("--purchase-test"))await form.AcceptanceSmokeAsync(args.Contains("--purchase-test"),args.Contains("--protocol-regression"));else if(args.Contains("--scenario-test"))await form.ScenarioSmokeAsync();else await form.SmokeAsync();}catch(Exception e){File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"self-test-error.txt"),e.ToString());Environment.ExitCode=1;}finally{form.Close();}}; Application.Run(form); }
 }
 
-internal sealed record Settings(string Account, string Password, string Config, string Target);
+internal sealed record Settings(string Account, string Password, string Config, string Target, string CharacterName = "", uint LobbyID = 1);
 
 internal sealed partial class TesterForm : Form
 {
     readonly TextBox account = new() { Text = "localtest10", Width = 115 };
     readonly TextBox password = new() { UseSystemPasswordChar = true, Width = 110 };
-    readonly TextBox config = new() { Width = 530 };
+    readonly TextBox config = new() { Width = 370 };
+    readonly TextBox characterName = new() { Width = 130, PlaceholderText = "留空不创建" };
+    readonly NumericUpDown lobbyID = new() { Minimum=1, Maximum=uint.MaxValue, Value=1, Width=80 };
     readonly TextBox target = new() { Text = "10001", Width = 110 };
     readonly TextBox protocol = new() { Text = "2420", Width = 75 };
     readonly TextBox payload = new() { Width = 340 };
@@ -44,18 +46,18 @@ internal sealed partial class TesterForm : Form
     {
         Text = "功夫小子 · 本地协议测试器"; Width = 1120; Height = 800; MinimumSize = new Size(980,650); StartPosition = FormStartPosition.CenterScreen;
         config.Text = Path.GetFullPath(Path.Combine(root,"..","local-server","bridge.json"));
-        try { var path = Path.Combine(root,"settings.bin"); if (File.Exists(path)) { var plain = ProtectedData.Unprotect(File.ReadAllBytes(path),null,DataProtectionScope.CurrentUser); try { var s = JsonSerializer.Deserialize<Settings>(plain)!; account.Text=s.Account;password.Text=s.Password;config.Text=s.Config;target.Text=s.Target; } finally { CryptographicOperations.ZeroMemory(plain); } } } catch { status.Text="保存的设置无法读取，请重新输入。"; }
+        try { var path = Path.Combine(root,"settings.bin"); if (File.Exists(path)) { var plain = ProtectedData.Unprotect(File.ReadAllBytes(path),null,DataProtectionScope.CurrentUser); try { var s = JsonSerializer.Deserialize<Settings>(plain)!; account.Text=s.Account;password.Text=s.Password;config.Text=s.Config;target.Text=s.Target;characterName.Text=s.CharacterName??"";lobbyID.Value=Math.Max(1u,s.LobbyID); } finally { CryptographicOperations.ZeroMemory(plain); } } } catch { status.Text="保存的设置无法读取，请重新输入。"; }
         var layout = new TableLayoutPanel { Dock=DockStyle.Fill, Padding=new Padding(12), ColumnCount=1, RowCount=9 };
         foreach (int height in new[]{40,42,42,42,35}) layout.RowStyles.Add(new RowStyle(SizeType.Absolute,height));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute,225));layout.RowStyles.Add(new RowStyle(SizeType.Percent,55));layout.RowStyles.Add(new RowStyle(SizeType.Percent,45));layout.RowStyles.Add(new RowStyle(SizeType.Absolute,34));Controls.Add(layout);
         FlowLayoutPanel Row(params Control[] controls) {var row=new FlowLayoutPanel {Dock=DockStyle.Fill,WrapContents=false};row.Controls.AddRange(controls);return row;}
         Label Label(string text)=>new(){Text=text,AutoSize=true,Margin=new Padding(3,8,3,0)};
         var browse=new Button{Text="选择配置",AutoSize=true};browse.Click+=(_,_)=>{using var d=new OpenFileDialog{Filter="连接配置|*.json",FileName=config.Text};if(d.ShowDialog()==DialogResult.OK)config.Text=d.FileName;};
-        layout.Controls.Add(Row(Label("本地连接配置"),config,browse),0,0);
+        layout.Controls.Add(Row(Label("本地连接配置"),config,browse,Label("无角色时创建昵称"),characterName,Label("频道ID"),lobbyID),0,0);
         layout.Controls.Add(Row(Label("账号"),account,Label("密码"),password,connect,disconnect,reconnect),0,1);
         Button Test(string name,Action action){var b=new Button{Text=name,AutoSize=true,Enabled=false};b.Click+=(_,_)=>{try{action();}catch(Exception e){Add("错误",0,0,e.Message,"");}};tests.Add(b);return b;}
         byte[] Target(){if(!ulong.TryParse(target.Text,out var uid)||uid==0)throw new Exception("目标UID必须是正整数");return BitConverter.GetBytes(uid);}
-        layout.Controls.Add(Row(Label("目标玩家UID"),target,Test("查看资料 2420",()=>Send(2420,Target(),2421)),Test("兵器库 2430",()=>Send(2430,Target(),2431)),Test("余额",()=>Send(1232,[],1230)),Test("房间列表",()=>Send(2260,[1,1,0x88],2280))),0,2);
+        layout.Controls.Add(Row(Label("目标玩家UID"),target,Test("查看资料 2420",()=>Send(2420,Target(),2421)),Test("兵器库 2430",()=>Send(2430,Target(),2431)),Test("余额",()=>Send(1232,[],1230)),Test("房间列表",()=>Send(2260,[1,1,0x88],2280)),Test("在线玩家",()=>Send(2250,[1,0,0,0,10,0,0,0],2270))),0,2);
         layout.Controls.Add(Row(Label("协议号"),protocol,Label("内容 HEX"),payload,Label("预期回包"),expected,Test("发送",()=>{if(!uint.TryParse(protocol.Text,out var id)||!uint.TryParse(expected.Text,out var reply))throw new Exception("协议号必须是整数，预期填0表示不检查");Send(id,Convert.FromHexString(string.Concat(payload.Text.Where(c=>!char.IsWhiteSpace(c)))),reply);})),0,3);
         layout.Controls.Add(status,0,4);
         history.Columns.Add("时间",115);history.Columns.Add("方向/结果",95);history.Columns.Add("协议号",85);history.Columns.Add("字节",70);history.Columns.Add("说明",670);
@@ -70,7 +72,7 @@ internal sealed partial class TesterForm : Form
         FormClosing+=(_,_)=>{Stop();log?.Dispose();};
     }
     void SetReady(bool value){ready=value;foreach(var b in tests)b.Enabled=value;}
-    void Save(){var data=JsonSerializer.SerializeToUtf8Bytes(new Settings(account.Text,password.Text,config.Text,target.Text));try{File.WriteAllBytes(Path.Combine(root,"settings.bin"),ProtectedData.Protect(data,null,DataProtectionScope.CurrentUser));}finally{CryptographicOperations.ZeroMemory(data);}}
+    void Save(){var data=JsonSerializer.SerializeToUtf8Bytes(new Settings(account.Text,password.Text,config.Text,target.Text,characterName.Text,(uint)lobbyID.Value));try{File.WriteAllBytes(Path.Combine(root,"settings.bin"),ProtectedData.Protect(data,null,DataProtectionScope.CurrentUser));}finally{CryptographicOperations.ZeroMemory(data);}}
     void Stop(){stop?.Cancel();SetReady(false);pending=0;try{worker?.StandardInput.Close();}catch{}try{if(worker is {HasExited:false})worker.Kill();}catch{} }
     void Add(string direction,uint id,int length,string text,string hex)
     {
@@ -83,24 +85,43 @@ internal sealed partial class TesterForm : Form
         if(!ready||worker==null)throw new Exception("尚未连接");if(pending!=0)throw new Exception("上一条请求仍在等待回包");if(data.Length>32768)throw new Exception("内容不能超过32768字节");
         Save();worker.StandardInput.WriteLine(JsonSerializer.Serialize(new{id,hex=Convert.ToHexString(data)}));worker.StandardInput.Flush();pending=reply;waitSeconds=timeout;sentAt=DateTime.UtcNow;
     }
+    string PrepareCore(){
+        string folder=Path.Combine(root,"components");Directory.CreateDirectory(folder);string image=Path.Combine(folder,"ProtocolTesterCore.exe");
+        using var resource=Assembly.GetExecutingAssembly().GetManifestResourceStream("ProtocolTesterCore.exe")!;using var bytes=new MemoryStream();resource.CopyTo(bytes);var data=bytes.ToArray();
+        if(!File.Exists(image)||!SHA256.HashData(File.ReadAllBytes(image)).SequenceEqual(SHA256.HashData(data)))File.WriteAllBytes(image,data);
+        return image;
+    }
+    async Task ReadStageCatalogue(string path, bool training=false){
+        var info=new ProcessStartInfo(PrepareCore()){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true,StandardOutputEncoding=Encoding.UTF8};
+        info.ArgumentList.Add(training?"--training-catalog":"--stage-catalog");info.ArgumentList.Add(path);
+        using var process=Process.Start(info)??throw new Exception("无法启动目录读取组件");
+        var stdout=process.StandardOutput.ReadToEndAsync();var stderr=process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();var text=await stdout;var error=await stderr;
+        if(process.ExitCode!=0)throw new Exception("读取目录失败："+text+error);
+        using var document=JsonDocument.Parse(text);
+        foreach(var row in document.RootElement.EnumerateArray()) {
+            if(training) Add("基础训练目录",0,0,$"任务 {row.GetProperty("id")} / {row.GetProperty("name")} / 组 {row.GetProperty("group")} / 地图 {row.GetProperty("map_id")} / 时限 {row.GetProperty("seconds")} 秒 / 前置 {row.GetProperty("dependencies")}（不是60xx任务进度）","");
+            else Add("关卡目录",0,0,$"玩法 {row.GetProperty("logic")} / 组 {row.GetProperty("group")} / 难度 {row.GetProperty("difficulty")} / 地图 {row.GetProperty("map_id")} / 类型 {row.GetProperty("map_type")} / 显示难度 {row.GetProperty("display_difficulty")} / 客户端奖励展示ID {row.GetProperty("reward_items")}（非掉落概率）","");
+        }
+        Add("目录读取完成",0,0,$"共 {document.RootElement.GetArrayLength()} 项；只读取资源，不解锁关卡或修改服务器","");
+    }
     async Task ConnectLoop()
     {
         if(stop!=null)return;
         if(string.IsNullOrWhiteSpace(account.Text)||string.IsNullOrEmpty(password.Text)){status.Text="请输入测试账号和密码。";return;}
         try{Save();}catch(Exception e){status.Text=e.Message;return;}
-        stop=new CancellationTokenSource();var token=stop.Token;connect.Enabled=false;disconnect.Enabled=true;account.ReadOnly=password.ReadOnly=config.ReadOnly=true;
+        stop=new CancellationTokenSource();var token=stop.Token;connect.Enabled=false;disconnect.Enabled=true;account.ReadOnly=password.ReadOnly=config.ReadOnly=characterName.ReadOnly=true;lobbyID.Enabled=false;
         Directory.CreateDirectory(Path.Combine(root,"logs"));logPath=Path.Combine(root,"logs",$"protocol-{DateTime.Now:yyyyMMdd-HHmmss-fff}.jsonl");log=new StreamWriter(logPath,true){AutoFlush=true};
         try
         {
-            string folder=Path.Combine(root,"components");Directory.CreateDirectory(folder);string image=Path.Combine(folder,"ProtocolTesterCore.exe");
-            using(var resource=Assembly.GetExecutingAssembly().GetManifestResourceStream("ProtocolTesterCore.exe")!)using(var bytes=new MemoryStream()){resource.CopyTo(bytes);var data=bytes.ToArray();if(!File.Exists(image)||!SHA256.HashData(File.ReadAllBytes(image)).SequenceEqual(SHA256.HashData(data)))File.WriteAllBytes(image,data);}
+            string image=PrepareCore();string folder=Path.GetDirectoryName(image)!;
             do
             {
                 token.ThrowIfCancellationRequested();SetReady(false);pending=0;status.Text="正在认证并进入协议大厅…";bool fatal=false;
                 var info=new ProcessStartInfo(image){UseShellExecute=false,CreateNoWindow=true,RedirectStandardInput=true,RedirectStandardOutput=true,RedirectStandardError=true,StandardInputEncoding=new UTF8Encoding(false),StandardOutputEncoding=Encoding.UTF8,StandardErrorEncoding=Encoding.UTF8,WorkingDirectory=folder};
                 using var process=Process.Start(info)??throw new Exception("无法启动测试组件");worker=process;
                 var stderr=process.StandardError.ReadToEndAsync(token);
-                await process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(new{config=config.Text,account=account.Text.Trim(),password=password.Text}));await process.StandardInput.FlushAsync();
+                await process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(new{config=config.Text,account=account.Text.Trim(),password=password.Text,character_name=characterName.Text,lobby_id=(uint)lobbyID.Value}));await process.StandardInput.FlushAsync();
                 string? line;
                 while((line=await process.StandardOutput.ReadLineAsync(token))!=null)
                 {
@@ -119,7 +140,7 @@ internal sealed partial class TesterForm : Form
         }
         catch(OperationCanceledException){status.Text="已断开。";}
         catch(Exception e){status.Text=e.Message;Add("错误",0,0,e.Message,"");}
-        finally{try{if(worker is {HasExited:false})worker.Kill();}catch{}worker=null;SetReady(false);pending=0;stop?.Dispose();stop=null;connect.Enabled=true;disconnect.Enabled=false;account.ReadOnly=password.ReadOnly=config.ReadOnly=false;log?.Dispose();log=null;}
+        finally{try{if(worker is {HasExited:false})worker.Kill();}catch{}worker=null;SetReady(false);pending=0;stop?.Dispose();stop=null;connect.Enabled=true;disconnect.Enabled=false;account.ReadOnly=password.ReadOnly=config.ReadOnly=characterName.ReadOnly=false;lobbyID.Enabled=true;log?.Dispose();log=null;}
     }
     internal async Task SmokeAsync()
     {

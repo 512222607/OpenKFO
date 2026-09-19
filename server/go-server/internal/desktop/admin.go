@@ -16,25 +16,38 @@ import (
 )
 
 type Request struct {
-	Environment    string                   `json:"environment"`
-	Rewards        *persistence.RewardRules `json:"rewards,omitempty"`
-	RewardRevision uint64                   `json:"reward_revision"`
-	Operation      string                   `json:"operation"`
-	ID             string                   `json:"id"`
-	UID            uint64                   `json:"uid"`
-	Mode           string                   `json:"mode"`
-	Amount         uint32                   `json:"amount"`
-	Keys           []string                 `json:"keys"`
-	Key            string                   `json:"key"`
-	Quantity       int                      `json:"quantity"`
-	Days           int                      `json:"days"`
-	Currency       string                   `json:"currency"`
-	Price          int64                    `json:"price"`
-	Enabled        *bool                    `json:"enabled"`
-	All            bool                     `json:"all"`
-	Weapon         int                      `json:"weapon"`
-	Revision       string                   `json:"revision"`
-	Rules          []Rule                   `json:"rules"`
+	StageUnlocks     *persistence.StagePlayerUnlocks `json:"stage_unlocks,omitempty"`
+	WeaponSettings   *persistence.WeaponSettings     `json:"weapon_settings,omitempty"`
+	VIPShopSettings  *persistence.VIPShopSettings    `json:"vip_shop_settings,omitempty"`
+	TalismanSettings *persistence.TalismanSettings   `json:"talisman_settings,omitempty"`
+	Titles           *persistence.TitleSettings      `json:"titles,omitempty"`
+	Tasks            *persistence.TaskSettings       `json:"tasks,omitempty"`
+	Training         *persistence.TrainingSettings   `json:"training,omitempty"`
+	VIPKind          uint32                          `json:"vip_kind,omitempty"`
+	Honour           *persistence.HonourSettings     `json:"honour,omitempty"`
+	StageAccess      *persistence.StageAccess        `json:"stage_access,omitempty"`
+	ServerExpiryDays *uint32                         `json:"server_expiry_days,omitempty"`
+	Instance         uint32                          `json:"instance"`
+	ExpiresAt        *int64                          `json:"expires_at,omitempty"`
+	Environment      string                          `json:"environment"`
+	Rewards          *persistence.RewardRules        `json:"rewards,omitempty"`
+	RewardRevision   uint64                          `json:"reward_revision"`
+	Operation        string                          `json:"operation"`
+	ID               string                          `json:"id"`
+	UID              uint64                          `json:"uid"`
+	Mode             string                          `json:"mode"`
+	Amount           uint32                          `json:"amount"`
+	Keys             []string                        `json:"keys"`
+	Key              string                          `json:"key"`
+	Quantity         int                             `json:"quantity"`
+	Days             int                             `json:"days"`
+	Currency         string                          `json:"currency"`
+	Price            int64                           `json:"price"`
+	Enabled          *bool                           `json:"enabled"`
+	All              bool                            `json:"all"`
+	Weapon           int                             `json:"weapon"`
+	Revision         string                          `json:"revision"`
+	Rules            []Rule                          `json:"rules"`
 }
 type Admin struct {
 	Root          string
@@ -149,7 +162,7 @@ func offer(item Item, request Request) (persistence.AdminOffer, error) {
 	} else {
 		little.PutUint32(record[22:], uint32(request.Days*24))
 	}
-	return persistence.AdminOffer{Offer: persistence.Offer{Key: key, Category: 10, Variant: item.Kind, Record: record, Grant: template(item, request.Quantity, request.Days)}, Enabled: *request.Enabled}, nil
+	return persistence.AdminOffer{Offer: persistence.Offer{Key: key, Category: 10, Variant: item.Kind, Record: record, Grant: template(item, request.Quantity, request.Days)}, Enabled: *request.Enabled, ServerExpiryDays: request.ServerExpiryDays}, nil
 }
 func (admin *Admin) Call(request Request) (any, error) {
 	if request.Environment != "" && request.Environment != "local" && request.Environment != "online" {
@@ -162,8 +175,25 @@ func (admin *Admin) Call(request Request) (any, error) {
 		environment = "本地测试服"
 	}
 	remote := persistence.AdminRequest{Operation: request.Operation, ID: request.ID, UID: request.UID, Mode: request.Mode, Amount: request.Amount, Rewards: request.Rewards, RewardRevision: request.RewardRevision}
+	remote.Instance, remote.ExpiresAt = request.Instance, request.ExpiresAt
+	remote.StageAccess = request.StageAccess
+	remote.StageUnlocks = request.StageUnlocks
+	remote.Honour = request.Honour
+	remote.Training = request.Training
+	remote.WeaponSettings = request.WeaponSettings
+	remote.VIPShopSettings = request.VIPShopSettings
+	remote.TalismanSettings = request.TalismanSettings
+	remote.Tasks = request.Tasks
+	remote.Titles = request.Titles
+	remote.VIPKind = request.VIPKind
 	switch request.Operation {
-	case "accounts", "inventory", "wallet_accounts", "wallet_update", "rewards_get", "rewards_save":
+	case "stage_unlocks_get", "stage_unlocks_save":
+		return call(remote)
+	case "tasks_get", "tasks_save", "titles_get", "titles_save":
+		return call(remote)
+	case "vip_shop_settings_get", "vip_shop_settings_save", "talisman_settings_get", "talisman_settings_save", "weapon_settings_get", "weapon_settings_save", "training_get", "training_save", "stages_get", "stages_save", "honour_get", "honour_save", "vip_get", "vip_grant":
+		return call(remote)
+	case "accounts", "inventory", "inventory_expiry", "wallet_accounts", "wallet_update", "rewards_get", "rewards_save":
 		return call(remote)
 	}
 	client := filepath.Join(admin.Root, "runtime-local", "client")
@@ -181,6 +211,43 @@ func (admin *Admin) Call(request Request) (any, error) {
 		}
 	} else if !os.IsNotExist(readErr) {
 		return nil, readErr
+	}
+	if request.Operation == "task_extended_templates" {
+		catalogues, hash, err := readExtendedTaskCatalogues(filepath.Join(client, "Data", "config.spf2"))
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"source": "client_extended_tasks", "catalogues": catalogues, "client_hash": hash}, nil
+	}
+	if request.Operation == "task_templates" {
+		templates, hash, err := readBaseQuestCatalogue(filepath.Join(client, "Data", "config.spf2"))
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"source": "client_basequest", "templates": templates, "client_hash": hash}, nil
+	}
+	if request.Operation == "title_catalog" {
+		titles, hash, err := readRoleTitleCatalogue(filepath.Join(client, "Data", "config.spf2"))
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"source": "client_roletitle", "titles": titles, "client_hash": hash}, nil
+	}
+	if request.Operation == "stage_requirements" {
+		rows, pve, hash, err := ReadStageCatalogue(filepath.Join(client, "Data", "config.spf2"))
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"source": "client_mapmgr", "client_hash": hash, "maps": rows, "pve_maps": pve}, nil
+	}
+	if request.Operation == "training_missions" {
+		// Client catalogue only: never dispatch to an account database or treat
+		// these scenario IDs as the task-panel 60xx configuration keys.
+		missions, err := ReadTrainingMissions(filepath.Join(client, "Data", "config.spf2"))
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"source": "client_titlemission", "missions": missions}, nil
 	}
 	items, err := catalog(client, request.Operation == "catalog")
 	if err != nil {
@@ -236,7 +303,7 @@ func (admin *Admin) Call(request Request) (any, error) {
 			if quantity == 0 {
 				quantity = 1
 			}
-			offers[key] = map[string]any{"currency": currency, "price": price, "days": days, "quantity": quantity, "enabled": row.Enabled}
+			offers[key] = map[string]any{"server_expiry_days": row.ServerExpiryDays, "currency": currency, "price": price, "days": days, "quantity": quantity, "enabled": row.Enabled}
 		}
 		return map[string]any{"items": available, "offers": offers, "environment": environment}, nil
 	}

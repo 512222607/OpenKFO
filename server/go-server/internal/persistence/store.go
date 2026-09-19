@@ -49,7 +49,23 @@ type Export struct {
 }
 
 var schema = []string{
+	`CREATE TABLE IF NOT EXISTS honour_rules(id TINYINT UNSIGNED PRIMARY KEY,revision BIGINT UNSIGNED NOT NULL,rules MEDIUMBLOB NOT NULL) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS honour_rules_audit(revision BIGINT UNSIGNED PRIMARY KEY,before_data MEDIUMBLOB NOT NULL,after_data MEDIUMBLOB NOT NULL,created TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB`,
 	`CREATE TABLE IF NOT EXISTS battle_reward_rules(id TINYINT UNSIGNED PRIMARY KEY,revision BIGINT UNSIGNED NOT NULL,rules MEDIUMBLOB NOT NULL) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS training_rules(id TINYINT UNSIGNED PRIMARY KEY,revision BIGINT UNSIGNED NOT NULL,rules MEDIUMBLOB NOT NULL) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS weapon_rules(id TINYINT UNSIGNED PRIMARY KEY,revision BIGINT UNSIGNED NOT NULL,rules MEDIUMBLOB NOT NULL) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS weapon_rules_audit(revision BIGINT UNSIGNED PRIMARY KEY,before_data MEDIUMBLOB NOT NULL,after_data MEDIUMBLOB NOT NULL,created TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS talisman_rules(id TINYINT UNSIGNED PRIMARY KEY,revision BIGINT UNSIGNED NOT NULL,rules MEDIUMBLOB NOT NULL) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS talisman_rules_audit(revision BIGINT UNSIGNED PRIMARY KEY,before_data MEDIUMBLOB NOT NULL,after_data MEDIUMBLOB NOT NULL,created TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS task_rules(id TINYINT UNSIGNED PRIMARY KEY,revision BIGINT UNSIGNED NOT NULL,rules MEDIUMBLOB NOT NULL) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS title_rules(id TINYINT UNSIGNED PRIMARY KEY,revision BIGINT UNSIGNED NOT NULL,rules MEDIUMBLOB NOT NULL) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS title_rules_audit(revision BIGINT UNSIGNED PRIMARY KEY,before_data MEDIUMBLOB NOT NULL,after_data MEDIUMBLOB NOT NULL,created TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS task_rules_audit(revision BIGINT UNSIGNED PRIMARY KEY,before_data MEDIUMBLOB NOT NULL,after_data MEDIUMBLOB NOT NULL,created TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS training_rules_audit(revision BIGINT UNSIGNED PRIMARY KEY,before_data MEDIUMBLOB NOT NULL,after_data MEDIUMBLOB NOT NULL,created TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS stage_access(id TINYINT UNSIGNED PRIMARY KEY,revision BIGINT UNSIGNED NOT NULL,rules MEDIUMBLOB NOT NULL) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS stage_player_unlocks(uid BIGINT UNSIGNED NOT NULL,client_hash CHAR(64) CHARACTER SET ascii NOT NULL,revision BIGINT UNSIGNED NOT NULL,maps MEDIUMBLOB NOT NULL,PRIMARY KEY(uid,client_hash),FOREIGN KEY(uid) REFERENCES accounts(uid) ON DELETE CASCADE) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS stage_player_unlock_audit(uid BIGINT UNSIGNED NOT NULL,client_hash CHAR(64) CHARACTER SET ascii NOT NULL,revision BIGINT UNSIGNED NOT NULL,before_data MEDIUMBLOB NOT NULL,after_data MEDIUMBLOB NOT NULL,created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(uid,client_hash,revision)) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS stage_access_audit(revision BIGINT UNSIGNED PRIMARY KEY,before_data MEDIUMBLOB NOT NULL,after_data MEDIUMBLOB NOT NULL,created TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB`,
 	`CREATE TABLE IF NOT EXISTS battle_settlements(serial INT UNSIGNED PRIMARY KEY,reports MEDIUMBLOB NOT NULL,result MEDIUMBLOB NOT NULL,created TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB`,
 	`CREATE TABLE IF NOT EXISTS accounts(
         uid BIGINT UNSIGNED PRIMARY KEY ,
@@ -64,6 +80,12 @@ var schema = []string{
         tickets BIGINT UNSIGNED NOT NULL DEFAULT 0
     ) ENGINE=InnoDB`,
 	`CREATE TABLE IF NOT EXISTS character_creations(uid BIGINT UNSIGNED PRIMARY KEY,nickname VARCHAR(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL UNIQUE,request VARBINARY(68) NOT NULL,FOREIGN KEY(uid) REFERENCES accounts(uid)) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS talisman_uses(uid BIGINT UNSIGNED NOT NULL,operation_id VARCHAR(128) CHARACTER SET ascii NOT NULL,request BINARY(16) NOT NULL,PRIMARY KEY(uid,operation_id),FOREIGN KEY(uid) REFERENCES accounts(uid)) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS talisman_repairs(uid BIGINT UNSIGNED NOT NULL,operation_id VARCHAR(128) CHARACTER SET ascii NOT NULL,instance INT UNSIGNED NOT NULL,material INT UNSIGNED NOT NULL,quantity INT UNSIGNED NOT NULL,capacity INT UNSIGNED NOT NULL,PRIMARY KEY(uid,operation_id),FOREIGN KEY(uid) REFERENCES accounts(uid)) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS mailbox(id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,uid BIGINT UNSIGNED NOT NULL,list_record VARBINARY(339) NOT NULL,detail_record VARBINARY(136) NOT NULL,is_read BOOLEAN NOT NULL DEFAULT FALSE,deleted BOOLEAN NOT NULL DEFAULT FALSE,claimed BOOLEAN NOT NULL DEFAULT FALSE,created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,INDEX inbox(uid,deleted,id),FOREIGN KEY(uid) REFERENCES accounts(uid) ON DELETE CASCADE) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS mail_attachments(id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,mail_id INT UNSIGNED NOT NULL UNIQUE,uid BIGINT UNSIGNED NOT NULL,grant_record VARBINARY(68) NOT NULL,expiry_days INT UNSIGNED NOT NULL DEFAULT 0,claimed_instance INT UNSIGNED NULL,FOREIGN KEY(mail_id) REFERENCES mailbox(id) ON DELETE CASCADE,FOREIGN KEY(uid) REFERENCES accounts(uid) ON DELETE CASCADE) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS gift_receipts(uid BIGINT UNSIGNED NOT NULL,operation_id VARCHAR(128) CHARACTER SET ascii NOT NULL,request_hash BINARY(32) NOT NULL,recipient BIGINT UNSIGNED NOT NULL,mail_id INT UNSIGNED NOT NULL,cost INT UNSIGNED NOT NULL,PRIMARY KEY(uid,operation_id),FOREIGN KEY(uid) REFERENCES accounts(uid)) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS honour_stats(period INT UNSIGNED NOT NULL,uid BIGINT UNSIGNED NOT NULL,points BIGINT UNSIGNED NOT NULL,games BIGINT UNSIGNED NOT NULL,wins BIGINT UNSIGNED NOT NULL,PRIMARY KEY(period,uid),INDEX honour_rank(period,points),FOREIGN KEY(uid) REFERENCES accounts(uid) ON DELETE CASCADE) ENGINE=InnoDB`,
 	`CREATE TABLE IF NOT EXISTS inventory(
         uid BIGINT UNSIGNED NOT NULL ,
         instance INT UNSIGNED NOT NULL ,
@@ -72,6 +94,8 @@ var schema = []string{
         instance) ,
         FOREIGN KEY(uid) REFERENCES accounts(uid)
     ) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS inventory_expirations(uid BIGINT UNSIGNED NOT NULL,instance INT UNSIGNED NOT NULL,expires_at BIGINT NOT NULL,processed BOOLEAN NOT NULL DEFAULT FALSE,PRIMARY KEY(uid,instance),INDEX due_inventory(uid,processed,expires_at),FOREIGN KEY(uid,instance) REFERENCES inventory(uid,instance) ON DELETE CASCADE) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS weapon_upgrades(uid BIGINT UNSIGNED NOT NULL,operation_id VARCHAR(128) CHARACTER SET ascii NOT NULL,instance INT UNSIGNED NOT NULL,success BOOLEAN NOT NULL,cost INT UNSIGNED NOT NULL,score_cost INT UNSIGNED NOT NULL,odds INT UNSIGNED NOT NULL,roll INT UNSIGNED NOT NULL,before_record VARBINARY(68) NOT NULL,after_record VARBINARY(68) NOT NULL,created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(uid,operation_id),FOREIGN KEY(uid) REFERENCES accounts(uid)) ENGINE=InnoDB`,
 	`CREATE TABLE IF NOT EXISTS offers(
         catalog_key INT UNSIGNED PRIMARY KEY ,
         category TINYINT UNSIGNED NOT NULL ,
@@ -80,6 +104,7 @@ var schema = []string{
         grant_record VARBINARY(68) NOT NULL ,
         enabled BOOLEAN NOT NULL DEFAULT TRUE
     ) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS offer_lifetimes(catalog_key INT UNSIGNED PRIMARY KEY,days INT UNSIGNED NOT NULL,FOREIGN KEY(catalog_key) REFERENCES offers(catalog_key) ON DELETE CASCADE) ENGINE=InnoDB`,
 	`CREATE TABLE IF NOT EXISTS purchases(
         uid BIGINT UNSIGNED NOT NULL ,
         operation_id VARCHAR(128) CHARACTER SET ascii NOT NULL ,
@@ -107,6 +132,14 @@ var schema = []string{
         value BIGINT UNSIGNED NOT NULL
     ) ENGINE=InnoDB`,
 	`INSERT IGNORE INTO counters(name,value) VALUES('battle',0)`,
+	`CREATE TABLE IF NOT EXISTS training_claims(uid BIGINT UNSIGNED NOT NULL,operation_id VARCHAR(128) NOT NULL,started BIGINT NOT NULL,training_rank INT UNSIGNED NOT NULL,revision BIGINT UNSIGNED NOT NULL,experience INT UNSIGNED NOT NULL,PRIMARY KEY(uid,operation_id),UNIQUE KEY training_cycle(uid,started)) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS training_ranks(uid BIGINT UNSIGNED PRIMARY KEY,training_rank INT UNSIGNED NOT NULL DEFAULT 0,FOREIGN KEY(uid) REFERENCES accounts(uid) ON DELETE CASCADE) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS vip_shop_rules(id TINYINT PRIMARY KEY,revision BIGINT UNSIGNED NOT NULL,rules MEDIUMBLOB NOT NULL) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS vip_shop_rules_audit(revision BIGINT UNSIGNED PRIMARY KEY,before_data MEDIUMBLOB NOT NULL,after_data MEDIUMBLOB NOT NULL,created TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS task_progress(uid BIGINT UNSIGNED NOT NULL,task_key SMALLINT UNSIGNED NOT NULL,state TINYINT UNSIGNED NOT NULL,baseline BINARY(116) NOT NULL,rule_revision BIGINT UNSIGNED NOT NULL,rule_data MEDIUMBLOB NULL,PRIMARY KEY(uid,task_key),FOREIGN KEY(uid) REFERENCES accounts(uid) ON DELETE CASCADE) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS extended_task_progress(uid BIGINT UNSIGNED NOT NULL,task_key SMALLINT UNSIGNED NOT NULL,cycle VARCHAR(10) NOT NULL,state TINYINT UNSIGNED NOT NULL,rule_revision BIGINT UNSIGNED NOT NULL,rule_data MEDIUMBLOB NOT NULL,counts BINARY(12) NOT NULL,PRIMARY KEY(uid,task_key,cycle),FOREIGN KEY(uid) REFERENCES accounts(uid) ON DELETE CASCADE) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS task_rewards(uid BIGINT UNSIGNED NOT NULL,task_key SMALLINT UNSIGNED NOT NULL,rule_revision BIGINT UNSIGNED NOT NULL,experience INT UNSIGNED NOT NULL,gold INT UNSIGNED NOT NULL,created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(uid,task_key),FOREIGN KEY(uid) REFERENCES accounts(uid) ON DELETE CASCADE) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS title_rewards(uid BIGINT UNSIGNED NOT NULL,title_level TINYINT UNSIGNED NOT NULL,choices BLOB NOT NULL,claimed_key INT UNSIGNED NULL,claimed_instance INT UNSIGNED NULL,created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(uid,title_level),FOREIGN KEY(uid) REFERENCES accounts(uid) ON DELETE CASCADE) ENGINE=InnoDB`,
 	`CREATE TABLE IF NOT EXISTS training(
         uid BIGINT UNSIGNED PRIMARY KEY ,
         started BIGINT NULL ,
@@ -155,6 +188,9 @@ func open(dsn string, initialize bool) (*Store, error) {
 }
 func (store *Store) Snapshot(uid uint64) (Account, error) {
 	account := Account{UID: uid}
+	if err := store.ExpireInventory(uid); err != nil {
+		return account, err
+	}
 	err := store.DB.QueryRow(`SELECT account,nickname,profile,gold,tickets FROM accounts WHERE uid=?`, uid).Scan(&account.Account, &account.Nickname, &account.Profile, &account.Gold, &account.Tickets)
 	if err != nil {
 		return account, err
@@ -177,7 +213,13 @@ func (store *Store) Snapshot(uid uint64) (Account, error) {
 	if len(account.Profile) != 360 {
 		return account, ErrDenied
 	}
-	return account, rows.Err()
+	if err = rows.Err(); err != nil {
+		return account, err
+	}
+	if err = rows.Close(); err != nil {
+		return account, err
+	}
+	return account, store.projectVIPInventory(&account)
 }
 func (account Account) InventoryBytes() []byte { return bytes.Join(account.Inventory, nil) }
 func (store *Store) Authenticate(account, legacy string) (Account, error) {
@@ -339,165 +381,6 @@ func (store *Store) Offers(category, variant int) ([]Offer, error) {
 	return offers, rows.Err()
 }
 
-var Slots = map[byte][]uint16{12: {4}, 13: {3}, 14: {7}, 15: {2}, 16: {6}, 17: {5}, 18: {4}, 20: {10}, 21: {11}, 25: {8, 9}, 64: {27, 28}}
-
-func (store *Store) Equip(uid uint64, instance uint32, slot uint16) ([]byte, error) {
-	return store.equip(uid, instance, slot, false)
-}
-
-// EquipDefault resolves the warehouse's zero slot inside the ownership transaction.
-// Zero still means unequip for Equip callers (2300).
-func (store *Store) EquipDefault(uid uint64, instance uint32, slot uint16) ([]byte, error) {
-	return store.equip(uid, instance, slot, true)
-}
-
-func (store *Store) equip(uid uint64, instance uint32, slot uint16, automatic bool) ([]byte, error) {
-	transaction, err := store.DB.Begin()
-	if err != nil {
-		return nil, err
-	}
-	defer transaction.Rollback()
-	var owner uint64
-	if err = transaction.QueryRow(`SELECT uid FROM accounts WHERE uid=? FOR UPDATE`, uid).Scan(&owner); err != nil {
-		return nil, err
-	}
-	var record []byte
-	if err = transaction.QueryRow(`SELECT record FROM inventory WHERE uid=? AND instance=?`, uid, instance).Scan(&record); err != nil || len(record) != 68 {
-		return nil, ErrDenied
-	}
-	if automatic && slot == 0 {
-		// Native 650CE0 establishes type 25's default; other kinds need evidence.
-		if record[4] != 25 {
-			return nil, ErrDenied
-		}
-		slot = 8
-	}
-	if slot == 0 && protocol.ReadUint16(record, 17) == 0 {
-		return nil, nil
-	}
-	if slot != 0 {
-		allowed := false
-		for _, allowedSlot := range Slots[record[4]] {
-			allowed = allowed || allowedSlot == slot
-		}
-		if !allowed {
-			return nil, ErrDenied
-		}
-		rows, err := transaction.Query(`SELECT instance,record FROM inventory WHERE uid=?`, uid)
-		if err != nil {
-			return nil, err
-		}
-		type change struct {
-			instance uint32
-			record   []byte
-		}
-		var edits []change
-		for rows.Next() {
-			var change change
-			if err = rows.Scan(&change.instance, &change.record); err != nil {
-				rows.Close()
-				return nil, err
-			}
-			if len(change.record) == 68 && protocol.ReadUint16(change.record, 17) == slot {
-				protocol.WriteUint16(change.record, 17, 0)
-				edits = append(edits, change)
-			}
-		}
-		err = rows.Err()
-		rows.Close()
-		if err != nil {
-			return nil, err
-		}
-		for _, change := range edits {
-			if _, err = transaction.Exec(`UPDATE inventory SET record=? WHERE uid=? AND instance=?`, change.record, uid, change.instance); err != nil {
-				return nil, err
-			}
-		}
-	}
-	protocol.WriteUint16(record, 17, slot)
-	if _, err = transaction.Exec(`UPDATE inventory SET record=? WHERE uid=? AND instance=?`, record, uid, instance); err != nil {
-		return nil, err
-	}
-	return record, transaction.Commit()
-}
-func (store *Store) Purchase(uid uint64, operationID string, request []byte) (uint32, []byte, []byte, error) {
-	if len(request) != 169 || len(operationID) == 0 || len(operationID) > 128 {
-		return 0, nil, nil, ErrDenied
-	}
-	transaction, err := store.DB.Begin()
-	if err != nil {
-		return 0, nil, nil, err
-	}
-	defer transaction.Rollback()
-	var gold, tickets uint32
-	if err = transaction.QueryRow(`SELECT gold,tickets FROM accounts WHERE uid=? FOR UPDATE`, uid).Scan(&gold, &tickets); err != nil {
-		return 0, nil, nil, err
-	}
-	requestHash := sha256.Sum256(request)
-	var previousHash, previousItem, previousCatalog []byte
-	var previousBalance uint32
-	err = transaction.QueryRow(`SELECT request_hash,balance,item_record,catalog_record FROM purchases WHERE uid=? AND operation_id=?`, uid, operationID).Scan(&previousHash, &previousBalance, &previousItem, &previousCatalog)
-	if err == nil {
-		if !bytes.Equal(previousHash, requestHash[:]) {
-			return 0, nil, nil, ErrDenied
-		}
-		var currentItem []byte
-		lookupErr := transaction.QueryRow(`SELECT record FROM inventory WHERE uid=? AND instance=?`, uid, protocol.ReadUint32(previousItem, 0)).Scan(&currentItem)
-		if lookupErr != nil && lookupErr != sql.ErrNoRows {
-			return 0, nil, nil, lookupErr
-		}
-		previousItem = currentItem
-		if err = transaction.Commit(); err != nil {
-			return 0, nil, nil, err
-		}
-		if protocol.ReadUint32(previousCatalog, 30) > 0 {
-			previousBalance = gold
-		} else {
-			previousBalance = tickets
-		}
-		return previousBalance, previousItem, previousCatalog, nil
-	}
-	if err != sql.ErrNoRows {
-		return 0, nil, nil, err
-	}
-	var catalog, item []byte
-	err = transaction.QueryRow(`SELECT record,grant_record FROM offers WHERE catalog_key=? AND enabled=TRUE FOR UPDATE`, protocol.ReadUint32(request, 145)).Scan(&catalog, &item)
-	if err != nil || len(catalog) != 108 || len(item) != 68 {
-		return 0, nil, nil, ErrDenied
-	}
-	goldPrice, ticketPrice := protocol.ReadUint32(catalog, 30), protocol.ReadUint32(catalog, 38)
-	if catalog[48] == 0 || catalog[46] != 0 || catalog[49] != 0 || catalog[13] != 0 || catalog[83] != 1 || protocol.ReadUint32(catalog, 88) != 0 || protocol.ReadUint32(catalog, 77) != 0 || (goldPrice == 0) == (ticketPrice == 0) || goldPrice > 2147483647 || ticketPrice > 2147483647 || protocol.ReadUint32(catalog, 34) != goldPrice || protocol.ReadUint32(catalog, 42) != ticketPrice {
-		return 0, nil, nil, ErrDenied
-	}
-	currencyCode, balance, price := uint32(109), tickets, ticketPrice
-	column := "tickets"
-	if goldPrice > 0 {
-		currencyCode, balance, price = 111, gold, goldPrice
-		column = "gold"
-	}
-	if protocol.ReadUint32(request, 0) != currencyCode || protocol.ReadUint64(request, 4) != uid || protocol.ReadUint64(request, 54) != uid || protocol.ReadUint32(request, 149) != goldPrice || protocol.ReadUint32(request, 157) != ticketPrice || protocol.ReadUint32(request, 153) != 0 || protocol.ReadUint32(request, 161) != 0 || protocol.ReadUint32(request, 165) != 0 || balance < price {
-		return 0, nil, nil, ErrDenied
-	}
-	var instance uint64
-	if err = transaction.QueryRow(`SELECT COALESCE(MAX(instance),1048575)+1 FROM inventory WHERE uid=?`, uid).Scan(&instance); err != nil {
-		return 0, nil, nil, err
-	}
-	if instance > 0xffffffff {
-		return 0, nil, nil, ErrDenied
-	}
-	protocol.WriteUint32(item, 0, uint32(instance))
-	balance -= price
-	if _, err = transaction.Exec(`UPDATE accounts SET `+column+`=? WHERE uid=?`, balance, uid); err != nil {
-		return 0, nil, nil, err
-	}
-	if _, err = transaction.Exec(`INSERT INTO inventory VALUES(?,?,?)`, uid, instance, item); err != nil {
-		return 0, nil, nil, err
-	}
-	if _, err = transaction.Exec(`INSERT INTO purchases(uid,operation_id,request_hash,balance,item_record,catalog_record) VALUES(?,?,?,?,?,?)`, uid, operationID, requestHash[:], balance, item, catalog); err != nil {
-		return 0, nil, nil, err
-	}
-	return balance, item, catalog, transaction.Commit()
-}
 func (store *Store) Wallet(uid uint64, mode string, amount uint32, operationID string) (uint32, uint32, error) {
 	if (mode != "gift" && mode != "set") || amount > 2147483647 || len(operationID) < 1 || len(operationID) > 128 {
 		return 0, 0, ErrDenied

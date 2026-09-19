@@ -20,6 +20,10 @@ func creationRequest(name string, options []byte) ([]byte, error) {
 		if len(encoded) == 0 || len(encoded) > 20 {
 			return nil, fmt.Errorf("nickname must fit 20 GBK bytes")
 		}
+		decoded, err := persistence.DecodeGBK(encoded)
+		if err != nil || decoded != name {
+			return nil, fmt.Errorf("nickname cannot be represented in GBK")
+		}
 		copy(p, encoded)
 		p[21] = byte(gender)
 		for slot := uint32(0); slot < 7; slot++ {

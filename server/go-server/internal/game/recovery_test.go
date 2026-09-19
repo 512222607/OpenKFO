@@ -13,19 +13,33 @@ import (
 	"time"
 )
 
-// Only the two Snapshot reads are allowed; unexpected writes fail the test.
+// Snapshot reads including the no-expiry fast path; unexpected writes fail.
 type snapshotDriver struct{}
-type snapshotConn struct{}
+type snapshotConn struct{ expired bool }
 type snapshotRows struct {
 	columns []string
 	row     []driver.Value
 }
 
-func (snapshotDriver) Open(string) (driver.Conn, error)  { return snapshotConn{}, nil }
+func (snapshotDriver) Open(name string) (driver.Conn, error) {
+	return snapshotConn{expired: name == "expired"}, nil
+}
 func (snapshotConn) Prepare(string) (driver.Stmt, error) { return nil, driver.ErrSkip }
 func (snapshotConn) Close() error                        { return nil }
 func (snapshotConn) Begin() (driver.Tx, error)           { return nil, driver.ErrSkip }
-func (snapshotConn) QueryContext(_ context.Context, q string, args []driver.NamedValue) (driver.Rows, error) {
+func (c snapshotConn) QueryContext(_ context.Context, q string, args []driver.NamedValue) (driver.Rows, error) {
+	if q == "SELECT revision,rules FROM training_rules WHERE id=1" {
+		return &snapshotRows{columns: []string{"revision", "rules"}}, nil
+	}
+	if strings.HasPrefix(q, "SELECT COALESCE(t.training_rank,0)") {
+		return &snapshotRows{[]string{"training_rank"}, []driver.Value{int64(0)}}, nil
+	}
+	if q == "SELECT revision,rules FROM stage_access WHERE id=1" || q == "SELECT revision,rules FROM honour_rules WHERE id=1" {
+		return &snapshotRows{columns: []string{"revision", "rules"}}, nil
+	}
+	if strings.HasPrefix(q, "SELECT EXISTS(SELECT 1 FROM inventory_expirations") {
+		return &snapshotRows{[]string{"due"}, []driver.Value{false}}, nil
+	}
 	if strings.HasPrefix(q, "SELECT t.started FROM accounts a LEFT JOIN training") {
 		uid := args[0].Value.(int64)
 		if uid == 0 || uid == 999999 {
@@ -39,6 +53,14 @@ func (snapshotConn) QueryContext(_ context.Context, q string, args []driver.Name
 		return &snapshotRows{[]string{"account", "nickname", "profile", "gold", "tickets"}, []driver.Value{"test", "test", profile, int64(0), int64(0)}}, nil
 	}
 	if strings.HasPrefix(q, "SELECT record FROM inventory") {
+		if c.expired {
+			r := make([]byte, 68)
+			protocol.WriteUint32(r, 0, 7)
+			r[4] = 25
+			protocol.WriteUint32(r, 5, 253002)
+			protocol.WriteUint32(r, 19, 2)
+			return &snapshotRows{[]string{"record"}, []driver.Value{r}}, nil
+		}
 		return &snapshotRows{columns: []string{"record"}}, nil
 	}
 	return nil, driver.ErrSkip
@@ -84,8 +106,12 @@ func TestReloginClearsOnlyThisSession(t *testing.T) {
 	s.Channels[3] = &Channel{ID: 3, Kind: "sdk", Phase: "authenticated"}
 	s.Bound = true
 	s.P2P = 33
+	s.TitleOffer, peer.TitleOffer = 1, 2
 	s.ConsumeIntents = map[uint32]bool{9: true}
 	hub.resetNativeSession(s, 3)
+	if s.TitleOffer != 0 || peer.TitleOffer != 2 {
+		t.Fatal("relogin failed to isolate title binding")
+	}
 	if s.Room != nil || s.GameChannel != 0 || s.P2P != 33 || s.Bound || s.ConsumeIntents != nil || hub.Sessions[peer.UID] != peer {
 		t.Fatal("relogin leaked state or affected another session")
 	}
