@@ -47,3 +47,13 @@
 Native绑定表B9A370将notify_wave_end映射到93D860。该包装要求一个数值参数、当前房间模式21及CStageAssaultMode对象，再调用938C70。后者清零40B、复制房间+311的QWORD到+0、波次DWORD到+8、常数1到+12，经A3C950发送20571。对应证据为`nixiang/stage-wave-report.asm`；解包条目及归档SHA256保存在`nixiang/stage-wave-script-evidence.json`，未提交客户端脚本或素材。
 
 共享ParseStageWaveReport读取上下文原值、波次、报告字段并保留40B原文；统一日志仅在C→S方向标注20571，测试器区分20571上报与20572下行控制。未知报告值保留用于诊断，不视为合法通关。这补齐了实际上行发送端，仍未提供服务端怪物存活验证、波次配置及授权推进业务。
+
+## 第一波与推进通知不能重复触发
+
+`nixiang/stage-wave-initialization.asm`记录完整93B6B0及93A530。93B6B0在93B6F3直接传入1调用93A530；因此该本地初始化路径自行启动第一波，并不需要服务端先下发20572/1。已核对的93A530直接CALL引用另一个是20572处理器82A820。
+
+93A530检查当前控制对象44B3F0和脚本对象后，用BADD04字符串MonsterWaveBegin及收到的波次作为参数调用脚本；随后更新波次文案和面板。它没有可见的“已开始此波则忽略”检查。stageassault.lua的SetMonsterWaveBorn会重置各刷怪点LastCreateMonsterIndex和LastCreateMonsterEllaps；重复开波通知可能重新生成本波怪物，因此未来服务端不能无条件重发相同20572。
+
+已核对的act_zombiedefend.lua配置最大25波、MonsterWaveBegin分支覆盖1至25；main初始化怪物和出生点，并按玩家数量调整难度。其MonsterWaveEnd中的本地最大波数结束逻辑已被注释，实际仍调用Map.notify_wave_end；不能指望此脚本自行在第25波结束。这个25仅属于当前地图脚本，不能硬编码为所有PVE地图的总波数。
+
+当前接入约束：第一波记为本地启动；后续推进应校验当前场次、上报波次、控制来源和服务端怪物状态；旧波重复上报不能再推进或重发刷怪指令。最后一波使用20572的-1分支仍需与模式21的完整结算验证衔接。以上为接入依据，尚未开放PVE房间。
