@@ -99,7 +99,7 @@ func (hub *Hub) battleMessage(session *Session, channel *Channel, message protoc
 	if id == protocol.BattleEventMovement {
 		// 82B230 resolves the moving entity from +4, not +39. The room
 		// controller can send movement for a registered monster only.
-		if actor, known := room.PVEActors[sender]; room.Type() == protocol.StageAssault && known && !actor.active {
+		if actor, known := room.PVEActors[sender]; (room.Type() == protocol.StageAssault || room.Type() == protocol.FosterMode) && known && !actor.active {
 			return nil
 		}
 		if !room.controlsBattleActor(session, sender) {

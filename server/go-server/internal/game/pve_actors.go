@@ -2,7 +2,7 @@ package game
 
 import "kungfu.local/server/internal/protocol"
 
-// Native 93B0C8 seeds 100 identities and 93C1C0 returns removed identities
+// Native 93B0C8 (mode 21) / 942E8E (mode 10) seed 100 identities and return removed identities
 // to the pool. Keep tombstones for this battle so old events cannot resurrect
 // an actor, while newer creates can reuse an identity.
 const stageAssaultActorPoolSize = 100
@@ -13,7 +13,7 @@ type pveActor struct {
 }
 
 func (r *Room) hasPVEActor(uid uint64) bool {
-	return r.Type() == protocol.StageAssault && r.PVEActors[uid].active
+	return (r.Type() == protocol.StageAssault || r.Type() == protocol.FosterMode) && r.PVEActors[uid].active
 }
 
 func (r *Room) controlsBattleActor(s *Session, uid uint64) bool {
@@ -22,7 +22,7 @@ func (r *Room) controlsBattleActor(s *Session, uid uint64) bool {
 
 func (r *Room) stalePVEEvent(s *Session, uid uint64, sequence uint32) bool {
 	a, known := r.PVEActors[uid]
-	return r.Type() == protocol.StageAssault && known &&
+	return (r.Type() == protocol.StageAssault || r.Type() == protocol.FosterMode) && known &&
 		(!a.active || (s.UID == r.Owner && int32(sequence-a.sequence) <= 0))
 }
 
@@ -31,11 +31,12 @@ func (r *Room) stalePVEEvent(s *Session, uid uint64, sequence uint32) bool {
 // This does not enable PVE room admission or turn removals into rewards.
 func (h *Hub) pveActorMessage(s *Session, message protocol.Message) error {
 	r, p := s.Room, message.Payload
-	if r.Type() != protocol.StageAssault || r.Owner != s.UID {
+	if (r.Type() != protocol.StageAssault && r.Type() != protocol.FosterMode) || r.Owner != s.UID {
 		return nil
 	}
 	var sender, actor uint64
 	var template uint32
+	var spawn protocol.PVEActorCreate
 	create := protocol.ReadUint32(p, 0) == protocol.BattleEventPVEActorCreate
 	if create {
 		event, err := protocol.ParsePVEActorCreate(p)
@@ -44,6 +45,7 @@ func (h *Hub) pveActorMessage(s *Session, message protocol.Message) error {
 		}
 		sender, actor = event.Sender, event.Actor
 		template = event.TemplateValue
+		spawn = event
 	} else {
 		event, err := protocol.ParsePVEActorRemove(p)
 		if err != nil {
@@ -60,6 +62,7 @@ func (h *Hub) pveActorMessage(s *Session, message protocol.Message) error {
 	if seen && int32(sequence-previous.sequence) <= 0 {
 		return nil
 	}
+	fosterGroup := -1
 	if create {
 		// A live identity cannot change template/location via another create.
 		if seen && previous.active {
@@ -71,6 +74,12 @@ func (h *Hub) pveActorMessage(s *Session, message protocol.Message) error {
 		if r.StageWaves != nil && !r.StageWaves.canSpawn(template) {
 			return nil
 		}
+		if r.Type() == protocol.FosterMode {
+			fosterGroup = r.fosterSpawnGroup(spawn)
+			if fosterGroup < 0 {
+				return nil
+			}
+		}
 	} else if !seen || !previous.active {
 		return nil
 	}
@@ -78,6 +87,9 @@ func (h *Hub) pveActorMessage(s *Session, message protocol.Message) error {
 		r.PVEActors = make(map[uint64]pveActor)
 	}
 	r.PVEActors[actor] = pveActor{sequence: sequence, active: create}
+	if fosterGroup >= 0 {
+		r.FosterSpawned[fosterGroup]++
+	}
 	if create && r.StageWaves != nil {
 		r.StageWaves.spawned[template]++
 	}

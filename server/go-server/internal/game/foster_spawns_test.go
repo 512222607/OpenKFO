@@ -1,0 +1,144 @@
+package game
+
+import (
+	"bytes"
+	"math"
+	"os"
+	"testing"
+
+	"kungfu.local/server/internal/desktop"
+	"kungfu.local/server/internal/protocol"
+)
+
+func fosterSpawnPacket(owner, actor uint64, sequence uint32, spawn protocol.FosterSpawn) protocol.Message {
+	m := combatPacket(protocol.BattleEventPVEActorCreate, 67, owner, actor, 0)
+	protocol.WriteUint32(m.Payload, 19, sequence)
+	protocol.WriteUint32(m.Payload, 47, spawn.Template)
+	for i, v := range spawn.Position {
+		protocol.WriteUint32(m.Payload, 51+4*i, math.Float32bits(v))
+	}
+	protocol.WriteUint32(m.Payload, 63, spawn.Direction)
+	return m
+}
+
+func TestFosterSpawnPlanGate(t *testing.T) {
+	for _, scenario := range []string{"valid", "no-plan", "template", "position", "direction", "peer", "capacity", "ambiguous"} {
+		t.Run(scenario, func(t *testing.T) {
+			h, owner, peer, outsider := combatFixture()
+			r := owner.Room
+			r.Request[46] = byte(protocol.FosterMode)
+			spawn := protocol.FosterSpawn{Template: 251, Position: [3]float32{-1610, -4, -15}, Direction: 2}
+			r.FosterPlan = &protocol.FosterPlan{GlobalLimit: 1, Groups: []protocol.FosterGroup{{Spawns: []protocol.FosterSpawn{spawn}}}}
+			r.FosterSpawned = []int{0}
+			sender := owner
+			switch scenario {
+			case "no-plan":
+				r.FosterPlan = nil
+			case "template":
+				spawn.Template = 51
+			case "position":
+				spawn.Position[0]++
+			case "direction":
+				spawn.Direction = 0
+			case "peer":
+				sender = peer
+			case "capacity":
+				r.PVEActors = map[uint64]pveActor{43: {active: true}}
+			case "ambiguous":
+				r.FosterPlan.Groups = append(r.FosterPlan.Groups, r.FosterPlan.Groups[0])
+				r.FosterSpawned = append(r.FosterSpawned, 0)
+			}
+			m := fosterSpawnPacket(sender.UID, 42, 1, spawn)
+			if err := h.battleMessage(sender, sender.game(), m); err != nil {
+				t.Fatal(err)
+			}
+			if scenario == "valid" {
+				if !r.hasPVEActor(42) || !r.controlsBattleActor(owner, 42) || r.controlsBattleActor(peer, 42) || r.FosterSpawned[0] != 1 {
+					t.Fatal("spawn permission not registered")
+				}
+				if out := roomOutputs(t, peer, 8071); !bytes.Equal(out[0].Payload, m.Payload) {
+					t.Fatal("native spawn changed")
+				}
+				if err := h.battleMessage(owner, owner.game(), m); err != nil {
+					t.Fatal(err)
+				}
+				if r.FosterSpawned[0] != 1 {
+					t.Fatal("retry consumed another spawn")
+				}
+			} else if r.hasPVEActor(42) || r.FosterSpawned[0] != 0 {
+				t.Fatal("invalid spawn consumed plan")
+			}
+			roomOutputs(t, peer)
+			roomOutputs(t, owner)
+			roomOutputs(t, outsider)
+		})
+	}
+}
+
+func TestNativeFosterSpawnPlan(t *testing.T) {
+	path := os.Getenv("OPENKFO_CLIENT_ARCHIVE")
+	if path == "" {
+		t.Skip("native client archive required")
+	}
+	maps, err := desktop.ReadStageMaps(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var plan *protocol.FosterPlan
+	for _, m := range maps {
+		if m.MapID == 8110 {
+			plan = m.FosterPreview
+		}
+	}
+	if plan == nil {
+		t.Fatal("verified map plan missing")
+	}
+	h, owner, peer, outsider := combatFixture()
+	r := owner.Room
+	r.Request[46] = byte(protocol.FosterMode)
+	r.FosterPlan, r.FosterSpawned = plan, make([]int, len(plan.Groups))
+	sequence, total := uint32(1), 0
+	// Trying to skip directly to the boss cannot advance either event group.
+	boss := plan.Groups[1].Spawns[len(plan.Groups[1].Spawns)-1]
+	if err = h.battleMessage(owner, owner.game(), fosterSpawnPacket(owner.UID, 42, sequence, boss)); err != nil {
+		t.Fatal(err)
+	}
+	roomOutputs(t, peer)
+	if len(r.PVEActors) != 0 {
+		t.Fatal("early boss admitted")
+	}
+	// Groups are concurrent: interleave their lists instead of flattening waves.
+	for index := 0; index < 21; index++ {
+		for group := len(plan.Groups) - 1; group >= 0; group-- {
+			if index >= len(plan.Groups[group].Spawns) {
+				continue
+			}
+			create := fosterSpawnPacket(owner.UID, 42, sequence, plan.Groups[group].Spawns[index])
+			if err = h.battleMessage(owner, owner.game(), create); err != nil {
+				t.Fatal(err)
+			}
+			roomOutputs(t, peer, 8071)
+			sequence++
+			remove := combatPacket(protocol.BattleEventPVEActorRemove, 47, owner.UID, 42, 0)
+			protocol.WriteUint32(remove.Payload, 19, sequence)
+			if err = h.battleMessage(owner, owner.game(), remove); err != nil {
+				t.Fatal(err)
+			}
+			roomOutputs(t, peer, 8071)
+			if !r.stalePVEEvent(owner, 42, sequence+1) {
+				t.Fatal("removed identity accepts events")
+			}
+			sequence++
+			total++
+		}
+	}
+	if total != 23 || r.FosterSpawned[0] != 2 || r.FosterSpawned[1] != 21 || r.Stage != "battle" || len(r.Reports) != 0 {
+		t.Fatal("spawn plan progress or settlement changed")
+	}
+	if err = h.battleMessage(owner, owner.game(), fosterSpawnPacket(owner.UID, 42, sequence, boss)); err != nil {
+		t.Fatal(err)
+	}
+	roomOutputs(t, peer)
+	roomOutputs(t, owner)
+	roomOutputs(t, outsider)
+}

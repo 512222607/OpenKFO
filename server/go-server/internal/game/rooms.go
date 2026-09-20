@@ -45,6 +45,7 @@ type Room struct {
 	PVEBlocks           map[uint32]pveBlock
 	FosterPositions     []byte
 	FosterPlan          *protocol.FosterPlan
+	FosterSpawned       []int
 	NetworkProbe        *roomNetworkProbe
 	TutorialPending     bool
 	Reliable            map[reliableActor]*reliableExchange
@@ -762,6 +763,10 @@ func (hub *Hub) startBattle(room *Room) error {
 	room.Serial = serial
 	room.StageWaves = waves
 	room.FosterPlan = foster
+	room.FosterSpawned = nil
+	if foster != nil {
+		room.FosterSpawned = make([]int, len(foster.Groups))
+	}
 	room.PVEActors = nil
 	room.PVEBlocks = nil
 	room.FosterPositions = nil
