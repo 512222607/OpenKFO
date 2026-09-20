@@ -31,7 +31,7 @@ func TestTitlesTLS(t *testing.T) {
 	}
 	defer store.DB.Close()
 	uid := uint64(time.Now().UnixMicro())
-	a, err := persistence.NewAccount(uid, fmt.Sprintf("tt%d", uid), "test123456")
+	a, err := persistence.NewAccountWithStarterCharacter(uid, fmt.Sprintf("tt%d", uid), "test123456")
 	if err != nil {
 		t.Fatal(err)
 	}

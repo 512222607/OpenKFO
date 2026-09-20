@@ -56,7 +56,7 @@ func TestDesktopAdminTransactions(t *testing.T) {
 		t.Fatal("isolated database required")
 	}
 	uid := uint64(time.Now().UnixMicro())
-	account, err := NewAccount(uid, fmt.Sprintf("adm%d", uid%10000000000000), "admin-test-only")
+	account, err := NewAccountWithStarterCharacter(uid, fmt.Sprintf("adm%d", uid%10000000000000), "admin-test-only")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -31,7 +31,7 @@ func TestExtendedTaskActionsTLS(t *testing.T) {
 	}
 	defer store.DB.Close()
 	uid := uint64(time.Now().UnixMicro())
-	a, e := persistence.NewAccount(uid, fmt.Sprintf("ext%d", uid), "test123456")
+	a, e := persistence.NewAccountWithStarterCharacter(uid, fmt.Sprintf("ext%d", uid), "test123456")
 	if e != nil {
 		t.Fatal(e)
 	}

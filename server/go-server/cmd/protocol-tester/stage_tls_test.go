@@ -56,7 +56,7 @@ func TestStageGateTLS(t *testing.T) {
 	accounts := make([]persistence.Account, 2)
 	uid := uint64(time.Now().UnixMicro())
 	for i := range accounts {
-		a, e := persistence.NewAccount(uid+uint64(i), fmt.Sprintf("sg%d", uid+uint64(i)), "test123456")
+		a, e := persistence.NewAccountWithStarterCharacter(uid+uint64(i), fmt.Sprintf("sg%d", uid+uint64(i)), "test123456")
 		if e != nil {
 			t.Fatal(e)
 		}

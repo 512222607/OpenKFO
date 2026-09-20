@@ -31,7 +31,7 @@ func TestTasksTLS(t *testing.T) {
 	}
 	defer store.DB.Close()
 	uid := uint64(time.Now().UnixMicro())
-	a, err := persistence.NewAccount(uid, fmt.Sprintf("qt%d", uid), "test123456")
+	a, err := persistence.NewAccountWithStarterCharacter(uid, fmt.Sprintf("qt%d", uid), "test123456")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func TestTasksTLS(t *testing.T) {
 			}
 		}
 	}()
-	peer, err := persistence.NewAccount(uid+1, fmt.Sprintf("qt%d", uid+1), "test123456")
+	peer, err := persistence.NewAccountWithStarterCharacter(uid+1, fmt.Sprintf("qt%d", uid+1), "test123456")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -153,14 +153,11 @@ internal sealed class InstanceManager
     internal async Task LaunchAsync(int number, IProgress<string> progress)
     {
         if (number < 1 || number > WindowCount) throw new ArgumentOutOfRangeException(nameof(number));
-        using (var existing = FindGame(number))
-        {
-            if (existing != null) { await PrepareLoginAsync(number, existing, progress); Activate(number); return; }
-        }
-        // Serialize preparation across launcher windows; never stop an existing game.
+        // Serialize update and preparation across launcher windows.
         string stateDirectory = Path.Combine(root, "launcher-components");
         Directory.CreateDirectory(stateDirectory);
         using var preparationLock = new FileStream(Path.Combine(stateDirectory, SharedClient ? "shared.lock" : $"window-{number}.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        await UpdateWeaponsAsync(progress);
         string config = await Task.Run(() => Prepare(number, progress));
         using (var existing = FindGame(number))
         {
@@ -181,6 +178,23 @@ internal sealed class InstanceManager
             if (helper.HasExited && (!SharedClient || helper.ExitCode != 0)) throw new IOException($"网络组件已退出，请查看窗口 {number} 的日志。");
         }
         throw new IOException($"窗口 {number} 启动超时，请查看日志；不要重复点击启动。");
+    }
+
+    private async Task UpdateWeaponsAsync(IProgress<string> progress)
+    {
+        if (Endpoint.IsLoopback || Endpoint.Scheme != "wss") return;
+        progress.Report("正在检查线上武器配置…");
+        using var resource = Assembly.GetExecutingAssembly().GetManifestResourceStream("OpenKFO.Updater.exe") ?? throw new IOException("缺少更新组件。");
+        using var buffer = new MemoryStream(); await resource.CopyToAsync(buffer); var bytes = buffer.ToArray();
+        string folder = Path.Combine(root, "launcher-components", "updater", Hash(bytes)[..16]); Directory.CreateDirectory(folder);
+        string exe = Path.Combine(folder, "OpenKFO.Updater.exe"); if (!File.Exists(exe) || FileHash(exe) != Hash(bytes)) File.WriteAllBytes(exe, bytes);
+        var manifest = new UriBuilder(Endpoint) { Scheme = "https", Path = "/updates/weapons.json", Query = "", Port = Endpoint.IsDefaultPort ? -1 : Endpoint.Port }.Uri;
+        var start = new ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = folder };
+        foreach (var argument in new[] { "--kind", "weapons", "--target", SourceDirectory, "--bridge", Path.Combine(root, "bridge.json"), "--manifest", manifest.AbsoluteUri }) start.ArgumentList.Add(argument);
+        using var process = Process.Start(start) ?? throw new IOException("无法启动更新组件。"); await process.WaitForExitAsync();
+        if (process.ExitCode != 0) throw new IOException("武器更新未完成，请完成更新后再启动游戏。");
+        var current = JsonNode.Parse(File.ReadAllText(Path.Combine(root, "bridge.json")))!.AsObject();
+        baseline["config_hash"] = current["config_hash"]!.GetValue<string>();
     }
 
     private async Task PrepareLoginAsync(int number, Process game, IProgress<string> progress)

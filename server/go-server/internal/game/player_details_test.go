@@ -8,7 +8,7 @@ import (
 )
 
 func TestPlayerDetailsUsesTargetProfileAndOnlyEquippedItems(t *testing.T) {
-	a, err := persistence.NewAccount(10002, "detailstest", "123456")
+	a, err := persistence.NewAccountWithStarterCharacter(10002, "detailstest", "123456")
 	if err != nil {
 		t.Fatal(err)
 	}

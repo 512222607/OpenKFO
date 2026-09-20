@@ -216,7 +216,7 @@ func NewAccount(uid uint64, name, password string) (Account, error) {
 	if uid == 0 || !accountPattern.MatchString(name) || len(password) < 6 || len(password) > 128 {
 		return Account{}, ErrDenied
 	}
-	account := Account{UID: uid, Account: strings.ToLower(name), Nickname: name, Profile: make([]byte, 360), Salt: make([]byte, 16), LegacySalt: make([]byte, 16)}
+	account := Account{UID: uid, Account: strings.ToLower(name), Profile: make([]byte, 360), Salt: make([]byte, 16), LegacySalt: make([]byte, 16)}
 	if _, err := rand.Read(account.Salt); err != nil {
 		return account, err
 	}
@@ -233,6 +233,19 @@ func NewAccount(uid uint64, name, password string) (Account, error) {
 	if err != nil {
 		return account, err
 	}
+	// An authenticated account is not a character. The all-zero profile causes
+	// profileReady to send 1125; only the client's 1150 creates the character.
+	return account, nil
+}
+
+// NewAccountWithStarterCharacter explicitly constructs the historical test
+// fixture. Registration must use NewAccount and the native creation flow.
+func NewAccountWithStarterCharacter(uid uint64, name, password string) (Account, error) {
+	account, err := NewAccount(uid, name, password)
+	if err != nil {
+		return account, err
+	}
+	account.Nickname = name
 	protocol.WriteUint32(account.Profile, 0, 1)
 	copy(account.Profile[4:25], name)
 	account.Profile[122] = 1

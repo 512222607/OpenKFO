@@ -53,7 +53,7 @@ func TestVIPShopPurchaseLocalDatabase(t *testing.T) {
 		if uid == 2 {
 			name = "viprecipient"
 		}
-		a, e := NewAccount(uid, name, "test123456")
+		a, e := NewAccountWithStarterCharacter(uid, name, "test123456")
 		if e != nil {
 			t.Fatal(e)
 		}

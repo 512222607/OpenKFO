@@ -9,11 +9,13 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"kungfu.local/server/internal/releases"
 	"kungfu.local/server/internal/tunnel"
 )
 
@@ -47,6 +49,7 @@ func (server *Server) Handler() http.Handler {
 		io.WriteString(writer, `{"service":"kungfu-go","status":"ok"}`)
 	})
 	mux.HandleFunc("GET /kk/tunnel", server.accept)
+	mux.Handle("GET /updates/", releases.Handler(os.Getenv("OPENKFO_UPDATES_DIR")))
 	return mux
 }
 
@@ -165,7 +168,7 @@ func (server *Server) serveConnection(connection *tls.Conn) {
 		deny("busy")
 		return
 	}
-	account, err := server.Hub.Store.Authenticate(auth.Account, auth.Password)
+	account, err := server.Hub.Store.AuthenticateOrRegister(auth.Account, auth.Password)
 	<-server.hashing
 	auth.Password = ""
 	if err != nil {

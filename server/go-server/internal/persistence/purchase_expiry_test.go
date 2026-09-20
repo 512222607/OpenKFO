@@ -26,7 +26,7 @@ func TestPurchaseExpiryLocalDatabase(t *testing.T) {
 	}
 	defer s.DB.Close()
 	uid := uint64(time.Now().UnixMicro())
-	a, err := NewAccount(uid, fmt.Sprintf("pe%d", uid), "test123456")
+	a, err := NewAccountWithStarterCharacter(uid, fmt.Sprintf("pe%d", uid), "test123456")
 	if err != nil {
 		t.Fatal(err)
 	}

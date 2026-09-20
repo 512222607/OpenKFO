@@ -16,6 +16,7 @@ import (
 )
 
 type Request struct {
+	Notes            string                          `json:"notes,omitempty"`
 	Definition       *persistence.ItemDefinition     `json:"definition,omitempty"`
 	StageUnlocks     *persistence.StagePlayerUnlocks `json:"stage_unlocks,omitempty"`
 	WeaponSettings   *persistence.WeaponSettings     `json:"weapon_settings,omitempty"`
@@ -259,7 +260,14 @@ func (admin *Admin) Call(request Request) (any, error) {
 		return shopImages(client, items, request.Keys)
 	}
 	if strings.HasPrefix(request.Operation, "weapon_") {
-		return weaponHandle(request, client, items, filepath.Join(admin.Root, "runtime-local", "weapon-config"))
+		result, err := weaponHandle(request, client, items, filepath.Join(admin.Root, "runtime-local", "weapon-config"))
+		if err != nil {
+			return nil, err
+		}
+		if release, ok := result.(weaponRelease); ok {
+			return admin.publishWeapon(release)
+		}
+		return result, nil
 	}
 	if request.Operation == "definition_from_item" {
 		for _, item := range items {

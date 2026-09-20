@@ -67,7 +67,40 @@ static LRESULT CALLBACK editProcedure(HWND window, UINT message, WPARAM wparam, 
     if (message == WM_NCDESTROY) RemoveWindowSubclass(window, editProcedure, SkinId);
     return DefSubclassProc(window, message, wparam, lparam);
 }
+static LRESULT CALLBACK updateProcedure(HWND window, UINT message, WPARAM wparam, LPARAM lparam) {
+    if (message == WM_SIZE) { MoveWindow(GetDlgItem(window, 1), 14, 14, LOWORD(lparam) - 28, HIWORD(lparam) - 28, TRUE); return 0; }
+    return DefWindowProcW(window, message, wparam, lparam);
+}
+static void showUpdates(HWND owner, const wchar_t* text) {
+    auto instance = GetModuleHandleW(nullptr);
+    WNDCLASSW type = {}; type.hInstance = instance; type.lpfnWndProc = updateProcedure;
+    type.lpszClassName = L"OpenKFOWeaponUpdates"; type.hCursor = LoadCursorW(nullptr, MAKEINTRESOURCEW(32512));
+    type.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1); RegisterClassW(&type);
+    HWND window = CreateWindowExW(WS_EX_TOOLWINDOW, type.lpszClassName, L"武器更新内容",
+        WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 680, 480, owner, nullptr, instance, nullptr);
+    HWND content = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", text,
+        WS_CHILD | WS_VISIBLE | WS_VSCROLL | ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL,
+        14, 14, 630, 400, window, (HMENU)1, instance, nullptr);
+    SendMessageW(content, WM_SETFONT, (WPARAM)textFont, TRUE);
+    RECT rect; GetClientRect(window, &rect); MoveWindow(content, 14, 14, rect.right - 28, rect.bottom - 28, TRUE);
+    ShowWindow(window, SW_SHOW); SetForegroundWindow(window);
+}
 static LRESULT CALLBACK loginProcedure(HWND window, UINT message, WPARAM wparam, LPARAM lparam, UINT_PTR, DWORD_PTR) {
+    if (message == WM_COMMAND && LOWORD(wparam) == 0x4b55) {
+        wchar_t path[32768]; GetModuleFileNameW(nullptr, path, 32768);
+        wchar_t* end = wcsrchr(path, L'\\'); if (end) wcscpy_s(end + 1, 32768 - (end + 1 - path), L"weapon-update-notes.txt");
+        HANDLE file = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        wchar_t text[32769] = L"当前客户端没有武器更新说明。";
+        if (file != INVALID_HANDLE_VALUE) {
+            char bytes[32768]; DWORD length = 0;
+            if (ReadFile(file, bytes, sizeof(bytes), &length, nullptr) && length) {
+                int count = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, bytes, (int)length, text, 32768);
+                if (count > 0) text[count] = 0;
+            }
+            CloseHandle(file);
+        }
+        showUpdates(window, text); return 0;
+    }
     if (message == WM_ERASEBKGND) return 1;
     if (message == WM_PAINT) {
         PAINTSTRUCT state; HDC dc = BeginPaint(window, &state); paint(window, dc); EndPaint(window, &state); return 0;
@@ -131,6 +164,9 @@ extern "C" __declspec(dllexport) BOOL __stdcall SkinLoginWindow(HWND window) {
         SetWindowPos(buttons[index], nullptr, 244, 281 + index * 52, 334, index ? 30 : 44, SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
     }
     SetWindowTextW(login, L"登录游戏"); SetWindowTextW(cancel, L"返回");
+    HWND updates = CreateWindowExW(0, L"BUTTON", L"武器更新内容", WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+        245, 379, 334, 28, window, (HMENU)0x4b55, GetModuleHandleW(nullptr), nullptr);
+    SendMessageW(updates, WM_SETFONT, (WPARAM)textFont, TRUE);
     RedrawWindow(window, nullptr, nullptr, RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_FRAME);
     return TRUE;
 }

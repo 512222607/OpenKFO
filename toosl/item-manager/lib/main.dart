@@ -69,6 +69,29 @@ class Backend {
   }
 
   Future<dynamic> call(Map<String, dynamic> input) async {
+    if (input['operation'] == 'gm_update') {
+      if (!Platform.isWindows) throw Exception('独立更新 EXE 适用于 Windows。');
+      final directory = File(Platform.resolvedExecutable).parent.path;
+      final config = jsonDecode(
+        await File('$directory/updater-settings.json').readAsString(),
+      );
+      final url = Uri.parse(config['manifest']);
+      if (url.scheme != 'https' || url.userInfo.isNotEmpty) {
+        throw Exception('更新地址必须使用 HTTPS。');
+      }
+      final temporary = await Directory.systemTemp.createTemp(
+        'OpenKFOUpdater-',
+      );
+      final updater = await File('$directory/OpenKFO.Updater.exe')
+          .copy('${temporary.path}/OpenKFO.Updater.exe');
+      await Process.start(
+        updater.path,
+        ['--kind', 'gm', '--target', directory, '--manifest', url.toString()],
+        workingDirectory: directory,
+        mode: ProcessStartMode.detached,
+      );
+      return {'message': '更新程序已打开'};
+    }
     resolvePaths();
     if (root == null) throw Exception('找不到服务器目录，请勿单独移动 EXE。');
     final executable = File(Platform.resolvedExecutable).parent;
@@ -502,6 +525,27 @@ class _ManagerState extends State<Manager> {
                         style: TextStyle(color: Color(0xFF9AB1C1)),
                       ),
                     ),
+                    if (!widget.onlineOnly)
+                      ListTile(
+                        leading: const Icon(
+                          Icons.system_update_alt,
+                          color: Colors.white,
+                        ),
+                        title: const Text(
+                          '检查 GM 更新',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                        onTap: () async {
+                          try {
+                            await widget.api({'operation': 'gm_update'});
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context)
+                                  .showSnackBar(SnackBar(content: Text('$e')));
+                            }
+                          }
+                        },
+                      ),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       child: DropdownButtonFormField<String>(
@@ -823,7 +867,7 @@ class _ManagerState extends State<Manager> {
                       child: Text(
                         widget.onlineOnly
                             ? '线上管理 · HTTPS'
-                            : '$environmentLabel · MySQL\n武器配置仅修改本机客户端',
+                            : '$environmentLabel · MySQL\n武器方案可应用本机或发布线上',
                         style: TextStyle(
                           color: Color(0xFF9AB1C1),
                           height: 1.8,

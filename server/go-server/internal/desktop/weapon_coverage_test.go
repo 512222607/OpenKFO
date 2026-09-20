@@ -2,6 +2,7 @@ package desktop
 
 import (
 	"bytes"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -10,12 +11,18 @@ import (
 )
 
 func TestWeaponActionCoverage(t *testing.T) {
-	root := installedRoot(t)
-	items, err := catalog(filepath.Join(root, "runtime-local/client"), false)
+	client := os.Getenv("OPENKFO_WEAPON_TEST_CLIENT")
+	source := filepath.Join(client, "Data/config.spf2")
+	if client == "" {
+		root := installedRoot(t)
+		client = filepath.Join(root, "runtime-local/client")
+		source = filepath.Join(root, "runtime-local/weapon-config/original.spf2")
+	}
+	items, err := catalog(client, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, err := loadArchive(filepath.Join(root, "runtime-local/weapon-config/original.spf2"))
+	a, err := loadArchive(source)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,8 +70,8 @@ func TestWeaponActionCoverage(t *testing.T) {
 			count := 0
 			editable := 0
 			for _, stage := range w.Stages {
-				if stage.State == "2031" && stage.Label != "未收录按键 · 状态 2031" {
-					t.Fatalf("missing explicit unmapped-input label: %s", stage.Label)
+				if stage.State == "2031" && (!strings.Contains(stage.Label, "跑动普通攻击") || !strings.Contains(stage.Label, "非按键")) {
+					t.Fatalf("missing animation description: %s", stage.Label)
 				}
 				if strings.Contains(stage.Label, "客户端未标注") {
 					t.Fatal(stage.Label)

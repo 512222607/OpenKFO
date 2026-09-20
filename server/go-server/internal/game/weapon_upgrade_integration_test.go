@@ -32,7 +32,7 @@ func TestWeaponUpgradeProtocolLocalDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	uid := uint64(time.Now().UnixMicro())
-	a, err := persistence.NewAccount(uid, fmt.Sprintf("wg%d", uid), "test123456")
+	a, err := persistence.NewAccountWithStarterCharacter(uid, fmt.Sprintf("wg%d", uid), "test123456")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -95,6 +95,8 @@ curl http://127.0.0.1:19090/health
 
 ## 账号管理
 
+游戏登录支持自动注册：账号不存在时，用本次登录凭据创建空账号，随后进入取名与外观选择；账号已存在时仍校验原密码，不会覆盖密码或重置角色。账号为 3–20 位英文字母或数字，不区分大小写。新号首次输错账号名也会创建另一个账号，请核对输入。
+
 同样设置 `KK_MYSQL_DSN`，准备仅供管理员读取的 `account.private.json`，包含 `UID`、`Account`、`Password`。密码为 6–128 字节；文件中使用自己的测试账号。
 
 Linux/macOS：
@@ -111,7 +113,7 @@ kungfu-server.exe -operation create-account < account.private.json
 kungfu-server.exe -operation reset-password < account.private.json
 ```
 
-两条命令按需要选一条。重置密码不修改角色和道具。不要提交该私密 JSON；用完后妥善移除。其他管理操作见 `cmd/server/main.go`。
+两条命令按需要选一条。创建账号默认只生成登录凭据，首次登录由玩家取名、选择外观，再提交创建角色；无需传入 `create_character`。服务器配置必须包含有效的 `character_choices` 外观候选表。重置密码不修改角色和道具。不要提交该私密 JSON；用完后妥善移除。其他管理操作见 `cmd/server/main.go`。
 
 ## 协议日志
 

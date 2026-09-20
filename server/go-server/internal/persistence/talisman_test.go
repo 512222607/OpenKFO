@@ -26,7 +26,7 @@ func TestTalismanEquipmentLocalDatabase(t *testing.T) {
 	}
 	defer s.DB.Close()
 	uid := uint64(time.Now().UnixMicro())
-	a, e := NewAccount(uid, fmt.Sprintf("te%d", uid), "test123456")
+	a, e := NewAccountWithStarterCharacter(uid, fmt.Sprintf("te%d", uid), "test123456")
 	if e != nil {
 		t.Fatal(e)
 	}

@@ -13,6 +13,7 @@
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="../../dist/updater/OpenKFO.Updater.exe" LogicalName="OpenKFO.Updater.exe" />
     <EmbeddedResource Include="../../dist/launcher-components/OnlineBridge.exe" LogicalName="OnlineBridge.exe" />
     <EmbeddedResource Include="../../dist/launcher-components/LoginSkin.dll" LogicalName="LoginSkin.dll" />
     <EmbeddedResource Include="../../dist/launcher-components/LoginSkinHost.exe" LogicalName="LoginSkinHost.exe" />

@@ -28,7 +28,7 @@ func TestGiftLocalDatabase(t *testing.T) {
 	defer s.DB.Close()
 	uid := uint64(time.Now().UnixMicro())
 	for i := uint64(0); i < 2; i++ {
-		a, e := NewAccount(uid+i, fmt.Sprintf("gt%d", uid+i), "test123456")
+		a, e := NewAccountWithStarterCharacter(uid+i, fmt.Sprintf("gt%d", uid+i), "test123456")
 		if e != nil {
 			t.Fatal(e)
 		}

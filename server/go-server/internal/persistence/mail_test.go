@@ -27,7 +27,7 @@ func TestMailboxLocalDatabase(t *testing.T) {
 	}
 	defer s.DB.Close()
 	uid := uint64(time.Now().UnixMilli())
-	a, err := NewAccount(uid, fmt.Sprintf("ml%d", uid), "test123456")
+	a, err := NewAccountWithStarterCharacter(uid, fmt.Sprintf("ml%d", uid), "test123456")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -54,6 +54,11 @@ int wmain(int count, wchar_t** args) {
     MSG message;
     while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) { TranslateMessage(&message); DispatchMessageW(&message); }
     if (loginClicks != 1) return 6;
+    if (!GetDlgItem(dialog, 0x4b55)) return 8;
+    SendMessageW(dialog, WM_COMMAND, MAKEWPARAM(0x4b55, BN_CLICKED), (LPARAM)GetDlgItem(dialog, 0x4b55));
+    HWND updates = FindWindowW(L"OpenKFOWeaponUpdates", L"武器更新内容");
+    if (!updates || !(GetWindowLongW(GetDlgItem(updates, 1), GWL_STYLE) & ES_READONLY)) return 9;
+    DestroyWindow(updates);
     // Preview contains no account examples or password values.
     SetWindowTextW(account, L""); SetWindowTextW(password, L"");
     if (!savePreview(dialog, args[2])) return 7;

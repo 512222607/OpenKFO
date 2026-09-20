@@ -147,6 +147,82 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
     }
   }
 
+  Future<void> publish() async {
+    if (!(form.currentState?.validate() ?? false)) return;
+    var notes = '${weapon!['name']}：';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('更新到线上'),
+        content: SizedBox(
+          width: 560,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                '发布全部已保存的武器方案及当前编辑内容。将重启线上服务器，在线玩家会断开；玩家下次启动游戏时下载更新。不会覆盖本地客户端。',
+              ),
+              const SizedBox(height: 14),
+              TextFormField(
+                initialValue: notes,
+                onChanged: (value) => notes = value,
+                minLines: 4,
+                maxLines: 8,
+                maxLength: 2000,
+                decoration: const InputDecoration(
+                  labelText: '给玩家看的更新说明（武器名称、改动内容）',
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (notes.trim().isNotEmpty) Navigator.pop(context, true);
+            },
+            child: const Text('发布到线上'),
+          ),
+        ],
+      ),
+    );
+    final text = notes.trim();
+    if (confirmed != true || !mounted) return;
+    setState(() {
+      busy = true;
+      failed = false;
+      message = '正在生成、上传并启用线上配置，请勿重复发布…';
+    });
+    try {
+      final result = await widget.api({
+        'operation': 'weapon_publish',
+        'environment': 'online',
+        'weapon': weapon!['id'],
+        'rules': rules,
+        'revision': data!['revision'],
+        'notes': text,
+      });
+      if (!mounted) return;
+      setState(() {
+        message = result['message'];
+        dirty = false;
+      });
+      await load();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          busy = false;
+          failed = true;
+          message = '$e';
+        });
+      }
+    }
+  }
+
   List<Widget> hitEditors(
     dynamic stage,
     Map<String, dynamic> rule,
@@ -271,12 +347,16 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              stage['label'] ?? '第 ${rule['stage']} 下 C',
+              stage['label'] ?? '动作说明缺失（按键待核实）',
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
             ),
-            Text(
-              '状态 ${stage['state'] ?? rule['stage']} · 动作 ${stage['action']} · ${stage['property_ids'].length} 个命中属性',
-              style: Theme.of(context).textTheme.bodySmall,
+            ExpansionTile(
+              title: const Text('技术详情（状态、动作编号）'),
+              children: [
+                SelectableText(
+                  '状态 ${stage['state'] ?? rule['stage']} · 动作 ${stage['action']} · ${stage['property_ids'].length} 个命中属性',
+                ),
+              ],
             ),
             if (stage['supported'] != true)
               Text(
@@ -514,11 +594,11 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                                 ),
                                 const SizedBox(height: 8),
                                 const Text(
-                                  '展开连招，选择动作段设置伤害和 BUFF。同一个动作被多条连招引用时，共用一份配置。\n持续时间单位为毫秒，3000 = 3 秒；多次命中可能重复施加。',
+                                  '展开按键路线，选择动作段设置伤害和 BUFF。同一个动作被多条连招引用时，共用一份配置。\n默认操作：C 普通攻击 · X 特殊攻击 · V 跳跃 · Z 瞄准。连招按键以各武器提示为准。',
                                 ),
                                 if ((weapon!['combos'] as List? ?? []).isEmpty)
                                   const Text(
-                                    '当前配置包没有该武器的独立按键提示；动作仍保留在“其他动作”，不会根据动画名称猜测按键。',
+                                    '该武器没有独立连招提示，下方按动画说明列出全部动作；说明可能来自共享动画，不代表完整按键路线。',
                                   ),
                                 if (weapon!['id'] == 253013)
                                   Align(
@@ -560,18 +640,20 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                                             ? <dynamic>[]
                                             : combo['nodes'] as List;
                                         final title = other
-                                            ? '其他动作（${otherStages.length}）'
+                                            ? '动作说明（${otherStages.length}）'
                                             : nodes.isEmpty
                                             ? '按键提示不完整'
                                             : '${nodes.last['keys']}';
                                         return ExpansionTile(
+                                          initiallyExpanded:
+                                              other && combos.isEmpty,
                                           key: ValueKey(
                                             '${weapon!['id']}-combo-$group',
                                           ),
                                           title: Text(title),
                                           subtitle: Text(
                                             other
-                                                ? '没有连招按键映射，按状态编号查看'
+                                                ? '按动画说明选择；编号在技术详情中'
                                                 : '${combo['name']} · ${nodes.length} 个动作段',
                                           ),
                                           children: [
@@ -589,7 +671,7 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                                                     ? otherStages[n]
                                                     : stageIndices['${nodes[n]['state']}'],
                                                 other
-                                                    ? '状态 ${weapon!['stages'][otherStages[n]]['state']}'
+                                                    ? '${weapon!['stages'][otherStages[n]]['label'] ?? '动作说明缺失（按键待核实）'}'
                                                     : '第 ${n + 1} 段 · ${nodes[n]['keys']}',
                                               ),
                                           ],
@@ -623,6 +705,13 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                                           ? null
                                           : () => execute('weapon_restore'),
                                       child: const Text('恢复原效果'),
+                                    ),
+                                    FilledButton.tonalIcon(
+                                      onPressed: busy ? null : publish,
+                                      icon: const Icon(
+                                        Icons.cloud_upload_outlined,
+                                      ),
+                                      label: const Text('更新到线上'),
                                     ),
                                     if (dirty)
                                       const Text(

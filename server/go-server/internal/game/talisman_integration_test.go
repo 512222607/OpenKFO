@@ -31,7 +31,7 @@ func TestTalismanRepairProtocolLocalDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	uid := uint64(time.Now().UnixMicro())
-	a, err := persistence.NewAccount(uid, fmt.Sprintf("tr%d", uid), "test123456")
+	a, err := persistence.NewAccountWithStarterCharacter(uid, fmt.Sprintf("tr%d", uid), "test123456")
 	if err != nil {
 		t.Fatal(err)
 	}

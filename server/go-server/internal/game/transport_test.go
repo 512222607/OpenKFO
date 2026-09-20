@@ -41,7 +41,7 @@ func testAuthenticatedTransport(t *testing.T, direct bool) {
 		t.Fatal("isolated test database required")
 	}
 	uid := uint64(time.Now().UnixNano() / 1000)
-	account, err := persistence.NewAccount(uid, "ws"+hex.EncodeToString(protocol.Uint64Bytes(uid))[:14], "transport123")
+	account, err := persistence.NewAccountWithStarterCharacter(uid, "ws"+hex.EncodeToString(protocol.Uint64Bytes(uid))[:14], "transport123")
 	if err != nil {
 		t.Fatal(err)
 	}

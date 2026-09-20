@@ -549,7 +549,12 @@ func inspect(a *archive, items []Item) (*inspection, error) {
 			}
 			label := strings.Join(labels, " / ")
 			if label == "" {
-				label = "未收录按键 · 状态 " + state
+				label = "动作说明缺失（按键待核实）"
+				if len(candidates) == 1 {
+					if description := actionDescription(candidates[0].node); description != "" {
+						label = description + "（动画说明，非按键）"
+					}
+				}
 			}
 
 			weapon.Stages = append(weapon.Stages, Stage{number, state, label, action, refIDs, hits, reason == "", reason})
@@ -942,6 +947,46 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 		return nil, err
 	}
 	key := strconv.Itoa(weapon.ID)
+	if request.Operation == "weapon_publish" {
+		if strings.TrimSpace(request.Notes) == "" || len(request.Notes) > 8000 {
+			return nil, fmt.Errorf("请填写更新说明（最多 8000 字节）")
+		}
+		// Publish saved plans plus this editor, without overwriting local resources.
+		plans := make(map[string][]Rule)
+		for id, rules := range state.Applied {
+			plans[id] = rules
+		}
+		for id, rules := range state.Drafts {
+			plans[id] = rules
+		}
+		plans[key] = rules
+		data, err := render(source, items, plans)
+		if err != nil {
+			return nil, err
+		}
+		check, err := parseArchive(data)
+		if err != nil {
+			return nil, err
+		}
+		if err = check.verify(); err != nil {
+			return nil, err
+		}
+		names := []string{}
+		for _, entry := range info.weapons {
+			if _, exists := plans[strconv.Itoa(entry.ID)]; exists {
+				names = append(names, entry.Name)
+			}
+		}
+		state.Drafts[key] = rules
+		encoded, err := json.MarshalIndent(state, "", "  ")
+		if err != nil {
+			return nil, err
+		}
+		if err = atomicWrite(statePath, encoded); err != nil {
+			return nil, err
+		}
+		return weaponRelease{Data: data, Notes: "包含武器：" + strings.Join(names, "、") + "\n\n" + request.Notes}, nil
+	}
 	backup := ""
 	message := "方案已保存，尚未应用到游戏"
 	switch request.Operation {

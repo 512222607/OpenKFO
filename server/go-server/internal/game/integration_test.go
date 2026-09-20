@@ -30,11 +30,11 @@ func TestMySQLTransactionsAndTwoPlayers(t *testing.T) {
 		t.Fatal("integration requires kungfu_game_test")
 	}
 	uid := uint64(time.Now().UnixMilli())
-	first, err := persistence.NewAccount(uid, "test"+hex.EncodeToString(protocol.Uint64Bytes(uid))[:12], "testsecret123")
+	first, err := persistence.NewAccountWithStarterCharacter(uid, "test"+hex.EncodeToString(protocol.Uint64Bytes(uid))[:12], "testsecret123")
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := persistence.NewAccount(uid+1, "peer"+hex.EncodeToString(protocol.Uint64Bytes(uid))[:12], "testsecret456")
+	second, err := persistence.NewAccountWithStarterCharacter(uid+1, "peer"+hex.EncodeToString(protocol.Uint64Bytes(uid))[:12], "testsecret456")
 	if err != nil {
 		t.Fatal(err)
 	}

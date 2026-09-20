@@ -60,7 +60,7 @@ func TestGrowthSettlementMySQL(t *testing.T) {
 		t.Fatal("isolated database required")
 	}
 	uid := uint64(time.Now().UnixMilli())
-	a, err := NewAccount(uid, fmt.Sprintf("gr%d", uid), "test123456")
+	a, err := NewAccountWithStarterCharacter(uid, fmt.Sprintf("gr%d", uid), "test123456")
 	if err != nil {
 		t.Fatal(err)
 	}

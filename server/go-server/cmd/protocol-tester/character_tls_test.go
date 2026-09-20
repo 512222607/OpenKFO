@@ -38,18 +38,15 @@ func TestCharacterCreationTLS(t *testing.T) {
 	}
 	uid := uint64(time.Now().UnixMicro())
 	name := fmt.Sprintf("ct%d", uid)
-	a, err := persistence.NewAccount(uid, name, "test123456")
-	if err != nil {
-		t.Fatal(err)
-	}
-	a.Profile = make([]byte, 360)
-	a.Inventory = nil
-	if err := store.Create(a); err != nil {
-		t.Fatal(err)
-	}
+	// Do not seed an account: the actual TLS login must register it and then
+	// enter the native naming flow in this same connection.
 	defer func() {
+		var owned uint64
+		if err := store.DB.QueryRow("SELECT uid FROM accounts WHERE account=?", name).Scan(&owned); err != nil {
+			return
+		}
 		for _, table := range []string{"character_creations", "inventory", "accounts"} {
-			if _, err := store.DB.Exec("DELETE FROM "+table+" WHERE uid=?", uid); err != nil {
+			if _, err := store.DB.Exec("DELETE FROM "+table+" WHERE uid=?", owned); err != nil {
 				t.Error(err)
 			}
 		}
@@ -83,6 +80,9 @@ func TestCharacterCreationTLS(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer c.conn.Close()
+	if err := store.DB.QueryRow("SELECT uid FROM accounts WHERE account=?", name).Scan(&uid); err != nil {
+		t.Fatal(err)
+	}
 	// A ping round-trip confirms the previous 1156 was accepted, not just sent.
 	if err := c.send(tunnel.Frame{Op: "ping"}); err != nil {
 		t.Fatal(err)
@@ -99,7 +99,7 @@ func TestCharacterCreationTLS(t *testing.T) {
 		t.Fatal("persisted character differs")
 	}
 	// Exercise the actual 2250 route and DB summaries with a second TLS player.
-	peerAccount, err := persistence.NewAccount(uid+1, fmt.Sprintf("cp%d", uid), "test123456")
+	peerAccount, err := persistence.NewAccountWithStarterCharacter(uid+1, fmt.Sprintf("cp%d", uid), "test123456")
 	if err != nil {
 		t.Fatal(err)
 	}

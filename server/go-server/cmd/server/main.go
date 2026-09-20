@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"kungfu.local/server/internal/releases"
 	"log"
 	"net"
 	"net/http"
@@ -62,7 +63,6 @@ func main() {
 		var request struct {
 			UID               uint64
 			Account, Password string
-			CreateCharacter   bool `json:"create_character"`
 		}
 		if err = input.Decode(&request); err == nil {
 			if *operation == "reset-password" {
@@ -72,10 +72,6 @@ func main() {
 			var account persistence.Account
 			account, err = persistence.NewAccount(request.UID, request.Account, request.Password)
 			if err == nil {
-				if request.CreateCharacter {
-					account.Profile = make([]byte, 360)
-					account.Inventory = nil
-				}
 				err = store.Create(account)
 			}
 		}
@@ -113,6 +109,16 @@ func main() {
 		}
 		if err = config.ValidateLobbies(); err != nil {
 			log.Fatal(err)
+		}
+		if _, err = persistence.CharacterOptions(config.CharacterChoices); err != nil {
+			log.Fatal("character_choices must contain valid native character creation options: ", err)
+		}
+		if dir := os.Getenv("OPENKFO_UPDATES_DIR"); dir != "" {
+			if release, loadErr := releases.Load(dir, "weapons"); loadErr == nil {
+				config.ConfigHash = release.ConfigHash
+			} else if !os.IsNotExist(loadErr) {
+				log.Fatal(loadErr)
+			}
 		}
 		if err = config.ValidateWeaponLevels(); err != nil {
 			log.Fatal(err)

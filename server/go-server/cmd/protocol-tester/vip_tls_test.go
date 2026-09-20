@@ -64,7 +64,7 @@ func testVIPTLS(t *testing.T, discount bool) {
 		exec("INSERT INTO offers VALUES(7,0,0,?,?,TRUE)", catalog, item)
 	}
 	uid := uint64(time.Now().UnixMicro())
-	a, err := persistence.NewAccount(uid, fmt.Sprintf("vt%d", uid), "test123456")
+	a, err := persistence.NewAccountWithStarterCharacter(uid, fmt.Sprintf("vt%d", uid), "test123456")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -30,8 +30,6 @@ func TestNativeCharacterCreationWithLocalDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a.Profile = make([]byte, 360)
-	a.Inventory = nil
 	if err := store.Create(a); err != nil {
 		t.Fatal(err)
 	}
