@@ -41,3 +41,22 @@ func TestEnvironmentIsolation(t *testing.T) {
 		t.Fatal("online request not routed explicitly")
 	}
 }
+
+func TestLocalDatabaseName(t *testing.T) {
+	for _, tc := range []struct {
+		dsn, database string
+		valid         bool
+	}{
+		{"user@tcp(127.0.0.1:3306)/kungfu_game", "kungfu_game", true},
+		{"user@tcp(localhost:3306)/kungfu_game", "kungfu_game", true},
+		{"user@tcp(127.0.0.1:13316)/openkfo_debug_test", "openkfo_debug_test", true},
+		{"user@tcp(127.0.0.1:3306)/", "", false},
+		{"user@tcp(127.0.0.1:3306)/kungfu_game", "another", false},
+		{"user@tcp(example.com:3306)/kungfu_game", "kungfu_game", false},
+	} {
+		_, err := localDatabaseDSN(tc.dsn, tc.database)
+		if (err == nil) != tc.valid {
+			t.Errorf("DSN %q: valid=%v, error=%v", tc.dsn, tc.valid, err)
+		}
+	}
+}

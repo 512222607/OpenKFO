@@ -51,78 +51,82 @@ func prepareLocalConsole() (func(), error) {
 	if err != nil || db.Net != "tcp" || host != "127.0.0.1" || db.DBName == "" || db.DBName != settings.Database {
 		return noop, fmt.Errorf("debug DSN must use a loopback TCP address and the configured independent database")
 	}
-	sshPath := settings.SSHConfig
-	if !filepath.IsAbs(sshPath) {
-		sshPath = filepath.Join(root, sshPath)
-	}
-	var remote struct {
-		Host, User, Key string
-		Port            int
-	}
-	if err = readJSON(sshPath, &remote); err != nil {
-		return noop, err
-	}
-	if !filepath.IsAbs(remote.Key) {
-		remote.Key = filepath.Join(filepath.Dir(sshPath), remote.Key)
-	}
-	key, err := os.ReadFile(remote.Key)
-	if err != nil {
-		return noop, err
-	}
-	signer, err := ssh.ParsePrivateKey(key)
-	if err != nil {
-		return noop, fmt.Errorf("cannot load SSH private key: %w", err)
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return noop, err
-	}
-	verifyHost, err := knownhosts.New(filepath.Join(home, ".ssh", "known_hosts"))
-	if err != nil {
-		return noop, err
-	}
-	listener, err := net.Listen("tcp", db.Addr)
-	if err != nil {
-		return noop, fmt.Errorf("database tunnel port is in use: %w", err)
-	}
-	address := net.JoinHostPort(remote.Host, strconv.Itoa(remote.Port))
-	fmt.Println("LOCAL DEBUG SERVER | connecting independent database:", settings.Database)
-	raw, err := net.DialTimeout("tcp", address, 10*time.Second)
-	if err != nil {
-		listener.Close()
-		return noop, err
-	}
-	raw.SetDeadline(time.Now().Add(15 * time.Second))
-	connection, channels, requests, err := ssh.NewClientConn(raw, address, &ssh.ClientConfig{
-		User: remote.User, Auth: []ssh.AuthMethod{ssh.PublicKeys(signer)}, HostKeyCallback: verifyHost,
-	})
-	if err != nil {
-		raw.Close()
-		listener.Close()
-		return noop, err
-	}
-	raw.SetDeadline(time.Time{})
-	client := ssh.NewClient(connection, channels, requests)
-	cleanup := func() { listener.Close(); client.Close() }
-	go func() {
-		for {
-			local, err := listener.Accept()
-			if err != nil {
-				return
-			}
-			go func() {
-				defer local.Close()
-				remote, err := client.Dial("tcp", "127.0.0.1:3306")
+	cleanup := noop
+	// A local MySQL instance needs no SSH tunnel.
+	if settings.SSHConfig != "" {
+		sshPath := settings.SSHConfig
+		if !filepath.IsAbs(sshPath) {
+			sshPath = filepath.Join(root, sshPath)
+		}
+		var remote struct {
+			Host, User, Key string
+			Port            int
+		}
+		if err = readJSON(sshPath, &remote); err != nil {
+			return noop, err
+		}
+		if !filepath.IsAbs(remote.Key) {
+			remote.Key = filepath.Join(filepath.Dir(sshPath), remote.Key)
+		}
+		key, err := os.ReadFile(remote.Key)
+		if err != nil {
+			return noop, err
+		}
+		signer, err := ssh.ParsePrivateKey(key)
+		if err != nil {
+			return noop, fmt.Errorf("cannot load SSH private key: %w", err)
+		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return noop, err
+		}
+		verifyHost, err := knownhosts.New(filepath.Join(home, ".ssh", "known_hosts"))
+		if err != nil {
+			return noop, err
+		}
+		listener, err := net.Listen("tcp", db.Addr)
+		if err != nil {
+			return noop, fmt.Errorf("database tunnel port is in use: %w", err)
+		}
+		address := net.JoinHostPort(remote.Host, strconv.Itoa(remote.Port))
+		fmt.Println("LOCAL DEBUG SERVER | connecting independent database:", settings.Database)
+		raw, err := net.DialTimeout("tcp", address, 10*time.Second)
+		if err != nil {
+			listener.Close()
+			return noop, err
+		}
+		raw.SetDeadline(time.Now().Add(15 * time.Second))
+		connection, channels, requests, err := ssh.NewClientConn(raw, address, &ssh.ClientConfig{
+			User: remote.User, Auth: []ssh.AuthMethod{ssh.PublicKeys(signer)}, HostKeyCallback: verifyHost,
+		})
+		if err != nil {
+			raw.Close()
+			listener.Close()
+			return noop, err
+		}
+		raw.SetDeadline(time.Time{})
+		client := ssh.NewClient(connection, channels, requests)
+		cleanup = func() { listener.Close(); client.Close() }
+		go func() {
+			for {
+				local, err := listener.Accept()
 				if err != nil {
-					fmt.Fprintln(os.Stderr, "Database tunnel connection failed:", err)
 					return
 				}
-				defer remote.Close()
-				go func() { io.Copy(remote, local); remote.Close() }()
-				io.Copy(local, remote)
-			}()
-		}
-	}()
+				go func() {
+					defer local.Close()
+					remote, err := client.Dial("tcp", "127.0.0.1:3306")
+					if err != nil {
+						fmt.Fprintln(os.Stderr, "Database tunnel connection failed:", err)
+						return
+					}
+					defer remote.Close()
+					go func() { io.Copy(remote, local); remote.Close() }()
+					io.Copy(local, remote)
+				}()
+			}
+		}()
+	}
 	logs := filepath.Join(root, "logs")
 	if err = os.MkdirAll(logs, 0700); err != nil {
 		cleanup()

@@ -6,7 +6,7 @@ Flutter GM 管理界面：Windows 完整版包含本地/线上管理及本机武
 
 “战斗奖励”分别设置胜利、失败、平局的经验和金币，0 表示不发放，范围 0–1000000。读取失败不能保存；配置版本冲突必须重新读取。保存至对应 MySQL 的 `battle_reward_rules` 表，新版 Go 服务器在下一次结算读取，不需要重启；历史对局不补发。首次启动新版服务器仅在数据库没有配置时导入 `config.json` 的 `settlement`，以后 GM 配置优先。升级默认关闭，填写曲线后可启用；升级礼包、新手引导奖励及战斗武器掉落均需在 GM 中单独配置。
 
-本地模式连接回环地址的 `openkfo_debug_` 独立测试库；线上模式使用 SSH。两种模式的配置见下文，连接失败不会自动切换环境。
+本地模式连接回环地址上的独立 MySQL 实例，库名统一为 `kungfu_game`；线上模式使用 SSH。两种模式的配置见下文，连接失败不会自动切换环境。
 
 ## 直接构建（Windows x64）
 
@@ -68,12 +68,12 @@ Android 可在 Windows/Linux/macOS 上构建，需要 Android SDK 和兼容 JDK�
 
 ```json
 {
-  "dsn": "kfo:替换为自己的密码@tcp(127.0.0.1:3306)/openkfo_debug_local",
-  "database": "openkfo_debug_local"
+  "dsn": "kfo:替换为自己的密码@tcp(127.0.0.1:3306)/kungfu_game",
+  "database": "kungfu_game"
 }
 ```
 
-先启动 Go 服务器初始化表。可以使用本机 MySQL，或已经建立的本机 SSH 转发；GM 不负责建立数据库隧道。本地库名必须以 `openkfo_debug_` 开头，连接地址必须为回环地址。Windows 服务器双击模式额外需要 `ssh_config`，见 [Go 服务端说明](../server/go-server/README.md)。
+先启动 Go 服务器初始化表。可以使用本机 MySQL，或已经建立的本机 SSH 转发；GM 不负责建立数据库隧道。本地、线上均可使用 `kungfu_game`，但必须连接不同 MySQL 实例；本地连接地址必须为回环地址。Windows 服务器双击模式仅在需要 SSH 转发时填写 `ssh_config`，见 [Go 服务端说明](../server/go-server/README.md)。
 
 线上模式在 `root/runtime-local/online-admin.json` 中填写：
 

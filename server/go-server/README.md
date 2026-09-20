@@ -46,7 +46,7 @@ Go 本地与线上使用同一日志格式，窗口只读取本地文件，不�
 
 ## 准备数据库与配置
 
-1. 在 MySQL 创建数据库及有权访问该库的用户。本地 GM 测试库名称使用 `openkfo_debug_` 前缀，例如 `openkfo_debug_local`。
+1. 在 MySQL 创建数据库及有权访问该库的用户。本地和线上库名统一为 `kungfu_game`，使用不同 MySQL 实例隔离数据。
 2. 设置 `KK_MYSQL_DSN`，格式为 `用户:密码@tcp(主机:端口)/数据库`。服务器启动会初始化表，不会创建数据库。凭据不要提交 Git。
 3. 在当前目录准备与自己的客户端匹配的 `config.json`。
 
@@ -56,6 +56,7 @@ Go 本地与线上使用同一日志格式，窗口只读取本地文件，不�
 | --- | --- |
 | `config_hash` | 客户端 `Data/config.spf2` 的 SHA-256，64 位十六进制 |
 | `pools` | `模式:人数` 为键、地图 ID 数组为值的对象，不能为空 |
+| `character_choices` | 与客户端匹配的有效七槽角色创建候选，启动时必须通过校验 |
 | `groups` | 地图组 ID 对应地图 ID 数组 |
 | `settlement` | 首次初始化奖励的 win/loss/draw_gold 和 win/loss/draw_experience；数据库已有奖励配置时不覆盖 |
 
@@ -68,14 +69,14 @@ Go 本地与线上使用同一日志格式，窗口只读取本地文件，不�
 Linux/macOS（bash/zsh）：
 
 ```sh
-export KK_MYSQL_DSN='kfo:替换为自己的密码@tcp(127.0.0.1:3306)/openkfo_debug_local'
+export KK_MYSQL_DSN='kfo:替换为自己的密码@tcp(127.0.0.1:3306)/kungfu_game'
 ./kungfu-server -config config.json -cert-dir certificates -listen 127.0.0.1:19090 -tls-listen 127.0.0.1:19091
 ```
 
 Windows CMD：
 
 ```bat
-set "KK_MYSQL_DSN=kfo:替换为自己的密码@tcp(127.0.0.1:3306)/openkfo_debug_local"
+set "KK_MYSQL_DSN=kfo:替换为自己的密码@tcp(127.0.0.1:3306)/kungfu_game"
 kungfu-server.exe -config config.json -cert-dir certificates -listen 127.0.0.1:19090 -tls-listen 127.0.0.1:19091
 ```
 
@@ -135,13 +136,13 @@ kungfu-server.exe -operation reset-password < account.private.json
 
 ```json
 {
-  "dsn": "kfo:替换为自己的密码@tcp(127.0.0.1:13316)/openkfo_debug_local",
-  "database": "openkfo_debug_local",
+  "dsn": "kfo:替换为自己的密码@tcp(127.0.0.1:13316)/kungfu_game",
+  "database": "kungfu_game",
   "ssh_config": "ssh.private.json"
 }
 ```
 
-`ssh.private.json` 需要 `host`、`port`、`user`、`key`，以及当前用户 `.ssh/known_hosts` 中已验证的主机记录。此模式将本机数据库端口转发到 SSH 服务器的 MySQL，需要网络；它不是离线数据库。若直接使用本机 MySQL，采用上面的显式参数启动方式，不需要这个 SSH 模式。
+`ssh.private.json` 需要 `host`、`port`、`user`、`key`，以及当前用户 `.ssh/known_hosts` 中已验证的主机记录。此模式将本机数据库端口转发到 SSH 服务器的 MySQL，需要网络；它不是离线数据库。若直接使用本机 MySQL，删除 `ssh_config` 字段并把 DSN 改成本机 MySQL 端口即可，也支持无参数启动。
 
 ## 修改武器配置之后
 
