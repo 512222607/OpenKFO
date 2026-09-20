@@ -13,7 +13,7 @@ func TestFosterCompletionReceiptGate(t *testing.T) {
 			_, owner, _, _ := combatFixture()
 			r := owner.Room
 			r.Request[46] = byte(protocol.FosterMode)
-			r.FosterPlan = &protocol.FosterPlan{Groups: []protocol.FosterGroup{{Spawns: []protocol.FosterSpawn{{}, {}}}, {Spawns: []protocol.FosterSpawn{{}}}}}
+			r.FosterPlan = &protocol.FosterPlan{Groups: []protocol.FosterGroup{{SubLimit: 2, GroupLimit: 2, Spawns: []protocol.FosterSpawn{{}, {}}}, {Spawns: []protocol.FosterSpawn{{}}}}}
 			r.FosterSpawned, r.FosterRetired = []int{2, 1}, []int{1, 1}
 			r.FosterFinishReported = true
 			r.PVEActors = map[uint64]pveActor{42: {active: true, maximumHP: 8, fosterGroup: 0}}
@@ -60,7 +60,7 @@ func TestFosterRetiredReceiptsSurviveIdentityReuse(t *testing.T) {
 	r := owner.Room
 	r.Request[46] = byte(protocol.FosterMode)
 	spawn := protocol.FosterSpawn{}
-	r.FosterPlan = &protocol.FosterPlan{InitialHP: []float32{8}, GlobalLimit: 2, Groups: []protocol.FosterGroup{{Spawns: []protocol.FosterSpawn{spawn, spawn}}}}
+	r.FosterPlan = &protocol.FosterPlan{InitialHP: []float32{8}, GlobalLimit: 2, Groups: []protocol.FosterGroup{{SubLimit: 2, GroupLimit: 2, Spawns: []protocol.FosterSpawn{spawn, spawn}}}}
 	r.FosterSpawned, r.FosterRetired = []int{0}, []int{0}
 	for life := uint32(0); life < 2; life++ {
 		create := fosterSpawnPacket(owner.UID, 42, life*3+1, spawn)

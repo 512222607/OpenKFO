@@ -12,7 +12,7 @@ func TestFosterHealthReceipts(t *testing.T) {
 	r := owner.Room
 	r.Request[46] = byte(protocol.FosterMode)
 	spawn := protocol.FosterSpawn{Template: 0}
-	r.FosterPlan = &protocol.FosterPlan{InitialHP: []float32{8}, GlobalLimit: 2, Groups: []protocol.FosterGroup{{Spawns: []protocol.FosterSpawn{spawn, spawn}}}}
+	r.FosterPlan = &protocol.FosterPlan{InitialHP: []float32{8}, GlobalLimit: 2, Groups: []protocol.FosterGroup{{SubLimit: 2, GroupLimit: 2, Spawns: []protocol.FosterSpawn{spawn, spawn}}}}
 	r.FosterSpawned = []int{0}
 	r.FosterRetired = []int{0}
 	create := fosterSpawnPacket(owner.UID, 42, 1, spawn)

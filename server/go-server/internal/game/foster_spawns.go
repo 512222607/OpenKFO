@@ -11,9 +11,18 @@ func (r *Room) fosterSpawnGroup(event protocol.PVEActorCreate) int {
 		return -1
 	}
 	active := uint32(0)
+	living := make([]uint32, len(plan.Groups))
 	for _, actor := range r.PVEActors {
 		if actor.active {
 			active++ // Includes corpses until native 20401 destruction.
+			if actor.fosterGroup < 0 || actor.fosterGroup >= len(living) {
+				return -1
+			}
+			// The Lua sub-list counts living monsters only. Unknown template
+			// health must not create spare capacity by looking like a corpse.
+			if actor.maximumHP <= 0 || actor.reportedHP != 0 {
+				living[actor.fosterGroup]++
+			}
 		}
 	}
 	if active >= plan.GlobalLimit {
@@ -21,6 +30,9 @@ func (r *Room) fosterSpawnGroup(event protocol.PVEActorCreate) int {
 	}
 	matched := -1
 	for i, group := range plan.Groups {
+		if living[i] >= group.SubLimit || living[i] >= group.GroupLimit {
+			continue
+		}
 		next := r.FosterSpawned[i]
 		if next < 0 || next >= len(group.Spawns) {
 			continue

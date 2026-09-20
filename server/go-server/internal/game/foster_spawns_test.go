@@ -28,7 +28,7 @@ func TestFosterSpawnPlanGate(t *testing.T) {
 			r := owner.Room
 			r.Request[46] = byte(protocol.FosterMode)
 			spawn := protocol.FosterSpawn{Template: 251, Position: [3]float32{-1610, -4, -15}, Direction: 2}
-			r.FosterPlan = &protocol.FosterPlan{GlobalLimit: 1, Groups: []protocol.FosterGroup{{Spawns: []protocol.FosterSpawn{spawn}}}}
+			r.FosterPlan = &protocol.FosterPlan{GlobalLimit: 1, Groups: []protocol.FosterGroup{{SubLimit: 2, GroupLimit: 2, Spawns: []protocol.FosterSpawn{spawn}}}}
 			r.FosterSpawned = []int{0}
 			sender := owner
 			switch scenario {
@@ -141,4 +141,61 @@ func TestNativeFosterSpawnPlan(t *testing.T) {
 	roomOutputs(t, peer)
 	roomOutputs(t, owner)
 	roomOutputs(t, outsider)
+}
+
+func TestFosterConcurrentSpawnLimits(t *testing.T) {
+	for _, scenario := range []string{"room", "sub-full", "group-full", "other-group", "corpse", "corpse-global-full", "removed", "unknown-health", "invalid-group", "zero-limit"} {
+		t.Run(scenario, func(t *testing.T) {
+			_, owner, _, _ := combatFixture()
+			r := owner.Room
+			spawn := protocol.FosterSpawn{Template: 1}
+			r.FosterPlan = &protocol.FosterPlan{GlobalLimit: 3, Groups: []protocol.FosterGroup{
+				{SubLimit: 2, GroupLimit: 3, Spawns: []protocol.FosterSpawn{spawn}},
+				{SubLimit: 2, GroupLimit: 3, Spawns: []protocol.FosterSpawn{{Template: 2}}},
+			}}
+			r.FosterSpawned = []int{0, 0}
+			r.PVEActors = map[uint64]pveActor{42: {active: true, maximumHP: 8, reportedHP: 8, fosterGroup: 0}}
+			actor := r.PVEActors[42]
+			allowed := true
+			switch scenario {
+			case "sub-full":
+				r.PVEActors[43] = actor
+				allowed = false
+			case "group-full":
+				r.FosterPlan.Groups[0].GroupLimit = 1
+				allowed = false
+			case "other-group":
+				actor.fosterGroup = 1
+				r.FosterPlan.Groups[0].SubLimit = 1
+			case "corpse", "corpse-global-full":
+				actor.reportedHP = 0
+				r.FosterPlan.Groups[0].SubLimit = 1
+				if scenario == "corpse-global-full" {
+					r.FosterPlan.GlobalLimit = 1
+					allowed = false
+				}
+			case "removed":
+				actor.active = false
+				r.FosterPlan.GlobalLimit, r.FosterPlan.Groups[0].SubLimit = 1, 1
+			case "unknown-health":
+				actor.maximumHP, actor.reportedHP = 0, 0
+				r.FosterPlan.Groups[0].SubLimit = 1
+				allowed = false
+			case "invalid-group":
+				actor.fosterGroup = -1
+				allowed = false
+			case "zero-limit":
+				r.FosterPlan.Groups[0].SubLimit = 0
+				allowed = false
+			}
+			r.PVEActors[42] = actor
+			got := r.fosterSpawnGroup(protocol.PVEActorCreate{TemplateValue: spawn.Template})
+			if (got == 0) != allowed {
+				t.Fatalf("group=%d allowed=%t", got, allowed)
+			}
+			if r.FosterSpawned[0] != 0 {
+				t.Fatal("validation consumed spawn plan")
+			}
+		})
+	}
 }

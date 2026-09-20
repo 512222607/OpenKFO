@@ -12,7 +12,9 @@ type FosterSpawn struct {
 }
 
 // Each verified group currently contains one ordered sub-list. Groups are
-// concurrent, not StageAssault waves. Global/group limits also count corpses.
+// concurrent, not StageAssault waves. Global capacity includes corpses;
+// sub-list capacity counts living monsters. Native group batch admission also
+// checks global corpses, but its batch budget counts group living monsters only.
 type FosterGroup struct {
 	Spawns     []FosterSpawn `json:"spawns"`
 	SubLimit   uint32        `json:"sub_limit"`
