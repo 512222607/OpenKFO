@@ -38,14 +38,21 @@ func (h *Hub) prepareStageBattle(r *Room) (*stageWaves, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := h.validateStageRewards(mapID); err != nil {
+		return nil, err
+	}
+	return waves, nil
+}
+
+func (h *Hub) validateStageRewards(mapID uint32) error {
 	settings, err := h.Store.RewardManager().BattleRewards(h.Config.Settlement)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	for _, outcome := range []string{persistence.StageOutcomeClear, persistence.StageOutcomeFailed} {
 		if _, ok := settings.Rules.StageReward(mapID, outcome); !ok {
-			return nil, fmt.Errorf("当前关卡缺少通关/失败奖励配置，请在GM中保存关卡奖励")
+			return fmt.Errorf("当前关卡缺少通关/失败奖励配置，请在GM中保存关卡奖励")
 		}
 	}
-	return waves, nil
+	return nil
 }

@@ -1,0 +1,52 @@
+package game
+
+import (
+	"fmt"
+	"slices"
+
+	"kungfu.local/server/internal/persistence"
+	"kungfu.local/server/internal/protocol"
+)
+
+func (c Config) persistedFosterPlan(access persistence.StageAccess, mapID uint32, players int) (*protocol.FosterPlan, error) {
+	if c.ConfigHash == "" || access.ClientHash != c.ConfigHash {
+		return nil, fmt.Errorf("关卡事件计划与当前客户端版本不一致，请重新导入地图配置")
+	}
+	if err := access.Validate(); err != nil {
+		return nil, err
+	}
+	if !access.Allows(mapID) {
+		return nil, fmt.Errorf("当前关卡已关闭")
+	}
+	for _, config := range access.FosterPlans {
+		if config.MapID != mapID {
+			continue
+		}
+		if players < 1 || players > int(config.Plan.PlayerLimit) {
+			return nil, fmt.Errorf("当前人数超过关卡事件计划限制")
+		}
+		plan := config.Plan
+		plan.Groups = slices.Clone(plan.Groups)
+		for i := range plan.Groups {
+			plan.Groups[i].Spawns = slices.Clone(plan.Groups[i].Spawns)
+		}
+		return &plan, nil
+	}
+	return nil, fmt.Errorf("当前关卡缺少已保存的事件计划，请在GM中导入并保存")
+}
+
+func (h *Hub) prepareFosterBattle(r *Room) (*protocol.FosterPlan, error) {
+	access, err := h.stageAccess()
+	if err != nil {
+		return nil, err
+	}
+	mapID := protocol.ReadUint32(r.Request, protocol.RoomMapOffset)
+	plan, err := h.Config.persistedFosterPlan(access, mapID, len(r.Members))
+	if err != nil {
+		return nil, err
+	}
+	if err := h.validateStageRewards(mapID); err != nil {
+		return nil, err
+	}
+	return plan, nil
+}

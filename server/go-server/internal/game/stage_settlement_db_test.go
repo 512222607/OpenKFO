@@ -75,6 +75,25 @@ func TestStageSettlementRouteLocalDatabase(t *testing.T) {
 		t.Fatal("missing stage rewards accepted")
 	}
 	h.Config.Settlement = rewards
+	// Mode 10 reads its separate persisted plan, with the same reward gate.
+	fosterAccess := access
+	fosterAccess.WavePlans = nil
+	fosterAccess.FosterPlans = []persistence.FosterConfig{{MapID: 20051, ScriptHash: h.Config.ConfigHash, RuntimeHash: h.Config.ConfigHash, ConfigHash: h.Config.ConfigHash, Templates: []string{"Monster"}, Plan: protocol.FosterPlan{PlayerLimit: 6, GlobalLimit: 32, Groups: []protocol.FosterGroup{{SubLimit: 2, GroupLimit: 20, Spawns: []protocol.FosterSpawn{{Direction: 4}}}}}}}
+	fosterData, err := json.Marshal(fosterAccess)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exec("UPDATE stage_access SET rules=? WHERE id=1", fosterData)
+	foster, err := h.prepareFosterBattle(r)
+	if err != nil || foster.Groups[0].Spawns[0].Direction != 4 || r.FosterPlan != nil {
+		t.Fatal("stored Foster plan not prepared independently", err)
+	}
+	h.Config.Settlement = persistence.RewardRules{}
+	if _, err = h.prepareFosterBattle(r); err == nil {
+		t.Fatal("Foster preparation accepted missing rewards")
+	}
+	h.Config.Settlement = rewards
+	exec("UPDATE stage_access SET rules=? WHERE id=1", accessData)
 	profile := make([]byte, protocol.RoleProfileSize)
 	protocol.WriteUint16(profile, persistence.LevelOffset, 1)
 	exec("INSERT INTO counters VALUES('battle',1)")

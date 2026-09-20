@@ -44,6 +44,7 @@ type Room struct {
 	PVEActors           map[uint64]pveActor
 	PVEBlocks           map[uint32]pveBlock
 	FosterPositions     []byte
+	FosterPlan          *protocol.FosterPlan
 	NetworkProbe        *roomNetworkProbe
 	TutorialPending     bool
 	Reliable            map[reliableActor]*reliableExchange
@@ -732,6 +733,14 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 
 func (hub *Hub) startBattle(room *Room) error {
 	var waves *stageWaves
+	var foster *protocol.FosterPlan
+	if room.Type() == protocol.FosterMode {
+		var err error
+		foster, err = hub.prepareFosterBattle(room)
+		if err != nil {
+			return err
+		}
+	}
 	if room.Type() == protocol.StageAssault {
 		var err error
 		waves, err = hub.prepareStageBattle(room)
@@ -752,6 +761,7 @@ func (hub *Hub) startBattle(room *Room) error {
 	}
 	room.Serial = serial
 	room.StageWaves = waves
+	room.FosterPlan = foster
 	room.PVEActors = nil
 	room.PVEBlocks = nil
 	room.FosterPositions = nil
