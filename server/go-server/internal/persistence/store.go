@@ -49,6 +49,20 @@ type Export struct {
 }
 
 var schema = []string{
+	// accounts precedes every FK-dependent table; stage_player_unlocks once
+	// referenced it before creation and fresh databases failed with error 1824.
+	`CREATE TABLE IF NOT EXISTS accounts(
+        uid BIGINT UNSIGNED PRIMARY KEY ,
+        account VARCHAR(20) CHARACTER SET ascii COLLATE ascii_bin NOT NULL UNIQUE ,
+        nickname VARCHAR(40) NOT NULL ,
+        profile VARBINARY(360) NOT NULL ,
+        salt VARBINARY(16) NOT NULL ,
+        digest VARBINARY(32) NOT NULL ,
+        legacy_salt VARBINARY(16) NOT NULL ,
+        legacy_digest VARBINARY(32) NOT NULL ,
+        gold BIGINT UNSIGNED NOT NULL DEFAULT 0 ,
+        tickets BIGINT UNSIGNED NOT NULL DEFAULT 0
+    ) ENGINE=InnoDB`,
 	`CREATE TABLE IF NOT EXISTS honour_rules(id TINYINT UNSIGNED PRIMARY KEY,revision BIGINT UNSIGNED NOT NULL,rules MEDIUMBLOB NOT NULL) ENGINE=InnoDB`,
 	`CREATE TABLE IF NOT EXISTS honour_rules_audit(revision BIGINT UNSIGNED PRIMARY KEY,before_data MEDIUMBLOB NOT NULL,after_data MEDIUMBLOB NOT NULL,created TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB`,
 	`CREATE TABLE IF NOT EXISTS battle_reward_rules(id TINYINT UNSIGNED PRIMARY KEY,revision BIGINT UNSIGNED NOT NULL,rules MEDIUMBLOB NOT NULL) ENGINE=InnoDB`,
@@ -67,18 +81,6 @@ var schema = []string{
 	`CREATE TABLE IF NOT EXISTS stage_player_unlock_audit(uid BIGINT UNSIGNED NOT NULL,client_hash CHAR(64) CHARACTER SET ascii NOT NULL,revision BIGINT UNSIGNED NOT NULL,before_data MEDIUMBLOB NOT NULL,after_data MEDIUMBLOB NOT NULL,created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(uid,client_hash,revision)) ENGINE=InnoDB`,
 	`CREATE TABLE IF NOT EXISTS stage_access_audit(revision BIGINT UNSIGNED PRIMARY KEY,before_data MEDIUMBLOB NOT NULL,after_data MEDIUMBLOB NOT NULL,created TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB`,
 	`CREATE TABLE IF NOT EXISTS battle_settlements(serial INT UNSIGNED PRIMARY KEY,reports MEDIUMBLOB NOT NULL,result MEDIUMBLOB NOT NULL,created TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB`,
-	`CREATE TABLE IF NOT EXISTS accounts(
-        uid BIGINT UNSIGNED PRIMARY KEY ,
-        account VARCHAR(20) CHARACTER SET ascii COLLATE ascii_bin NOT NULL UNIQUE ,
-        nickname VARCHAR(40) NOT NULL ,
-        profile VARBINARY(360) NOT NULL ,
-        salt VARBINARY(16) NOT NULL ,
-        digest VARBINARY(32) NOT NULL ,
-        legacy_salt VARBINARY(16) NOT NULL ,
-        legacy_digest VARBINARY(32) NOT NULL ,
-        gold BIGINT UNSIGNED NOT NULL DEFAULT 0 ,
-        tickets BIGINT UNSIGNED NOT NULL DEFAULT 0
-    ) ENGINE=InnoDB`,
 	`CREATE TABLE IF NOT EXISTS friends(uid BIGINT UNSIGNED NOT NULL,friend_uid BIGINT UNSIGNED NOT NULL,created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(uid,friend_uid),FOREIGN KEY(uid) REFERENCES accounts(uid) ON DELETE CASCADE,FOREIGN KEY(friend_uid) REFERENCES accounts(uid) ON DELETE CASCADE) ENGINE=InnoDB`,
 	`CREATE TABLE IF NOT EXISTS character_creations(uid BIGINT UNSIGNED PRIMARY KEY,nickname VARCHAR(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL UNIQUE,request VARBINARY(68) NOT NULL,FOREIGN KEY(uid) REFERENCES accounts(uid)) ENGINE=InnoDB`,
 	`CREATE TABLE IF NOT EXISTS talisman_uses(uid BIGINT UNSIGNED NOT NULL,operation_id VARCHAR(128) CHARACTER SET ascii NOT NULL,request BINARY(16) NOT NULL,PRIMARY KEY(uid,operation_id),FOREIGN KEY(uid) REFERENCES accounts(uid)) ENGINE=InnoDB`,
