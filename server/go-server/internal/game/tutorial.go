@@ -108,12 +108,8 @@ func (h *Hub) announceTutorialReward(s *Session) (bool, error) {
 }
 
 func sendTutorialReward(s *Session, choices []uint32, catalog []byte) (bool, error) {
-	p, err := protocol.EncodeTitleAward(2, choices)
-	if err != nil {
+	if err := sendWeaponReward(s, 2, choices, catalog); err != nil {
 		return false, err
 	}
-	s.sendGame(protocol.Message{ID: 1550, Payload: catalog})
-	s.TitleOffer = 2
-	s.sendGame(protocol.Message{ID: protocol.MsgTitleAward, Payload: p})
 	return true, nil
 }

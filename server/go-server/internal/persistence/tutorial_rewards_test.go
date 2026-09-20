@@ -132,6 +132,25 @@ func TestTutorialBundleLocalDatabase(t *testing.T) {
 	}
 	exec("DELETE FROM offers")
 	hash := strings.Repeat("a", 64)
+	// A definition without a client resource would produce a blank reward icon.
+	// Reject it inside completion's transaction, before consuming graduation.
+	var weaponDefinition []byte
+	if err = db.QueryRow("SELECT record FROM item_definitions WHERE definition_key=1").Scan(&weaponDefinition); err != nil {
+		t.Fatal(err)
+	}
+	missingResource := bytes.Clone(weaponDefinition)
+	protocol.WriteUint32(missingResource, 5, 0)
+	exec("UPDATE item_definitions SET record=? WHERE definition_key=1", missingResource)
+	if _, err = store.RewardManager().CompleteTutorial(1, ""); err == nil {
+		t.Fatal("missing weapon resource consumed tutorial completion")
+	}
+	if err = db.QueryRow("SELECT COUNT(*) FROM tutorial_rewards").Scan(&collisionReceipts); err != nil || collisionReceipts != 0 {
+		t.Fatal("missing resource persisted completion", err)
+	}
+	if err = db.QueryRow("SELECT profile,gold,tickets FROM accounts WHERE uid=1").Scan(&before, &gold, &tickets); err != nil || !bytes.Equal(before, profile) || gold != 10 || tickets != 20 {
+		t.Fatal("missing resource changed progress or balances", err)
+	}
+	exec("UPDATE item_definitions SET record=? WHERE definition_key=1", weaponDefinition)
 	extended := &ExtendedTaskRules{ClientHash: hash}
 	for i := uint16(0); i < 3; i++ {
 		entry := ExtendedTaskCatalogueEntry{ID: 3001 + i, Kind: "newbie", Conditions: []ExtendedTaskRequirement{{Key: 0, Required: 1, Event: "tutorial_complete"}, {}, {}}}

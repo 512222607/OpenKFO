@@ -110,7 +110,7 @@ func weaponRewardCatalog(tx *sql.Tx, choices []uint32) (catalog []byte, err erro
 		if e != nil {
 			return nil, e
 		}
-		if d.Record[4] != protocol.ItemWeapon {
+		if d.Record[4] != protocol.ItemWeapon || protocol.ReadUint32(d.Record, 5) == 0 {
 			return nil, ErrDenied
 		}
 		existing, ok := records[key]

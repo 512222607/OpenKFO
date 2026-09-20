@@ -40,13 +40,37 @@ func (h *Hub) announceTitleReward(s *Session) error {
 	if s.TitleOffer != 0 && s.TitleOffer != level {
 		return nil
 	}
+	catalog, err := h.Store.RewardManager().WeaponChoiceCatalog(choices)
+	if err != nil {
+		return err
+	}
+	return sendWeaponReward(s, level, choices, catalog)
+}
+
+// Both tutorial graduation and later title rewards use the same native selector.
+// Validate the first matching catalogue row, as the client ignores duplicates.
+func sendWeaponReward(s *Session, level byte, choices []uint32, catalog []byte) error {
 	p, err := protocol.EncodeTitleAward(level, choices)
 	if err != nil {
 		return err
 	}
-	catalog, err := h.Store.RewardManager().WeaponChoiceCatalog(choices)
-	if err != nil {
-		return err
+	const catalogueRecordSize = 108
+	if len(catalog)%catalogueRecordSize != 0 {
+		return protocol.ErrFrame
+	}
+	for _, key := range choices {
+		found := false
+		for offset := 0; offset < len(catalog); offset += catalogueRecordSize {
+			row := catalog[offset : offset+catalogueRecordSize]
+			if protocol.ReadUint32(row, 9) != key {
+				continue
+			}
+			found = row[4] == protocol.ItemWeapon && protocol.ReadUint32(row, 5) != 0
+			break
+		}
+		if !found {
+			return protocol.ErrFrame
+		}
 	}
 	// The native selector resolves catalogue keys before loading item icons.
 	// Reward definitions may never have appeared in the purchasable shop list.
