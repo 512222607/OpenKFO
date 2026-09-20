@@ -177,6 +177,9 @@ func (s *Session) tracePacket(direction string, channel uint32, transport string
 				if r, err := protocol.ParsePVEActorCreate(payload); err == nil {
 					entry["content"] = fmt.Sprintf("PVE创建怪物：申报UID=%d，实体=%d，模板原值=%d，位置=%v，朝向原值=%d；仍需服务端授权", r.Sender, r.Actor, r.TemplateValue, r.Position, r.DirectionValue)
 				}
+				if r, err := protocol.ParseBattleHealth(payload); err == nil {
+					entry["content"] = fmt.Sprintf("伤害/治疗8121：申报UID=%d，目标=%d，来源=%d，伤害量=%g（负值为治疗），目标MP参数=%g，来源MP参数=%g（正伤害分支使用），本局标识=%d；此包不包含已确认的最终HP字段", r.Sender, r.Target, r.Source, r.Damage, r.TargetManaDelta, r.SourceManaDelta, r.Context)
+				}
 				if r, err := protocol.ParsePVEActorRemove(payload); err == nil {
 					entry["content"] = fmt.Sprintf("PVE移除怪物：申报UID=%d，实体=%d；不是击杀或通关凭据", r.Sender, r.Actor)
 				}
