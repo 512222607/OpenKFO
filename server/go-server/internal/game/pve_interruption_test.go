@@ -7,12 +7,18 @@ import (
 )
 
 func TestPVELeaveAbortsWithoutControllerMigration(t *testing.T) {
+	for _, mode := range []protocol.RoomType{protocol.StageAssault, protocol.FosterMode} {
+		t.Run(mode.String(), func(t *testing.T) { testPVELeaveAbortsWithoutControllerMigration(t, mode) })
+	}
+}
+
+func testPVELeaveAbortsWithoutControllerMigration(t *testing.T, mode protocol.RoomType) {
 	for _, phase := range []string{"loading", "wait_ready", "battle", "finishing"} {
 		for _, ownerLeaves := range []bool{true, false} {
 			h, owner, peer, outsider := combatFixture()
 			r := owner.Room
 			r.Stage = phase
-			r.Request[46] = byte(protocol.StageAssault)
+			r.Request[46] = byte(mode)
 			r.StageWaves, _ = newStageWaves([]StageWavePlan{{Monsters: map[uint32]uint32{7: 1}}})
 			r.PVEActors = map[uint64]pveActor{42: {active: true}}
 			r.PVEBlocks = map[uint32]pveBlock{100: {sequence: 1, payload: []byte{1}}}
@@ -60,10 +66,16 @@ func TestPVEReportCannotUseCompetitiveRewards(t *testing.T) {
 }
 
 func TestPVELeaveAfterSettlementKeepsRemainingResult(t *testing.T) {
+	for _, mode := range []protocol.RoomType{protocol.StageAssault, protocol.FosterMode} {
+		t.Run(mode.String(), func(t *testing.T) { testPVELeaveAfterSettlementKeepsRemainingResult(t, mode) })
+	}
+}
+
+func testPVELeaveAfterSettlementKeepsRemainingResult(t *testing.T, mode protocol.RoomType) {
 	for _, ownerLeaves := range []bool{true, false} {
 		h, owner, peer, outsider := combatFixture()
 		r := owner.Room
-		r.Request[46] = byte(protocol.StageAssault)
+		r.Request[46] = byte(mode)
 		r.Stage = "settlement"
 		for _, m := range r.Members {
 			m.Ready = false

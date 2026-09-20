@@ -300,8 +300,9 @@ func (hub *Hub) leave(session *Session, acknowledge bool) {
 		delete(hub.Rooms, room.ID)
 		return
 	}
-	stageSettled := room.Type() == protocol.StageAssault && room.Stage == "settlement"
-	if room.Type() == protocol.StageAssault && room.Stage != "room" && !stageSettled {
+	pveStage := room.Type() == protocol.StageAssault || room.Type() == protocol.FosterMode
+	stageSettled := pveStage && room.Stage == "settlement"
+	if pveStage && room.Stage != "room" && !stageSettled {
 		// The native map script and monster pool belong to the controller.
 		// Do not hand an in-progress script to another player's empty state.
 		hub.abortStageRoom(room)

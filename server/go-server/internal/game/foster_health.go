@@ -10,7 +10,7 @@ import (
 // deduplication. Native 9E46B0 clamps damage at zero; 9E4740 caps healing at max.
 // Source-side effects (9C5E40) send their own 8121; never apply them twice here.
 // Native local callbacks and unreceived events can diverge from this projection,
-// so neither corpse removal nor this value authorizes progress or rewards.
+// so neither corpse removal nor this value alone authorizes progress or rewards.
 func (r *Room) trackFosterHealth(payload []byte) {
 	if r.Type() != protocol.FosterMode {
 		return

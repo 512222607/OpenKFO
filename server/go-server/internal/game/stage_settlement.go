@@ -13,6 +13,9 @@ import (
 // A native report is not proof of clearance. Match its identities/context to
 // this room and require the server's complete wave progression for reason 1.
 func validateStageFinish(r *Room, payload []byte) (string, error) {
+	if r != nil && r.Type() == protocol.FosterMode {
+		return validateFosterFinish(r, payload)
+	}
 	if r == nil || r.Type() != protocol.StageAssault || r.StageWaves == nil {
 		return "", nil
 	}
@@ -54,7 +57,7 @@ func validateStageFinish(r *Room, payload []byte) (string, error) {
 	}
 }
 
-// 93C890 calls 987E40 only for the controller. Do not send 4100 to solicit
+// 93C890 / 942FE0 call 987E40 only for the controller. Do not send 4100 to solicit
 // peers: its report producer does not preserve this mode's natural reason.
 // This collects a validated finish for the separate PVE payout/result flow.
 func (h *Hub) stageFinishReport(s *Session, payload []byte) error {
@@ -90,7 +93,7 @@ func (h *Hub) retryStageSettlement(r *Room) {
 
 func recordStageFinish(s *Session, payload []byte) (bool, error) {
 	r := s.Room
-	if r == nil || r.StageWaves == nil || r.Owner != s.UID || (r.Stage != "battle" && r.Stage != "finishing") {
+	if r == nil || (r.StageWaves == nil && r.FosterPlan == nil) || r.Owner != s.UID || (r.Stage != "battle" && r.Stage != "finishing") {
 		return false, nil
 	}
 	m := r.Members[s.UID]
@@ -180,6 +183,12 @@ func (h *Hub) settleStage(r *Room) error {
 }
 
 func stageResultPacket(r *Room, awards []persistence.BattleReward, recipient uint64) (protocol.Message, error) {
+	if r.Type() == protocol.FosterMode {
+		return fosterResultPacket(r, awards, recipient)
+	}
+	if r.Type() != protocol.StageAssault || r.StageWaves == nil {
+		return protocol.Message{}, protocol.ErrFrame
+	}
 	ordered := append([]persistence.BattleReward(nil), awards...)
 	sort.SliceStable(ordered, func(i, j int) bool {
 		if ordered[i].UID == recipient {
@@ -216,4 +225,31 @@ func stageResultPacket(r *Room, awards []persistence.BattleReward, recipient uin
 	}
 	p, err := protocol.EncodeStageResults(rows)
 	return protocol.Message{ID: 4120, Payload: p}, err
+}
+
+// 82C970 routes mode 10 to 80F560 / Result.sui, not result21.sui.
+// Reuse its ordinary 140-byte header + complete profile serializer. Only the
+// UI result enum is mapped here; persisted PVE outcomes/reward policy stay PVE.
+func fosterResultPacket(r *Room, awards []persistence.BattleReward, recipient uint64) (protocol.Message, error) {
+	if len(awards) == 0 || len(awards) > 6 || len(awards) != len(r.Members) || r.Members[recipient] == nil {
+		return protocol.Message{}, protocol.ErrFrame
+	}
+	rows := append([]persistence.BattleReward(nil), awards...)
+	seen := map[uint64]bool{}
+	for i := range rows {
+		row := &rows[i]
+		if row.UID == 0 || seen[row.UID] || r.Members[row.UID] == nil || len(row.Profile) != protocol.RoleProfileSize {
+			return protocol.Message{}, protocol.ErrFrame
+		}
+		seen[row.UID] = true
+		switch row.Outcome {
+		case persistence.StageOutcomeClear:
+			row.Outcome = "win"
+		case persistence.StageOutcomeFailed:
+			row.Outcome = "loss"
+		default:
+			return protocol.Message{}, protocol.ErrFrame
+		}
+	}
+	return settlementPacket(r, rows, recipient), nil
 }

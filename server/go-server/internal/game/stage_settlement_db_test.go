@@ -181,4 +181,55 @@ func TestStageSettlementRouteLocalDatabase(t *testing.T) {
 			t.Fatal("failure rewards mixed with clearance", err)
 		}
 	}
+	// Mode 10 uses the same atomic stage rewards with the common result page.
+	for _, scenario := range []struct {
+		serial uint32
+		reason uint16
+		gold   uint32
+	}{{3, 1, 25}, {4, 2, 26}} {
+		r.Request[46] = byte(protocol.FosterMode)
+		r.Serial, r.Stage, r.Reports, r.StageWaves = scenario.serial, "battle", nil, nil
+		r.FosterPlan = foster
+		r.FosterSpawned, r.FosterRetired = []int{1}, []int{1}
+		r.FosterFinishReported = scenario.reason == 1
+		exec("UPDATE counters SET value=? WHERE name='battle'", scenario.serial)
+		p = settlementReport(r)
+		for _, m := range r.Members {
+			m.Session.game().Phase = "battle"
+			protocol.WriteUint16(p, int(m.Slot)*87+65, scenario.reason)
+			if scenario.reason == 2 {
+				protocol.WriteUint16(p, int(m.Slot)*87+2, 0)
+			}
+		}
+		if err = h.route(owner, owner.game(), protocol.Message{ID: 4110, Payload: p}); err != nil {
+			t.Fatal(err)
+		}
+		if r.Stage != "settlement" {
+			t.Fatal("Foster report did not settle")
+		}
+		for _, s := range []*Session{owner, peer} {
+			out := roomOutputs(t, s, 4300, 1240, 1230, 4120)
+			if protocol.ReadUint32(out[1].Payload, 0) != scenario.gold {
+				t.Fatal("Foster balance mismatch")
+			}
+			rows, e := protocol.ParseStageResults(out[3].Payload)
+			if e != nil || len(rows) != 2 || rows[1].UID != s.UID {
+				t.Fatal("Foster profile order", e)
+			}
+			for _, row := range rows {
+				if row.ResultValue != byte(scenario.reason) || row.Waves != 0 || row.ElapsedSeconds != 0 || row.GradeValue != 0 {
+					t.Fatal("wrong Foster result schema")
+				}
+			}
+		}
+		if err = h.route(owner, owner.game(), protocol.Message{ID: 4110, Payload: p}); err != nil {
+			t.Fatal(err)
+		}
+		roomOutputs(t, owner)
+		roomOutputs(t, peer)
+		if err = db.QueryRow("SELECT COUNT(*) FROM battle_settlements").Scan(&receipts); err != nil || receipts != int(scenario.serial) {
+			t.Fatal("Foster duplicate reward", receipts, err)
+		}
+	}
+
 }
