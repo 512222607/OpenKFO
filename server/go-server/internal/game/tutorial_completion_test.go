@@ -92,20 +92,6 @@ func TestTutorialCompletionLocalDatabase(t *testing.T) {
 		if e = h.route(s, s.game(), protocol.Message{ID: 4124}); e != nil {
 			t.Fatal(e)
 		}
-		if level < 2 {
-			// No reward settings: do not open an empty selector or consume
-			// graduation. The user can correct the GM configuration and retry.
-			roomOutputs(t, s, notice("").ID)
-			var stored []byte
-			var receipts int
-			if e = db.QueryRow("SELECT profile FROM accounts WHERE uid=?", s.UID).Scan(&stored); e != nil || !bytes.Equal(stored, original) {
-				t.Fatal("missing reward changed progress", e)
-			}
-			if e = db.QueryRow("SELECT COUNT(*) FROM tutorial_rewards").Scan(&receipts); e != nil || receipts != 0 || s.Room != r || s.game().Phase != "battle" {
-				t.Fatal("missing reward consumed completion", e)
-			}
-			continue
-		}
 		want := level
 		if want < 2 {
 			want = 2

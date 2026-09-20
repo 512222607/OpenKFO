@@ -3,11 +3,8 @@ package persistence
 import (
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"kungfu.local/server/internal/protocol"
 )
-
-var ErrTutorialWeaponRequired = errors.New("新手奖励未配置可选武器，请在GM管理器的新手奖励中至少选择一件武器后重试")
 
 type TutorialReward struct {
 	Profile       []byte
@@ -58,45 +55,41 @@ func (m *RewardManager) CompleteTutorial(uid uint64, clientHash string) (r Tutor
 			return r, err
 		}
 	}
-	if rules.Tutorial == nil {
-		return r, ErrTutorialWeaponRequired
-	}
-	bundle := *rules.Tutorial
-	bundle.Items = nil
-	seen := map[uint32]bool{}
-	for _, key := range rules.Tutorial.Items {
-		d, e := readDefinition(tx, key)
-		if e != nil {
-			return r, e
-		}
-		if d.Record[4] == protocol.ItemWeapon {
-			if seen[key] || len(r.Choices) == 7 {
-				return r, ErrDenied
+	if rules.Tutorial != nil {
+		bundle := *rules.Tutorial
+		bundle.Items = nil
+		seen := map[uint32]bool{}
+		for _, key := range rules.Tutorial.Items {
+			d, e := readDefinition(tx, key)
+			if e != nil {
+				return r, e
 			}
-			seen[key] = true
-			r.Choices = append(r.Choices, key)
-		} else {
-			bundle.Items = append(bundle.Items, key)
+			if d.Record[4] == protocol.ItemWeapon {
+				if seen[key] || len(r.Choices) == 7 {
+					return r, ErrDenied
+				}
+				seen[key] = true
+				r.Choices = append(r.Choices, key)
+			} else {
+				bundle.Items = append(bundle.Items, key)
+			}
 		}
+		// Create the pending choice in the same transaction as completion.
+		// No weapon enters inventory until authenticated 4126 chooses it.
+		if len(r.Choices) > 0 {
+			if r.Catalog, err = weaponRewardCatalog(tx, r.Choices); err != nil {
+				return r, err
+			}
+			if err = grantTitleChoices(tx, uid, 2, r.Choices); err != nil {
+				return r, err
+			}
+		}
+		r.Gold, r.Items, err = m.GrantBundle(tx, uid, uint64(r.Gold), bundle)
+		if err != nil {
+			return r, err
+		}
+		r.Tickets += rules.Tutorial.Tickets
 	}
-	// Create the pending choice in the same transaction as completion.
-	// No weapon enters inventory until authenticated 4126 chooses it.
-	// 4125 always opens the native selector; an empty offer cannot serve
-	// as a silent title refresh for a newly completed guide.
-	if len(r.Choices) == 0 {
-		return r, ErrTutorialWeaponRequired
-	}
-	if r.Catalog, err = weaponRewardCatalog(tx, r.Choices); err != nil {
-		return r, err
-	}
-	if err = grantTitleChoices(tx, uid, 2, r.Choices); err != nil {
-		return r, err
-	}
-	r.Gold, r.Items, err = m.GrantBundle(tx, uid, uint64(r.Gold), bundle)
-	if err != nil {
-		return r, err
-	}
-	r.Tickets += rules.Tutorial.Tickets
 	// Advance only configured, accepted tasks, in this same completion transaction.
 	// The receipt above prevents replay; native condition numbers are not event IDs.
 	if clientHash != "" {

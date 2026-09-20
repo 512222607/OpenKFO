@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -69,32 +68,35 @@ func TestTutorialBundleLocalDatabase(t *testing.T) {
 		}
 		exec("REPLACE INTO battle_reward_rules(id,rules) VALUES(1,?)", raw)
 	}
+	// Production regression: a missing/empty/currency-only reward is not
+	// a reason to strand a player after the native one-shot 4124 completion.
 	configured := rules
-	for _, bundle := range []*RewardBundle{nil, {}, {Gold: 100, Tickets: 50}, {Items: []uint32{2, 3}, Gold: 100}} {
+	for i, bundle := range []*RewardBundle{nil, {}, {Gold: 100, Tickets: 50}, {Items: []uint32{2}, Gold: 100}} {
+		uid := uint64(100 + i)
+		exec("INSERT INTO accounts VALUES(?,?,10,20)", uid, profile)
 		rules.Tutorial = bundle
 		save()
-		if _, err = store.RewardManager().CompleteTutorial(1, ""); !errors.Is(err, ErrTutorialWeaponRequired) {
-			t.Fatal("empty weapon selector accepted", err)
-		}
+		got, e := store.RewardManager().CompleteTutorial(uid, "")
+		wantGold, wantTickets := uint32(10), uint32(20)
+		wantItems := 0
 		if bundle != nil {
-			gmRules := rules
-			gmRules.LevelGifts, gmRules.StageRewards = []LevelGift{}, []StageMapRewards{}
-			if _, err = store.RewardManager().SaveBattleRewards(1, gmRules); !errors.Is(err, ErrTutorialWeaponRequired) {
-				t.Fatal("GM accepted an empty weapon selector", err)
-			}
+			wantGold += bundle.Gold
+			wantTickets += bundle.Tickets
+			wantItems = len(bundle.Items)
 		}
-		var stored []byte
-		var gold, tickets, receipts, items int
-		if err = db.QueryRow("SELECT profile,gold,tickets FROM accounts WHERE uid=1").Scan(&stored, &gold, &tickets); err != nil || !bytes.Equal(stored, profile) || gold != 10 || tickets != 20 {
-			t.Fatal("missing weapon changed progress or balances", err)
+		if e != nil || got.Replay || got.Profile[TitleLevelOffset] != 2 || len(got.Choices) != 0 || len(got.Items) != wantItems || got.Gold != wantGold || got.Tickets != wantTickets {
+			t.Fatal("optional reward blocked graduation or changed amounts", i, got, e)
 		}
-		if err = db.QueryRow("SELECT COUNT(*) FROM tutorial_rewards").Scan(&receipts); err != nil || receipts != 0 {
-			t.Fatal("missing weapon consumed completion", err)
-		}
-		if err = db.QueryRow("SELECT COUNT(*) FROM inventory").Scan(&items); err != nil || items != 0 {
-			t.Fatal("missing weapon granted partial inventory", err)
+		again, e := store.RewardManager().CompleteTutorial(uid, "")
+		if e != nil || !again.Replay || len(again.Items) != 0 || again.Gold != wantGold || again.Tickets != wantTickets {
+			t.Fatal("optional reward replay duplicated awards", i, again, e)
 		}
 	}
+	// All tables are connection-local fixtures; preserve the original tests'
+	// expectation of empty receipts and inventory before the next account.
+	exec("DELETE FROM tutorial_rewards")
+	exec("DELETE FROM inventory")
+	exec("DELETE FROM inventory_expirations")
 	rules = configured
 	save()
 	if _, err = store.RewardManager().CompleteTutorial(1, ""); err == nil {

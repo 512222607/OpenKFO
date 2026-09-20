@@ -2,8 +2,6 @@ package game
 
 import (
 	"bytes"
-	"errors"
-	"kungfu.local/server/internal/persistence"
 	"kungfu.local/server/internal/protocol"
 	"log"
 )
@@ -55,10 +53,6 @@ func (h *Hub) completeTutorial(s *Session, ch *Channel, payload []byte) error {
 		// storage failure. Keep the guide session alive so completion can retry;
 		// propagating this error disconnects a player who sent a valid 4124.
 		log.Printf("tutorial_reward_failed uid=%d error=%v", s.UID, err)
-		if errors.Is(err, persistence.ErrTutorialWeaponRequired) {
-			s.sendGame(notice(err.Error()))
-			return nil
-		}
 		s.sendGame(notice("新手奖励结算失败，进度尚未提交。请检查GM新手奖励配置后重试。"))
 		return nil
 	}
