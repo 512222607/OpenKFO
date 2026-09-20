@@ -12,6 +12,8 @@ func TestFosterPositionsLoadingBarrier(t *testing.T) {
 		h, owner, peer, outsider := combatFixture()
 		r := owner.Room
 		r.Request[46] = byte(protocol.FosterMode)
+		r.FosterPlan = &protocol.FosterPlan{Groups: []protocol.FosterGroup{{TriggerBox: [6]float32{-1, -1, -1, 1, 1, 1}}}}
+		r.FosterTriggered = []bool{false}
 		r.Stage = "loading"
 		for _, m := range r.Members {
 			m.Loaded = false
@@ -48,12 +50,15 @@ func TestFosterPositionsLoadingBarrier(t *testing.T) {
 			case "sender":
 				protocol.WriteUint64(bad, 4, peer.UID)
 			}
-			if e := send(owner, bad); e == nil || r.FosterPositions != nil {
+			if e := send(owner, bad); e == nil || r.FosterPositions != nil || r.FosterTriggered[0] {
 				t.Fatal("invalid snapshot stored", failure, e)
 			}
 		}
 		if e := send(owner, p); e != nil {
 			t.Fatal(e)
+		}
+		if !r.FosterTriggered[0] {
+			t.Fatal("non-owner initial position did not activate group")
 		}
 		if e := send(owner, p); e != nil {
 			t.Fatal("retry", e)
@@ -96,7 +101,7 @@ func TestFosterPositionsLoadingBarrier(t *testing.T) {
 			t.Fatal("late reposition accepted")
 		}
 		h.abortStageRoom(r)
-		if r.FosterPositions != nil {
+		if r.FosterPositions != nil || r.FosterTriggered != nil {
 			t.Fatal("snapshot survived aborted battle")
 		}
 	}

@@ -30,6 +30,7 @@ func TestFosterSpawnPlanGate(t *testing.T) {
 			spawn := protocol.FosterSpawn{Template: 251, Position: [3]float32{-1610, -4, -15}, Direction: 2}
 			r.FosterPlan = &protocol.FosterPlan{GlobalLimit: 1, Groups: []protocol.FosterGroup{{SubLimit: 2, GroupLimit: 2, Spawns: []protocol.FosterSpawn{spawn}}}}
 			r.FosterSpawned = []int{0}
+			r.FosterTriggered = []bool{true}
 			sender := owner
 			switch scenario {
 			case "no-plan":
@@ -47,6 +48,7 @@ func TestFosterSpawnPlanGate(t *testing.T) {
 			case "ambiguous":
 				r.FosterPlan.Groups = append(r.FosterPlan.Groups, r.FosterPlan.Groups[0])
 				r.FosterSpawned = append(r.FosterSpawned, 0)
+				r.FosterTriggered = append(r.FosterTriggered, true)
 			}
 			m := fosterSpawnPacket(sender.UID, 42, 1, spawn)
 			if err := h.battleMessage(sender, sender.game(), m); err != nil {
@@ -97,6 +99,8 @@ func TestNativeFosterSpawnPlan(t *testing.T) {
 	r := owner.Room
 	r.Request[46] = byte(protocol.FosterMode)
 	r.FosterPlan, r.FosterSpawned = plan, make([]int, len(plan.Groups))
+	r.FosterTriggered = make([]bool, len(plan.Groups))
+	r.triggerFosterGroups([3]float32{-1500, -4, -17})
 	sequence, total := uint32(1), 0
 	// Trying to skip directly to the boss cannot advance either event group.
 	boss := plan.Groups[1].Spawns[len(plan.Groups[1].Spawns)-1]
@@ -154,6 +158,7 @@ func TestFosterConcurrentSpawnLimits(t *testing.T) {
 				{SubLimit: 2, GroupLimit: 3, Spawns: []protocol.FosterSpawn{{Template: 2}}},
 			}}
 			r.FosterSpawned = []int{0, 0}
+			r.FosterTriggered = []bool{true, true}
 			r.PVEActors = map[uint64]pveActor{42: {active: true, maximumHP: 8, reportedHP: 8, fosterGroup: 0}}
 			actor := r.PVEActors[42]
 			allowed := true

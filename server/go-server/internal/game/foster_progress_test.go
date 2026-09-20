@@ -62,6 +62,7 @@ func TestFosterRetiredReceiptsSurviveIdentityReuse(t *testing.T) {
 	spawn := protocol.FosterSpawn{}
 	r.FosterPlan = &protocol.FosterPlan{InitialHP: []float32{8}, GlobalLimit: 2, Groups: []protocol.FosterGroup{{SubLimit: 2, GroupLimit: 2, Spawns: []protocol.FosterSpawn{spawn, spawn}}}}
 	r.FosterSpawned, r.FosterRetired = []int{0}, []int{0}
+	r.FosterTriggered = []bool{true}
 	for life := uint32(0); life < 2; life++ {
 		create := fosterSpawnPacket(owner.UID, 42, life*3+1, spawn)
 		damage := combatPacket(protocol.BattleEventHealth, 94, owner.UID, 42, 86)

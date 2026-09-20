@@ -4,10 +4,10 @@ import "kungfu.local/server/internal/protocol"
 
 // Each event group advances independently. Match the complete native spawn
 // literal; template counts alone would permit skipping ahead to the boss.
-// This does not infer death from a removal or verify group trigger timing.
+// Trigger state is latched from validated player position receipts.
 func (r *Room) fosterSpawnGroup(event protocol.PVEActorCreate) int {
 	plan := r.FosterPlan
-	if plan == nil || len(r.FosterSpawned) != len(plan.Groups) {
+	if plan == nil || len(r.FosterSpawned) != len(plan.Groups) || len(r.FosterTriggered) != len(plan.Groups) {
 		return -1
 	}
 	active := uint32(0)
@@ -30,6 +30,9 @@ func (r *Room) fosterSpawnGroup(event protocol.PVEActorCreate) int {
 	}
 	matched := -1
 	for i, group := range plan.Groups {
+		if !r.FosterTriggered[i] {
+			continue
+		}
 		if living[i] >= group.SubLimit || living[i] >= group.GroupLimit {
 			continue
 		}

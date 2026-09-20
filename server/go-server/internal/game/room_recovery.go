@@ -57,6 +57,7 @@ func (hub *Hub) restoreRoom(room *Room, peers []roomPeer, reason string) {
 	room.FosterPositions = nil
 	room.FosterPlan = nil
 	room.FosterSpawned = nil
+	room.FosterTriggered = nil
 	room.FosterRetired = nil
 	room.FosterFinishReported = false
 	room.Reliable = nil

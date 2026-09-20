@@ -46,6 +46,7 @@ type Room struct {
 	FosterPositions      []byte
 	FosterPlan           *protocol.FosterPlan
 	FosterSpawned        []int
+	FosterTriggered      []bool
 	FosterRetired        []int // Per-group removals whose received-event HP was zero.
 	FosterFinishReported bool
 	NetworkProbe         *roomNetworkProbe
@@ -767,10 +768,12 @@ func (hub *Hub) startBattle(room *Room) error {
 	room.StageWaves = waves
 	room.FosterPlan = foster
 	room.FosterSpawned = nil
+	room.FosterTriggered = nil
 	room.FosterRetired = nil
 	room.FosterFinishReported = false
 	if foster != nil {
 		room.FosterSpawned = make([]int, len(foster.Groups))
+		room.FosterTriggered = make([]bool, len(foster.Groups))
 		room.FosterRetired = make([]int, len(foster.Groups))
 	}
 	room.PVEActors = nil

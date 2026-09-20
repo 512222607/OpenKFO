@@ -14,6 +14,7 @@ func TestFosterHealthReceipts(t *testing.T) {
 	spawn := protocol.FosterSpawn{Template: 0}
 	r.FosterPlan = &protocol.FosterPlan{InitialHP: []float32{8}, GlobalLimit: 2, Groups: []protocol.FosterGroup{{SubLimit: 2, GroupLimit: 2, Spawns: []protocol.FosterSpawn{spawn, spawn}}}}
 	r.FosterSpawned = []int{0}
+	r.FosterTriggered = []bool{true}
 	r.FosterRetired = []int{0}
 	create := fosterSpawnPacket(owner.UID, 42, 1, spawn)
 	if err := h.battleMessage(owner, owner.game(), create); err != nil {

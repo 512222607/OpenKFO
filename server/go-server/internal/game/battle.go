@@ -208,6 +208,15 @@ func (hub *Hub) battleMessage(session *Session, channel *Channel, message protoc
 	if id == protocol.BattleEventHealth {
 		room.trackFosterHealth(payload)
 	}
+	if id == protocol.BattleEventMovement && room.Members[sender] != nil {
+		// 7D16BA copies actor position (9E42E0) to +51; the consumer
+		// passes absolute=true to 9E9D10. +63 is a different vector.
+		room.triggerFosterGroups([3]float32{
+			math.Float32frombits(protocol.ReadUint32(payload, 51)),
+			math.Float32frombits(protocol.ReadUint32(payload, 55)),
+			math.Float32frombits(protocol.ReadUint32(payload, 59)),
+		})
+	}
 	hub.broadcast(room, message, session.UID)
 	if id == 8121 || id == 8122 {
 		if time.Since(session.LastBattleNotice) > time.Second {
