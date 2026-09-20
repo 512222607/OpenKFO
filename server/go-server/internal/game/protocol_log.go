@@ -181,7 +181,7 @@ func (s *Session) tracePacket(direction string, channel uint32, transport string
 					entry["content"] = fmt.Sprintf("PVE移除怪物：申报UID=%d，实体=%d；不是击杀或通关凭据", r.Sender, r.Actor)
 				}
 				if r, err := protocol.ParseStageWaveEnd(payload); err == nil {
-					entry["content"] = fmt.Sprintf("闯关结束子消息20407：申报UID=%d，上下文原值=%d；完整通关业务未接入，不作为发奖授权", r.Sender, r.ContextValue)
+					entry["content"] = fmt.Sprintf("PVE结束标记20407：申报UID=%d，本局标识=%d；模式10仅在房主和本局校验后同步，不作为发奖授权", r.Sender, r.ContextValue)
 				}
 			}
 		}

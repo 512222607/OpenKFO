@@ -46,7 +46,8 @@ type StageWaveEnd struct {
 	Raw                  [47]byte
 }
 
-// 93BC60 -> A3FBB0 produces an embedded battle event, not top-level 20407.
+// 93BC60 (mode 21) / 941910 (mode 10) -> A3FBB0 produces an embedded
+// battle event, not top-level 20407. Both use the same 47-byte layout.
 // ContextValue is copied from the room object; it is not a claimed reward.
 func ParseStageWaveEnd(p []byte) (r StageWaveEnd, err error) {
 	if len(p) != len(r.Raw) || ReadUint32(p, 0) != BattleEventStageWaveEnd {
