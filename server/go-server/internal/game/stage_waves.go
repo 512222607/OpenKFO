@@ -92,6 +92,8 @@ func (h *Hub) abortStageRoom(r *Room) {
 	r.FosterPositions = nil
 	r.FosterPlan = nil
 	r.FosterSpawned = nil
+	r.FosterRetired = nil
+	r.FosterFinishReported = false
 	for _, member := range r.Members {
 		s := member.Session
 		h.leave(s, true)

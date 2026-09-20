@@ -55,11 +55,17 @@ func TestFosterFinishEvent(t *testing.T) {
 					t.Fatal("unexpected validation result", err)
 				}
 				if scenario == "valid" || scenario == "repeat" {
+					if !r.FosterFinishReported {
+						t.Fatal("controller finish receipt missing")
+					}
 					out := roomOutputs(t, peer, protocol.MsgBattleEvent)
 					if !bytes.Equal(out[0].Payload, p) {
 						t.Fatal("native event changed")
 					}
 				} else {
+					if r.FosterFinishReported {
+						t.Fatal("invalid finish changed receipt")
+					}
 					roomOutputs(t, peer)
 				}
 				roomOutputs(t, owner)

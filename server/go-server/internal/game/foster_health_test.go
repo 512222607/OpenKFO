@@ -14,6 +14,7 @@ func TestFosterHealthReceipts(t *testing.T) {
 	spawn := protocol.FosterSpawn{Template: 0}
 	r.FosterPlan = &protocol.FosterPlan{InitialHP: []float32{8}, GlobalLimit: 2, Groups: []protocol.FosterGroup{{Spawns: []protocol.FosterSpawn{spawn, spawn}}}}
 	r.FosterSpawned = []int{0}
+	r.FosterRetired = []int{0}
 	create := fosterSpawnPacket(owner.UID, 42, 1, spawn)
 	if err := h.battleMessage(owner, owner.game(), create); err != nil {
 		t.Fatal(err)
@@ -69,6 +70,9 @@ func TestFosterHealthReceipts(t *testing.T) {
 	roomOutputs(t, peer, 8071)
 	if r.PVEActors[42].maximumHP != 0 {
 		t.Fatal("removed actor kept health projection")
+	}
+	if r.FosterRetired[0] != 0 {
+		t.Fatal("removing a living actor became a death receipt")
 	}
 	protocol.WriteUint32(create.Payload, 19, 9)
 	if err := h.battleMessage(owner, owner.game(), create); err != nil {

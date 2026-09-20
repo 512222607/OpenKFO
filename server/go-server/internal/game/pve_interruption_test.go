@@ -18,6 +18,8 @@ func TestPVELeaveAbortsWithoutControllerMigration(t *testing.T) {
 			r.PVEBlocks = map[uint32]pveBlock{100: {sequence: 1, payload: []byte{1}}}
 			r.FosterPlan = &protocol.FosterPlan{}
 			r.FosterSpawned = []int{1}
+			r.FosterRetired = []int{1}
+			r.FosterFinishReported = true
 			r.Reports = map[uint64][]byte{owner.UID: settlementReport(r)}
 			r.LoadTimer = time.NewTimer(time.Hour)
 			leaver, remaining := owner, peer
@@ -28,7 +30,7 @@ func TestPVELeaveAbortsWithoutControllerMigration(t *testing.T) {
 			roomOutputs(t, leaver)
 			roomOutputs(t, remaining, protocol.MsgRoomLeft, 20150)
 			roomOutputs(t, outsider)
-			if len(h.Rooms) != 0 || len(r.Members) != 0 || r.PVEActors != nil || r.PVEBlocks != nil || r.StageWaves != nil || r.FosterPlan != nil || r.FosterSpawned != nil || r.Reports != nil || r.LoadTimer != nil {
+			if len(h.Rooms) != 0 || len(r.Members) != 0 || r.PVEActors != nil || r.PVEBlocks != nil || r.StageWaves != nil || r.FosterPlan != nil || r.FosterSpawned != nil || r.FosterRetired != nil || r.FosterFinishReported || r.Reports != nil || r.LoadTimer != nil {
 				t.Fatal("stage state survived departure", phase, ownerLeaves)
 			}
 			if remaining.Room != nil || remaining.game().Phase != "lobby" {

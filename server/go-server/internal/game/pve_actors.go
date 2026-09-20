@@ -13,6 +13,7 @@ type pveActor struct {
 	// Receipt-based HP projection; zero maximum means no verified template.
 	// This is not an authoritative death/clear receipt.
 	reportedHP, maximumHP float32
+	fosterGroup           int
 }
 
 func (r *Room) hasPVEActor(uid uint64) bool {
@@ -89,7 +90,11 @@ func (h *Hub) pveActorMessage(s *Session, message protocol.Message) error {
 	if r.PVEActors == nil {
 		r.PVEActors = make(map[uint64]pveActor)
 	}
-	r.PVEActors[actor] = pveActor{sequence: sequence, active: create}
+	if !create && r.Type() == protocol.FosterMode && previous.maximumHP > 0 && previous.reportedHP == 0 &&
+		previous.fosterGroup >= 0 && previous.fosterGroup < len(r.FosterRetired) {
+		r.FosterRetired[previous.fosterGroup]++
+	}
+	r.PVEActors[actor] = pveActor{sequence: sequence, active: create, fosterGroup: fosterGroup}
 	if fosterGroup >= 0 {
 		r.FosterSpawned[fosterGroup]++
 		if int(template) < len(r.FosterPlan.InitialHP) {
