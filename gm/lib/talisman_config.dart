@@ -57,6 +57,19 @@ class _TalismanConfigPageState extends State<TalismanConfigPage> {
     setState(() => revision = null);
     apply(await widget.api({'operation': 'talisman_settings_get'}));
   });
+  Future<void> importClientRules() => run(() async {
+    final result = await widget.api({'operation': 'talisman_client_rules'});
+    if (!mounted) return;
+    final existing = uses.map((r) => r['item']).toSet();
+    final additions = (result as List)
+        .where((r) => !existing.contains(r['item']))
+        .map((r) => Map<String, dynamic>.from(r as Map))
+        .toList();
+    setState(() {
+      uses.addAll(additions);
+      status = '从客户端补充 ${additions.length} 条宠物/法宝规则，保留已有设置。请核对后保存。';
+    });
+  });
   Future<void> save() => run(() async {
     if (enabled && uses.isEmpty && repairs.isEmpty) {
       throw const FormatException('启用至少需要一条规则');
@@ -71,7 +84,9 @@ class _TalismanConfigPageState extends State<TalismanConfigPage> {
       }),
     );
     if (mounted) {
-      setState(() => status = '已保存到 ${widget.environment}；新版服务器动态读取；修理窗口需重新打开获取报价');
+      setState(
+        () => status = '已保存到 ${widget.environment}；新版服务器动态读取；修理窗口需重新打开获取报价',
+      );
     }
   });
   Future<void> edit(int index) async {
@@ -228,6 +243,10 @@ class _TalismanConfigPageState extends State<TalismanConfigPage> {
               TextButton(
                 onPressed: busy ? null : load,
                 child: const Text('重新读取'),
+              ),
+              TextButton(
+                onPressed: busy || revision == null ? null : importClientRules,
+                child: const Text('从客户端补齐宠物/法宝规则'),
               ),
               TextButton(
                 onPressed: busy || revision == null || levels.length >= 4096

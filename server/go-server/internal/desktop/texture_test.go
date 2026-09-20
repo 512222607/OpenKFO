@@ -2,6 +2,8 @@ package desktop
 
 import (
 	"bytes"
+	"image"
+	"image/color"
 	"image/png"
 	"os"
 	"path/filepath"
@@ -19,6 +21,8 @@ func TestInstalledShopImages(t *testing.T) {
 		width, height int
 	}{
 		{"Picture/ItemIcon/253030.png", 80, 80},
+		{"Picture/ItemIcon/253912.png", 80, 80},
+		{"Picture/ItemIcon/303172.png", 80, 80},
 		{"Picture/Shop_Panel1_New.png", 800, 560},
 	} {
 		b, err := os.ReadFile(filepath.Join(client, "Data/UI", fixture.path))
@@ -93,4 +97,85 @@ func TestInstalledShopImages(t *testing.T) {
 		}
 	}
 	t.Logf("Unavailable icons: %v", reasons)
+}
+
+func TestCatalogReturnsDecodedInventoryIcons(t *testing.T) {
+	client := os.Getenv("OPENKFO_TEST_CLIENT")
+	if client == "" {
+		t.Skip("installed client required")
+	}
+	all, err := Catalog(client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wanted := map[uint32]bool{253943: false, 253944: false, 253945: false, 253946: false, 253947: false, 253948: false, 253949: false, 253950: false}
+	available := 0
+	for _, item := range all {
+		if item.Icon == "" {
+			source := filepath.Join(client, "Data/UI", filepath.FromSlash(strings.ReplaceAll(item.Fields[9], "\\", "/")))
+			if data, readErr := os.ReadFile(source); readErr == nil {
+				_, decodeErr := decodeTexture(data)
+				t.Errorf("existing icon unavailable %s %s: %v", item.Key, item.Fields[9], decodeErr)
+			} else if !os.IsNotExist(readErr) {
+				t.Errorf("icon read failed %s: %v", item.Key, readErr)
+			}
+			if _, needed := wanted[item.ID]; needed {
+				t.Errorf("screenshot item %d missing icon", item.ID)
+			}
+			continue
+		}
+		data, err := os.ReadFile(item.Icon)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = png.Decode(bytes.NewReader(data)); err != nil {
+			t.Fatalf("catalog %s is not decoded PNG: %v", item.Key, err)
+		}
+		available++
+		if _, needed := wanted[item.ID]; needed {
+			wanted[item.ID] = true
+		}
+	}
+	for id, found := range wanted {
+		if !found {
+			t.Errorf("screenshot item %d not verified", id)
+		}
+	}
+	t.Logf("Catalog Image.file paths verified: %d / %d", available, len(all))
+}
+
+func TestTextureCacheInvalidatesChangedSource(t *testing.T) {
+	// Use a valid in-memory PNG to exercise publication without installed assets.
+	dir := t.TempDir()
+	t.Setenv("LOCALAPPDATA", dir)
+	t.Setenv("XDG_CACHE_HOME", dir)
+	path := filepath.Join(dir, "source.png")
+	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
+	var b bytes.Buffer
+	if err := png.Encode(&b, img); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, b.Bytes(), 0600); err != nil {
+		t.Fatal(err)
+	}
+	first, err := cachedTexture(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := cachedTexture(path)
+	if err != nil || first != again {
+		t.Fatal("cache reuse failed", err)
+	}
+	img.Set(0, 0, color.RGBA{R: 255, A: 255})
+	b.Reset()
+	png.Encode(&b, img)
+	os.WriteFile(path, b.Bytes(), 0600)
+	next, err := cachedTexture(path)
+	if err != nil || next == first {
+		t.Fatal("changed source reused old image", err)
+	}
+	os.WriteFile(path, []byte("not an image"), 0600)
+	if _, err = cachedTexture(path); err == nil {
+		t.Fatal("corrupt source accepted")
+	}
 }

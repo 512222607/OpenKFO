@@ -32,11 +32,26 @@ internal static class UpdateTests
             bytes = Zip("launcher.exe");
             var launcherRelease = new Manifest("launcher", "test", "登录器更新", UpdateEngine.Hash(bytes), bytes.Length, UpdateEngine.Hash(bytes) + ".zip", null, UpdateEngine.Hash(next));
             UpdateEngine.Validate(launcherRelease, "launcher"); files = UpdateEngine.Unpack(launcherRelease, bytes);
+            string localPackage = Path.Combine(root, launcherRelease.Package); File.WriteAllBytes(localPackage, bytes);
+            var localBytes = UpdateEngine.ReadLocal(localPackage, launcherRelease.Size);
+            UpdateEngine.Unpack(launcherRelease, localBytes);
+            try { UpdateEngine.ReadLocal(localPackage, bytes.Length - 1); throw new Exception("oversized local package accepted"); } catch (InvalidDataException) { }
+            localBytes[0] ^= 1;
+            try { UpdateEngine.Unpack(launcherRelease, localBytes); throw new Exception("tampered local package accepted"); } catch (InvalidDataException) { }
             string launcherPath = Path.Combine(root, "功夫小子线上登录器.exe"); File.WriteAllBytes(launcherPath, old);
             try { UpdateEngine.Apply(launcherRelease, files, root, null, n => { if(n == 1) throw new IOException("injected"); }, launcherPath); throw new Exception("launcher rollback not invoked"); } catch(IOException e) when(e.Message == "injected") { }
             if (!File.ReadAllBytes(launcherPath).SequenceEqual(old)) throw new Exception("launcher rollback failed");
             UpdateEngine.Apply(launcherRelease, files, root, null, launcher: launcherPath);
             if (!UpdateEngine.Current(launcherRelease, root, launcherPath) || !File.Exists(bridge)) throw new Exception("renamed launcher update failed");
+            var separated = launcherRelease with { GameEndpoint = "tls://game.example.invalid:19091", UpdateBaseURL = "https://example.invalid/updates/" };
+            UpdateEngine.Validate(separated, "launcher");
+            File.WriteAllText(bridge, "{\"url\":\"tls://example.invalid:19091\",\"client_directory\":\".\"}");
+            string before = File.ReadAllText(bridge);
+            try { UpdateEngine.Apply(separated, files, root, bridge, n => { if (n == 2) throw new IOException("injected"); }, launcherPath); throw new Exception("config rollback not invoked"); } catch (IOException e) when (e.Message == "injected") { }
+            if (File.ReadAllText(bridge) != before) throw new Exception("config rollback failed");
+            UpdateEngine.Apply(separated, files, root, bridge, launcher: launcherPath);
+            var migrated = JsonNode.Parse(File.ReadAllText(bridge))!;
+            if (migrated["url"]!.GetValue<string>() != separated.GameEndpoint || migrated["credentials_scope"]!.GetValue<string>() != "tls://example.invalid:19091/" || migrated["client_directory"]!.GetValue<string>() != ".") throw new Exception("separate endpoints migration failed");
             File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "updater-test-result.json"), "{\"ok\":true,\"checks\":[\"checksum\",\"install\",\"rollback\",\"preserve-settings\",\"zip-paths\"]}");
         }
         finally { Directory.Delete(root, true); }

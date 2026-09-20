@@ -65,9 +65,36 @@ func TestDesktopAdminTransactions(t *testing.T) {
 	}
 	prefix := fmt.Sprintf("admin-%d", uid)
 	offer := adminFixtureOffer(uint32(uid%100000000) + 20000000)
+	recommended := true
+	offer.Recommended = &recommended
 	save := AdminRequest{Operation: "shop_save", ID: prefix + "-save", Offers: []AdminOffer{offer}}
 	if _, err = store.Admin(save); err != nil {
 		t.Fatal(err)
+	}
+	list, err := store.ShopManager().Offers(protocol.ShopCategoryRecommended, int(protocol.ItemWeapon))
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, row := range list {
+		if row.Key == offer.Key {
+			found = true
+			if !bytes.Equal(row.Record, offer.Record) {
+				t.Fatal("recommendation changed purchase record")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("recommended weapon missing")
+	}
+	activatedSnapshot, err := store.RoleManager().Snapshot(uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, record := range activatedSnapshot.Inventory {
+		if protocol.ReadUint16(record, 17) != 0 && (protocol.ReadUint32(record, 19) != inventoryActive || protocol.ReadUint32(record, 13) != permanentDisplayMinutes) {
+			t.Fatal("legacy starter equipment not activated")
+		}
 	}
 	request := AdminRequest{Operation: "shop_batch", ID: prefix + "-disable", Offers: []AdminOffer{offer}, Preserve: true, Enabled: false}
 	if _, err = store.Admin(request); err != nil {

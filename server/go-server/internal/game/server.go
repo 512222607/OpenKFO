@@ -8,7 +8,6 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"errors"
-	"io"
 	"log"
 	"net"
 	"net/http"
@@ -56,7 +55,11 @@ func (server *Server) Handler() http.Handler {
 			return
 		}
 		writer.Header().Set("Content-Type", "application/json")
-		io.WriteString(writer, `{"service":"kungfu-go","status":"ok"}`)
+		json.NewEncoder(writer).Encode(struct {
+			Service string `json:"service"`
+			Status  string `json:"status"`
+			Key     string `json:"launcher_credentials_key,omitempty"`
+		}{"kungfu-go", "ok", server.Hub.Config.LauncherCredentialsKey})
 	})
 	mux.HandleFunc("GET /kk/tunnel", server.accept)
 	mux.Handle("GET /updates/", releases.Handler(os.Getenv("OPENKFO_UPDATES_DIR")))
@@ -146,7 +149,7 @@ func (server *Server) serveConnection(connection *tls.Conn) {
 	if auth.Op == "health" {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		response := tunnel.Frame{Op: "health", Value: 1}
+		response := tunnel.Frame{Op: "health", Value: 1, LauncherCredentialsKey: server.Hub.Config.LauncherCredentialsKey}
 		if server.Hub.Store.DB.PingContext(ctx) != nil {
 			response.Value = 0
 			response.Error = "unavailable"

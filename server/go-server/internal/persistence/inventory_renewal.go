@@ -8,7 +8,7 @@ import (
 // ExtendItem keeps the existing instance and its upgrades. The caller must
 // hold the account row lock, validate the offer and charge/record the renewal
 // in this same transaction. days is server policy, never a client duration.
-// This path handles weapons (hour-based display), not VIP minute-based cards.
+// This path handles weapons; active instances use minutes, unused ones hours.
 // Permanent ownership has no expiration row and cannot be renewed this way.
 func (m InventoryManager) ExtendItem(tx *sql.Tx, uid uint64, instance uint32, days uint32, now int64) ([]byte, error) {
 	if uid == 0 || instance == 0 || days == 0 || days > 3650 || now <= 0 {
@@ -37,6 +37,9 @@ func (m InventoryManager) ExtendItem(tx *sql.Tx, uid uint64, instance uint32, da
 	}
 	deadline = base + extension
 	protocol.WriteUint32(item, 13, uint32((deadline-now+3599)/3600))
+	if protocol.ReadUint32(item, inventoryStateOffset) == inventoryActive {
+		projectItemMinutes(item, sql.NullInt64{Int64: deadline, Valid: true}, now)
+	}
 	if _, err := tx.Exec(`UPDATE inventory SET record=? WHERE uid=? AND instance=?`, item, uid, instance); err != nil {
 		return nil, err
 	}

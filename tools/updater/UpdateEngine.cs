@@ -14,7 +14,9 @@ internal sealed record Manifest(
  [property: JsonPropertyName("size")] long Size,
  [property: JsonPropertyName("package")] string Package,
  [property: JsonPropertyName("config_hash")] string? ConfigHash,
- [property: JsonPropertyName("executable_hash")] string? ExecutableHash = null);
+ [property: JsonPropertyName("executable_hash")] string? ExecutableHash = null,
+ [property: JsonPropertyName("game_endpoint")] string? GameEndpoint = null,
+ [property: JsonPropertyName("update_base_url")] string? UpdateBaseURL = null);
 
 internal static class UpdateEngine
 {
@@ -22,6 +24,12 @@ internal static class UpdateEngine
     internal static bool ValidHash(string? text) => text is { Length: 64 } && text.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f');
     internal static void Validate(Manifest m, string kind)
     {
+        if (m.GameEndpoint != null || m.UpdateBaseURL != null)
+        {
+            if (kind != "launcher" || !Uri.TryCreate(m.GameEndpoint, UriKind.Absolute, out var endpoint) || endpoint.Scheme != "tls" || endpoint.Port < 1 || endpoint.IsLoopback || endpoint.UserInfo != "" || endpoint.Query != "" || endpoint.Fragment != "" || endpoint.AbsolutePath != "/") throw new InvalidDataException("游戏更新地址无效。");
+            var updates = SecureUri(m.UpdateBaseURL ?? "");
+            if (!updates.AbsolutePath.EndsWith('/') || updates.Query != "" || updates.Fragment != "") throw new InvalidDataException("更新目录地址无效。");
+        }
         if (m.Kind != kind || (kind != "gm" && kind != "weapons" && kind != "client" && kind != "launcher") || !ValidHash(m.SHA256) || m.Package != m.SHA256 + ".zip" || m.Size < 1 || m.Size > 256 * 1024 * 1024 || string.IsNullOrWhiteSpace(m.Version) || m.Version.Length > 100 || string.IsNullOrWhiteSpace(m.Notes) || m.Notes.Length > 16384 || (kind == "client" || kind == "weapons") && !ValidHash(m.ConfigHash) || kind == "launcher" && !ValidHash(m.ExecutableHash)) throw new InvalidDataException("更新清单无效。");
     }
     internal static bool Current(Manifest m, string target, string? launcher = null)
@@ -45,6 +53,14 @@ internal static class UpdateEngine
         return JsonSerializer.Deserialize<Manifest>(File.ReadAllText(path))?.SHA256 == m.SHA256;
     }
     internal static Uri SecureUri(string text) { var uri = new Uri(text); if (uri.Scheme != "https" || uri.UserInfo != "") throw new InvalidDataException("更新地址必须使用 HTTPS。"); return uri; }
+    internal static byte[] ReadLocal(string path, long maximum)
+    {
+        using var input = File.OpenRead(path);
+        if (input.Length < 1 || input.Length > maximum) throw new InvalidDataException("本地更新文件长度不正确。");
+        var bytes = new byte[checked((int)input.Length)]; input.ReadExactly(bytes);
+        if (input.ReadByte() != -1) throw new InvalidDataException("读取期间更新文件发生变化。");
+        return bytes;
+    }
     internal static async Task<byte[]> Download(HttpClient http, Uri uri, long maximum, Action<string> progress)
     {
         using var response = await http.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead); response.EnsureSuccessStatusCode();
@@ -87,6 +103,16 @@ internal static class UpdateEngine
         {
             if (launcher == null || !string.Equals(Path.GetDirectoryName(Path.GetFullPath(launcher)), target, StringComparison.OrdinalIgnoreCase) || !launcher.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("登录器目标路径不正确。");
             writes.Clear(); writes[Path.GetFullPath(launcher)] = files["launcher.exe"];
+            if (m.GameEndpoint != null)
+            {
+                if (bridge == null) throw new InvalidDataException("缺少登录器配置路径，未执行更新。");
+                var config = JsonNode.Parse(File.ReadAllText(bridge))!.AsObject();
+                var current = new Uri(config["url"]!.GetValue<string>());
+                if (current.IsLoopback) throw new InvalidDataException("线上更新包不能修改本地登录器。");
+                config["credentials_scope"] ??= current.AbsoluteUri;
+                config["url"] = m.GameEndpoint; config["update_base_url"] = m.UpdateBaseURL;
+                writes[Path.GetFullPath(bridge)] = Encoding.UTF8.GetBytes(config.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            }
         }
         if (m.Kind == "client" || m.Kind == "weapons")
         {

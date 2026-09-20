@@ -107,6 +107,9 @@ func main() {
 		if err = json.Unmarshal(encoded, &config); err != nil || len(config.ConfigHash) != 64 || len(config.Pools) == 0 {
 			log.Fatal("invalid game configuration")
 		}
+		if err = config.ValidateLauncherCredentials(); err != nil {
+			log.Fatal(err)
+		}
 		if err = config.ValidateLobbies(); err != nil {
 			log.Fatal(err)
 		}

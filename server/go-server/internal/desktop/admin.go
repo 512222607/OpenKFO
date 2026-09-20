@@ -13,9 +13,11 @@ import (
 	"time"
 
 	"kungfu.local/server/internal/persistence"
+	"kungfu.local/server/internal/protocol"
 )
 
 type Request struct {
+	Recommended      *bool                           `json:"recommended,omitempty"`
 	Notes            string                          `json:"notes,omitempty"`
 	Definition       *persistence.ItemDefinition     `json:"definition,omitempty"`
 	StageUnlocks     *persistence.StagePlayerUnlocks `json:"stage_unlocks,omitempty"`
@@ -131,6 +133,9 @@ func template(item Item, quantity, days int) []byte {
 	} else if item.Timed {
 		little.PutUint32(record[13:], uint32(days*24))
 	}
+	if item.Kind == protocol.ItemTalisman {
+		little.PutUint16(record[23:], initialTalismanQuota)
+	}
 	return record
 }
 func offer(item Item, request Request) (persistence.AdminOffer, error) {
@@ -164,7 +169,16 @@ func offer(item Item, request Request) (persistence.AdminOffer, error) {
 	} else {
 		little.PutUint32(record[22:], uint32(request.Days*24))
 	}
-	return persistence.AdminOffer{Offer: persistence.Offer{Key: key, Category: 10, Variant: item.Kind, Record: record, Grant: template(item, request.Quantity, request.Days)}, Enabled: *request.Enabled, ServerExpiryDays: request.ServerExpiryDays}, nil
+	if item.Kind == protocol.ItemTalisman {
+		little.PutUint32(record[26:], initialTalismanQuota)
+	}
+	grant := template(item, request.Quantity, request.Days)
+	if item.Kind == protocol.ItemTalisman {
+		// Native 99AB34 looks up maximum durability in the shop directory by
+		// inventory +9; 99AB48 reads the directory's DWORD +26.
+		little.PutUint32(grant[9:], key)
+	}
+	return persistence.AdminOffer{Offer: persistence.Offer{Key: key, Category: 10, Variant: item.Kind, Record: record, Grant: grant}, Enabled: *request.Enabled, Recommended: request.Recommended, ServerExpiryDays: request.ServerExpiryDays}, nil
 }
 func (admin *Admin) Call(request Request) (any, error) {
 	if request.Environment != "" && request.Environment != "local" && request.Environment != "online" {
@@ -259,6 +273,20 @@ func (admin *Admin) Call(request Request) (any, error) {
 	if request.Operation == "shop_images" {
 		return shopImages(client, items, request.Keys)
 	}
+	if request.Operation == "talisman_client_rules" {
+		return clientTalismanRules(client, items)
+	}
+	if request.Operation == "shop_image_status" {
+		pictures, err := shopImages(client, items, request.Keys)
+		if err != nil {
+			return nil, err
+		}
+		status := make(map[string]bool, len(request.Keys))
+		for _, key := range request.Keys {
+			_, status[key] = pictures[key]
+		}
+		return status, nil
+	}
 	if strings.HasPrefix(request.Operation, "weapon_") {
 		result, err := weaponHandle(request, client, items, filepath.Join(admin.Root, "runtime-local", "weapon-config"))
 		if err != nil {
@@ -343,12 +371,15 @@ func (admin *Admin) Call(request Request) (any, error) {
 				days = 365
 			}
 			quantity := little.Uint16(row.Grant[23:])
+			if row.Grant[4] == protocol.ItemTalisman {
+				quantity = 1
+			} // +23 is durability, not purchase count.
 			if quantity == 0 {
 				quantity = 1
 			}
-			offers[key] = map[string]any{"server_expiry_days": row.ServerExpiryDays, "currency": currency, "price": price, "days": days, "quantity": quantity, "enabled": row.Enabled}
+			offers[key] = map[string]any{"recommended": row.Recommended, "server_expiry_days": row.ServerExpiryDays, "currency": currency, "price": price, "days": days, "quantity": quantity, "enabled": row.Enabled}
 		}
-		return map[string]any{"items": available, "offers": offers, "environment": environment}, nil
+		return map[string]any{"items": items, "offers": offers, "environment": environment}, nil
 	}
 	if request.Operation != "grant" && request.Operation != "shop_save" && request.Operation != "shop_batch" && request.Operation != "shop_prices" {
 		return nil, fmt.Errorf("不支持的管理操作")
@@ -372,7 +403,8 @@ func (admin *Admin) Call(request Request) (any, error) {
 	seen := map[string]bool{}
 	for _, key := range keys {
 		item, exists := byKey[key]
-		if !exists || seen[key] || (request.Operation != "grant" && !item.Supported) {
+		delisting := request.Operation == "shop_batch" && request.Enabled != nil && !*request.Enabled
+		if !exists || seen[key] || (request.Operation != "grant" && !item.Supported && !delisting) {
 			return nil, fmt.Errorf("道具无效或重复")
 		}
 		seen[key] = true

@@ -70,6 +70,7 @@ internal sealed class InstanceManager
             response.EnsureSuccessStatusCode();
             using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
             if (document.RootElement.GetProperty("service").GetString() != "kungfu-go" || document.RootElement.GetProperty("status").GetString() != "ok") throw new IOException("服务返回异常状态");
+            ReadCredentialsKey(document.RootElement);
             return (null, null, elapsed.ElapsedMilliseconds);
         }
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
@@ -102,14 +103,26 @@ internal sealed class InstanceManager
         long roundTripMs = elapsed.ElapsedMilliseconds;
         using var status = JsonDocument.Parse(output.ToArray());
         if (status.RootElement.GetProperty("op").GetString() != "health" || status.RootElement.GetProperty("value").GetInt32() != 1) throw new IOException("服务暂不可用");
+        ReadCredentialsKey(status.RootElement);
         return (roundTripMs, connectionMs, connectionMs + roundTripMs);
     }
 
     private string Resolve(string path) => Path.GetFullPath(path, root);
 
+    internal Uri UpdateManifest(string kind)
+    {
+        if (baseline["update_base_url"] is JsonValue value && value.TryGetValue<string>(out var configured))
+        {
+            var address = OpenKFO.Updater.UpdateEngine.SecureUri(configured);
+            if (!address.AbsolutePath.EndsWith('/') || address.Query != "" || address.Fragment != "") throw new IOException("更新目录必须以 / 结尾，且不能包含查询参数。");
+            return new Uri(address, kind + ".json");
+        }
+        return new UriBuilder(Endpoint) { Scheme = "https", Path = "/updates/" + kind + ".json", Query = "", Port = Endpoint.Scheme == "tls" || Endpoint.IsDefaultPort ? -1 : Endpoint.Port }.Uri;
+    }
+
     internal bool CheckLauncherUpdate()
     {
-        if (Endpoint.IsLoopback || Endpoint.Scheme != "wss") return true;
+        if (Endpoint.IsLoopback || Endpoint.Scheme != "wss" && baseline["update_base_url"] == null) return true;
         using var resource = Assembly.GetExecutingAssembly().GetManifestResourceStream("OpenKFO.Updater.exe") ?? throw new IOException("登录器更新助手缺失，请重新下载登录器。");
         using var buffer = new MemoryStream(); resource.CopyTo(buffer); byte[] bytes = buffer.ToArray();
         string folder = Path.Combine(root, "launcher-components", "updater", Hash(bytes)[..16]);
@@ -117,7 +130,7 @@ internal sealed class InstanceManager
         string helper = Path.Combine(folder, "OpenKFO.Updater.exe");
         if (!File.Exists(helper) || FileHash(helper) != Hash(bytes)) File.WriteAllBytes(helper, bytes);
         string executable = Environment.ProcessPath!;
-        var uri = new UriBuilder(Endpoint) { Scheme = "https", Path = "/updates/launcher.json", Query = "", Port = Endpoint.IsDefaultPort ? -1 : Endpoint.Port }.Uri;
+        var uri = UpdateManifest("launcher");
         var start = new ProcessStartInfo(helper) { WorkingDirectory = folder, UseShellExecute = false };
         foreach (var arg in new[] { "--kind", "launcher", "--target", Path.GetDirectoryName(executable)!, "--launcher", executable, "--restart-root", root, "--manifest", uri.AbsoluteUri }) start.ArgumentList.Add(arg);
         using var process = Process.Start(start) ?? throw new IOException("无法启动登录器更新助手。");
@@ -164,6 +177,61 @@ internal sealed class InstanceManager
                     yield return file;
         }
     }
+    internal string CredentialsKey { get; private set; } = WindowCredentials.DefaultKey;
+    internal string CredentialsDirectory(int number) => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OpenKFO", "Launcher", Hash(Encoding.UTF8.GetBytes(baseline["credentials_scope"]?.GetValue<string>() ?? Endpoint.AbsoluteUri))[..16], "window-" + number);
+    internal WindowCredentials LoadCredentials(int number)
+    {
+        string legacy = InstanceDirectory(number);
+        if (!File.Exists(Path.Combine(legacy, "credentials.bin"))) legacy = Path.Combine(SourceDirectory, "launcher-components", "window-" + number);
+        return WindowCredentials.LoadMigrating(CredentialsDirectory(number), legacy, CredentialsKey);
+    }
+    internal void SaveCredentials(int number, WindowCredentials saved) => saved.Save(CredentialsDirectory(number), CredentialsKey);
+    private void ReadCredentialsKey(JsonElement response)
+    {
+        if (!response.TryGetProperty("launcher_credentials_key", out var value)) { CredentialsKey = WindowCredentials.DefaultKey; return; }
+        string? key = value.GetString();
+        if (!WindowCredentials.ValidKey(key)) throw new IOException("服务器账号保存密钥配置无效。");
+        CredentialsKey = key!;
+    }
+    internal void UpdateGameTitle(int number, string account)
+    {
+        if (string.IsNullOrWhiteSpace(account)) return;
+        using var game = FindGame(number);
+        if (game is null) return;
+        game.Refresh();
+        var window = game.MainWindowHandle;
+        if (window == IntPtr.Zero) return;
+        var key = (game.Id, game.StartTime.ToFileTimeUtc());
+        if (!gameTitles.TryGetValue(key, out var state))
+        {
+            var title = new StringBuilder(256); GetWindowTextW(window, title, title.Capacity);
+            state = (title.ToString(), false);
+        }
+        bool loginExists = false, loginVisible = false, browserVisible = false;
+        EnumChildWindows(window, (child, _) => {
+            var name = new StringBuilder(64); GetClassNameW(child, name, name.Capacity);
+            if (name.ToString() == "LoginChildWndClass") { loginExists = true; loginVisible |= IsWindowVisible(child); }
+            if (name.ToString() == "Internet Explorer_Server") browserVisible |= IsWindowVisible(child);
+            return true;
+        }, IntPtr.Zero);
+        // Native login initialization depends on its original parent caption.
+        // Never rename during startup, login, or recreation of the login view.
+        bool seen = state.SeenLogin || loginVisible;
+        bool showAccount = CanShowAccountTitle(seen, loginExists, loginVisible, browserVisible);
+        string desired = showAccount ? "功夫小子 - " + account : state.Original;
+        var current = new StringBuilder(256); GetWindowTextW(window, current, current.Capacity);
+        if (current.ToString() != desired) SetWindowTextW(window, desired);
+        gameTitles[key] = (state.Original, loginExists && seen);
+    }
+    private readonly Dictionary<(int PID, long Created), (string Original, bool SeenLogin)> gameTitles = new();
+    internal static bool CanShowAccountTitle(bool seenLogin, bool loginExists, bool loginVisible, bool browserVisible) => seenLogin && loginExists && !loginVisible && !browserVisible;
+    private delegate bool ChildWindowCallback(IntPtr window, IntPtr parameter);
+    [DllImport("user32.dll")] private static extern bool EnumChildWindows(IntPtr window, ChildWindowCallback callback, IntPtr parameter);
+    [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr window);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassNameW(IntPtr window, StringBuilder name, int length);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowTextW(IntPtr window, StringBuilder text, int length);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern bool SetWindowTextW(IntPtr window, string title);
+
     internal string InstanceDirectory(int number) => Path.Combine(root, "launcher-components", "window-" + number);
     internal string LogPath(int number) => Path.Combine(SharedClient ? SharedDirectory : InstanceDirectory(number), "online-client.log");
 
@@ -262,7 +330,7 @@ internal sealed class InstanceManager
     internal static void ValidateSharedBridgeDirectory(string expected, string actual)
     {
         if (string.Equals(Path.GetFullPath(expected), Path.GetFullPath(actual), StringComparison.OrdinalIgnoreCase)) return;
-        throw new IOException($"另一个游戏目录的网络组件正在运行，无法共用启动请求。\n\n正在运行：{actual}\n\n请在原来的登录器中点击“再开一个窗口”。若要切换游戏目录，请先退出原目录的游戏和登录器，等待网络组件退出后再启动。");
+        throw new IOException($"另一个游戏目录的网络组件正在运行，无法共用启动请求。\n\n正在运行：{actual}\n\n请在原来的登录器中选择未启动的窗口，再点击“启动选中窗口”。若要切换游戏目录，请先退出原目录的游戏和登录器，等待网络组件退出后再启动。");
     }
 
     private async Task RestoreLoginCertificateAsync(IProgress<string> progress)
@@ -284,9 +352,9 @@ internal sealed class InstanceManager
 
     private Task UpdateClientAsync(IProgress<string> progress)
     {
-        if (Endpoint.IsLoopback || Endpoint.Scheme != "wss") return Task.CompletedTask;
+        if (Endpoint.IsLoopback || Endpoint.Scheme != "wss" && baseline["update_base_url"] == null) return Task.CompletedTask;
         progress.Report("正在检查客户端更新…");
-        var manifest = new UriBuilder(Endpoint) { Scheme = "https", Path = "/updates/client.json", Query = "", Port = Endpoint.IsDefaultPort ? -1 : Endpoint.Port }.Uri;
+        var manifest = UpdateManifest("client");
         using var update = new OpenKFO.Updater.UpdateForm("client", SourceDirectory, manifest, Path.Combine(root, "bridge.json"));
         update.ShowDialog(Form.ActiveForm);
         if (!update.Completed) throw new IOException("客户端更新未完成，已取消启动游戏。请完成更新后重试。");
@@ -298,7 +366,7 @@ internal sealed class InstanceManager
     private async Task PrepareLoginAsync(int number, Process game, IProgress<string> progress)
     {
         StartLoginSkin(number, game);
-        var saved = WindowCredentials.Load(InstanceDirectory(number));
+        var saved = LoadCredentials(number);
         if (saved.Account.Length == 0 && saved.Password.Length == 0)
         {
             progress.Report($"窗口 {number} 已启动，请在游戏里输入账号密码。");

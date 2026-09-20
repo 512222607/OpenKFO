@@ -15,6 +15,11 @@ internal static class SelfTests
             var resources = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceNames();
             Require(resources.Contains("LoginSkin.dll") && resources.Contains("LoginSkinHost.exe") && resources.Contains("OpenKFO.Updater.exe"), "independent updater and presentation-only login skin embedded");
             TestCredentials(testRoot);
+            Require(!InstanceManager.CanShowAccountTitle(false, false, false, false), "startup keeps native caption before login creation");
+            Require(!InstanceManager.CanShowAccountTitle(false, true, false, false), "hidden precreated dialog is not a completed login");
+            Require(!InstanceManager.CanShowAccountTitle(true, true, true, false), "login view keeps native caption");
+            Require(InstanceManager.CanShowAccountTitle(true, true, false, false), "completed login can show account");
+            Require(!InstanceManager.CanShowAccountTitle(true, false, false, false) && !InstanceManager.CanShowAccountTitle(true, true, false, true), "relogin or browser initialization restores native caption");
             string source = Path.Combine(testRoot, "client"); Directory.CreateDirectory(Path.Combine(source, "Data"));
             Directory.CreateDirectory(Path.Combine(source, "OpenKFO", "backups"));
             File.WriteAllText(Path.Combine(source, "OpenKFO", "backups", "private.json"), "must not copy");
@@ -82,13 +87,18 @@ internal static class SelfTests
             File.WriteAllText(Path.Combine(testRoot, "bridge.json"), config.ToJsonString());
             var direct = new InstanceManager(testRoot);
             Require(direct.Endpoint.Scheme == "tls" && direct.Endpoint.Host == "example.invalid" && direct.HealthUri.Port == 19091, "direct TLS endpoint");
-            Require(direct.CheckLauncherUpdate(), "direct TLS does not launch the HTTPS updater");
-            Require(!Directory.Exists(Path.Combine(testRoot, "launcher-components", "updater")), "direct TLS does not extract an update helper");
+            Require(direct.UpdateManifest("launcher").AbsoluteUri == "https://example.invalid/updates/launcher.json", "direct TLS uses HTTPS update port");
+            config["update_base_url"] = "https://updates.example.invalid/releases/";
+            File.WriteAllText(Path.Combine(testRoot, "bridge.json"), config.ToJsonString());
+            var separated = new InstanceManager(testRoot);
+            Require(separated.UpdateManifest("launcher").AbsoluteUri == "https://updates.example.invalid/releases/launcher.json" && separated.Endpoint == direct.Endpoint, "update host does not change game endpoint");
+            config.Remove("update_base_url"); File.WriteAllText(Path.Combine(testRoot, "bridge.json"), config.ToJsonString());
+            Require(!Directory.Exists(Path.Combine(testRoot, "launcher-components", "updater")), "URL check does not start updater");
             string bridgePath = Path.Combine(testRoot, "launcher-components", "shared", "OnlineBridge.exe");
             InstanceManager.ValidateSharedBridgeDirectory(bridgePath, bridgePath.ToUpperInvariant());
             bool otherDirectoryRejected = false;
             try { InstanceManager.ValidateSharedBridgeDirectory(bridgePath, Path.Combine(testRoot, "other", "OnlineBridge.exe")); }
-            catch (IOException error) { otherDirectoryRejected = error.Message.Contains("另一个游戏目录") && error.Message.Contains("再开一个窗口"); }
+            catch (IOException error) { otherDirectoryRejected = error.Message.Contains("另一个游戏目录") && error.Message.Contains("启动选中窗口"); }
             Require(otherDirectoryRejected, "cross-directory bridge conflict is explained before queuing a launch");
             Require(Enumerable.Range(1, 8).SelectMany(number => new[] { InstanceManager.LoginPort(number), InstanceManager.SDKPort(number), InstanceManager.GamePort(number) }).Distinct().Count() == 24, "eight isolated port sets");
             string image = Path.Combine(manager.ClientDirectory(2), "gfld.dat"); secondBytes[100] ^= 1; File.WriteAllBytes(image, secondBytes);
@@ -124,9 +134,23 @@ internal static class SelfTests
         var one = new WindowCredentials("fixture-one", "secret-one" );
         var two = new WindowCredentials("fixture-two", "secret-two" );
         one.Save(first); two.Save(second);
+        byte[] firstSave = File.ReadAllBytes(Path.Combine(first, "credentials.bin"));
+        one.Save(first);
+        Require(!firstSave.SequenceEqual(File.ReadAllBytes(Path.Combine(first, "credentials.bin"))), "AES randomized nonce");
+        one.Save(first, "1234567890abcdef");
+
         Require(WindowCredentials.Load(first) == one && WindowCredentials.Load(second) == two, "isolated credential restore");
         byte[] stored = File.ReadAllBytes(Path.Combine(first, "credentials.bin"));
         Require(!Encoding.UTF8.GetString(stored).Contains(one.Password) && !Encoding.Unicode.GetString(stored).Contains(one.Password), "password encrypted on disk");
+        var legacy = Path.Combine(root, "legacy"); Directory.CreateDirectory(legacy);
+        File.WriteAllBytes(Path.Combine(legacy, "credentials.bin"), System.Security.Cryptography.ProtectedData.Protect(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(one), null, System.Security.Cryptography.DataProtectionScope.CurrentUser));
+        string migrated = Path.Combine(root, "migrated");
+        Require(WindowCredentials.LoadMigrating(migrated, legacy, WindowCredentials.DefaultKey) == one && !File.Exists(Path.Combine(legacy, "credentials.bin")), "legacy migration removes old file only after verification");
+        var envelope = JsonNode.Parse(File.ReadAllText(Path.Combine(migrated, "credentials.bin")))!;
+        byte[] cipher = Convert.FromBase64String(envelope["Ciphertext"]!.GetValue<string>()); cipher[0] ^= 1;
+        envelope["Ciphertext"] = Convert.ToBase64String(cipher); File.WriteAllText(Path.Combine(migrated, "credentials.bin"), envelope.ToJsonString());
+        bool rejected = false; try { WindowCredentials.Load(migrated); } catch (System.Security.Cryptography.CryptographicException) { rejected = true; }
+        Require(rejected, "AES authentication rejects tampering");
         new WindowCredentials("", "").Save(first);
         Require(!File.Exists(Path.Combine(first, "credentials.bin")) && WindowCredentials.Load(first) == new WindowCredentials("", "") && WindowCredentials.Load(second) == two, "clear only selected window");
         using var target = new Form();
