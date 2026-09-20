@@ -26,7 +26,7 @@ func TestFosterHealthReceipts(t *testing.T) {
 		sequence     uint32
 		amount, want float32
 		forward      bool
-	}{{2, 2, 6, true}, {2, 2, 6, false}, {1, 5, 6, false}, {3, -50, 8, true}, {4, 10, 0, true}, {5, 2, 0, true}, {6, -1, 1, true}} {
+	}{{2, 2, 6, true}, {2, 2, 6, false}, {2, 5, 6, false}, {2, -50, 6, false}, {1, 5, 6, false}, {3, -50, 8, true}, {4, 10, 0, true}, {5, 2, 0, true}, {6, -1, 1, true}} {
 		m := combatPacket(protocol.BattleEventHealth, 94, peer.UID, 42, 86)
 		protocol.WriteUint64(m.Payload, 47, peer.UID)
 		protocol.WriteUint32(m.Payload, 19, step.sequence)

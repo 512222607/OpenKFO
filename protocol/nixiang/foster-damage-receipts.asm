@@ -145,3 +145,45 @@
 009C600E mov esp, ebp
 009C6010 pop ebp
 009C6011 ret 4
+; Each A3FBB0 submission enters 7D1730; +19 receives 7D0E20 incrementing counter.
+; range 0xa3fc04..0xa3fc1e
+00A3FC04 push 0
+00A3FC06 mov edx, dword ptr [ebp + 0x10]
+00A3FC09 push edx
+00A3FC0A mov eax, dword ptr [ebp + 0xc]
+00A3FC0D push eax
+00A3FC0E call 0x7d0eb0
+00A3FC13 mov ecx, eax
+00A3FC15 call 0x7d1730
+00A3FC1A mov esp, ebp
+00A3FC1C pop ebp
+00A3FC1D ret
+; range 0x7d1730..0x7d1751
+007D1730 push ebp
+007D1731 mov ebp, esp
+007D1733 sub esp, 8
+007D1736 mov dword ptr [ebp - 8], ecx
+007D1739 mov eax, dword ptr [ebp + 8]
+007D173C mov dword ptr [ebp - 4], eax
+007D173F call 0x7d1040
+007D1744 mov ecx, eax
+007D1746 call 0x7d0e20
+007D174B mov ecx, dword ptr [ebp - 4]
+007D174E mov dword ptr [ecx + 0x13], eax
+; range 0x7d0e20..0x7d0e45
+007D0E20 push ebp
+007D0E21 mov ebp, esp
+007D0E23 sub esp, 8
+007D0E26 mov dword ptr [ebp - 4], ecx
+007D0E29 mov eax, dword ptr [ebp - 4]
+007D0E2C mov ecx, dword ptr [eax]
+007D0E2E mov dword ptr [ebp - 8], ecx
+007D0E31 mov edx, dword ptr [ebp - 4]
+007D0E34 mov eax, dword ptr [edx]
+007D0E36 add eax, 1
+007D0E39 mov ecx, dword ptr [ebp - 4]
+007D0E3C mov dword ptr [ecx], eax
+007D0E3E mov eax, dword ptr [ebp - 8]
+007D0E41 mov esp, ebp
+007D0E43 pop ebp
+007D0E44 ret

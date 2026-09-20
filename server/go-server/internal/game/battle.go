@@ -199,7 +199,9 @@ func (hub *Hub) battleMessage(session *Session, channel *Channel, message protoc
 		member.BattleEvents = make(map[battleEventKey]battleSequence)
 	}
 	previous, seen := member.BattleEvents[key]
-	if seen && ((sequence == previous.Sequence && string(payload) == previous.Payload) || int32(sequence-previous.Sequence) < 0) {
+	// A3FBB0 -> 7D1730 assigns a new event counter to every native 8121.
+	// A changed amount at the same sequence is not another health event.
+	if seen && ((sequence == previous.Sequence && (id == protocol.BattleEventHealth || string(payload) == previous.Payload)) || int32(sequence-previous.Sequence) < 0) {
 		return nil
 	}
 	member.BattleEvents[key] = battleSequence{sequence, string(payload)}
