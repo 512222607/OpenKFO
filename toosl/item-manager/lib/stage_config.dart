@@ -122,6 +122,10 @@ class _StageConfigPageState extends State<StageConfigPage> {
       for (final plan in (preserved['wave_plans'] as List? ?? []))
         plan['map_id'] as int: Map<String, dynamic>.from(plan as Map),
     };
+    final fosterPlans = <int, Map<String, dynamic>>{
+      for (final plan in (preserved['foster_plans'] as List? ?? []))
+        plan['map_id'] as int: Map<String, dynamic>.from(plan as Map),
+    };
     if (data['pve_maps'] != null) {
       final ids = <int>{};
       for (final r in data['pve_maps'] as List) {
@@ -132,12 +136,43 @@ class _StageConfigPageState extends State<StageConfigPage> {
         ids.add(id);
         final preview = r['wave_preview'];
         if (preview is Map && !wavePlans.containsKey(id)) {
+          if (fosterPlans.containsKey(id)) {
+            throw const FormatException('地图已有事件计划，不能覆盖为波次计划');
+          }
           wavePlans[id] = {
             'map_id': id,
             'script_hash': r['script_hash'],
             'runtime_hash': preview['runtime_hash'],
             'templates': preview['templates'],
             'variants': preview['variants'],
+          };
+        }
+        final foster = r['foster_preview'];
+        if (foster is Map && !fosterPlans.containsKey(id)) {
+          if (wavePlans.containsKey(id)) {
+            throw const FormatException('地图已有波次计划，不能覆盖为事件计划');
+          }
+          final catalogue = r['foster_templates'];
+          if (catalogue is! Map || catalogue['names'] is! List) {
+            throw const FormatException('事件计划缺少怪物模板目录');
+          }
+          for (final fingerprint in [
+            r['script_hash'],
+            r['runtime_hash'],
+            catalogue['config_hash'],
+          ]) {
+            if (fingerprint is! String ||
+                !RegExp(r'^[0-9a-f]{64}$').hasMatch(fingerprint)) {
+              throw const FormatException('事件计划缺少有效版本指纹');
+            }
+          }
+          fosterPlans[id] = {
+            'map_id': id,
+            'script_hash': r['script_hash'],
+            'runtime_hash': r['runtime_hash'],
+            'config_hash': catalogue['config_hash'],
+            'templates': catalogue['names'],
+            'plan': foster,
           };
         }
       }
@@ -153,10 +188,15 @@ class _StageConfigPageState extends State<StageConfigPage> {
       preserved['client_hash'] = hash;
       preserved['requirements'] = requirements;
       if (pve != null) preserved['pve_maps'] = pve;
-      if (wavePlans.isNotEmpty)
+      if (wavePlans.isNotEmpty) {
         preserved['wave_plans'] = wavePlans.values.toList();
+      }
+      if (fosterPlans.isNotEmpty) {
+        preserved['foster_plans'] = fosterPlans.values.toList();
+      }
       showRequirements = true;
-      status = '已导入地图条件草稿，${wavePlans.length} 张地图有波次配置；已有数值保留，未保存、未自动启用';
+      status =
+          '已导入地图条件草稿：${wavePlans.length} 张波次计划，${fosterPlans.length} 张事件计划；已有数值保留，未保存、未自动启用';
     });
   });
   Future<void> editRequirement(int index) async {

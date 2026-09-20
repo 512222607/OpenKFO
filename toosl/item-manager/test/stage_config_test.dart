@@ -75,6 +75,7 @@ void main() {
     'import and edit requirements preserves existing gates and version',
     (tester) async {
       Map<String, dynamic>? saved;
+      var imports = 0;
       final hash = 'a'.padRight(64, 'a');
       final data = {
         'revision': 7,
@@ -91,10 +92,38 @@ void main() {
             environment: '本地测试服',
             api: (r) async {
               if (r['operation'] == 'stage_requirements') {
+                imports++;
                 return {
                   'client_hash': hash,
                   'pve_maps': [
-                    {'map_id': 8110},
+                    {
+                      'map_id': 8110,
+                      'script_hash': hash,
+                      'runtime_hash': hash,
+                      'foster_templates': {
+                        'config_hash': hash,
+                        'names': [' Monster', 'Monster'],
+                      },
+                      'foster_preview': {
+                        'global_limit': 32,
+                        'player_limit': 6,
+                        'groups': [
+                          {
+                            'sub_limit': imports == 1 ? 2 : 1,
+                            'group_limit': 20,
+                            'trigger_box': [-2300, -5, -100, 1450, 10, 50],
+                            'block': 100,
+                            'spawns': [
+                              {
+                                'template': 0,
+                                'position': [-1610, -4, -15],
+                                'direction': 2,
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                    },
                     {
                       'map_id': 8111,
                       'script_hash': hash,
@@ -169,6 +198,14 @@ void main() {
       expect(access['revision'], 7);
       expect(access['pve_maps'], [8110, 8111]);
       expect(access['wave_plans'].length, 1);
+      expect(access['foster_plans'].length, 1);
+      final foster = access['foster_plans'][0];
+      expect(foster['map_id'], 8110);
+      expect(foster['config_hash'], hash);
+      expect(foster['templates'], [' Monster', 'Monster']);
+      expect(foster['plan']['groups'][0]['spawns'][0]['template'], 0);
+      expect(foster['plan']['groups'][0]['block'], 100);
+      expect(foster['plan']['groups'][0]['sub_limit'], 2);
       expect(access['wave_plans'][0]['map_id'], 8111);
       expect(access['wave_plans'][0]['variants'][0]['waves'][0]['monsters'], {
         '0': 2,
@@ -180,6 +217,54 @@ void main() {
       expect(access['requirements'][1]['title_level'], 4);
     },
   );
+  testWidgets('invalid Foster import does not replace the current draft', (
+    tester,
+  ) async {
+    final hash = 'a'.padRight(64, 'a');
+    Map<String, dynamic>? saved;
+    final current = {
+      'revision': 5,
+      'disabled_maps': <int>[],
+      'client_hash': hash,
+      'requirements': [
+        {'map_id': 8110, 'name': 'Existing', 'title_level': 3},
+      ],
+    };
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StageConfigPage(
+          environment: '本地测试服',
+          api: (r) async {
+            if (r['operation'] == 'stage_requirements') {
+              return {
+                'client_hash': hash,
+                'maps': [
+                  {'map_id': 8110, 'name': 'Existing', 'title_level': 1},
+                  {'map_id': 8111, 'name': 'New', 'title_level': 0},
+                ],
+                'pve_maps': [
+                  {'map_id': 8111, 'foster_preview': <String, dynamic>{}},
+                ],
+              };
+            }
+            if (r['operation'] == 'stages_save') saved = r['stage_access'];
+            return current;
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('读取客户端地图条件'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('事件计划缺少怪物模板目录'), findsOneWidget);
+    expect(saved, isNull);
+    await tester.tap(find.text('保存关卡开关'));
+    await tester.pumpAndSettle();
+    expect(saved!['foster_plans'], isNull);
+    expect(saved!['requirements'], current['requirements']);
+    expect(saved!['revision'], 5);
+  });
+
   testWidgets('mismatched catalogue rejected and online reader hidden', (
     tester,
   ) async {
