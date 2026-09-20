@@ -7,6 +7,7 @@ import (
 )
 
 type StageMap struct {
+	FosterPreview     *FosterPlanPreview       `json:"foster_preview,omitempty"`
 	FosterTemplates   *FosterTemplateCatalogue `json:"foster_templates,omitempty"`
 	WavePreview       *StageWavePreview        `json:"wave_preview,omitempty"`
 	Script            string                   `json:"script,omitempty"`

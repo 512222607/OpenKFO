@@ -98,6 +98,10 @@ func (a *archive) attachStageScripts(maps []StageMap) error {
 			}
 			maps[i].RuntimeScript, maps[i].RuntimeHash = runtime, fosterRuntimeHash
 			maps[i].FosterTemplates = templates
+			maps[i].FosterPreview, err = fosterPlanPreview(raw, fosterRuntimeHash, templates)
+			if err != nil {
+				return err
+			}
 		}
 		if maps[i].MapType == uint32(protocol.StageAssault) {
 			maps[i].WavePreview, err = a.stageWavePreview(name, raw)

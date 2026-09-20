@@ -40,6 +40,49 @@ func TestStageCatalogueClientArchive(t *testing.T) {
 	}
 	t.Logf("read %d native map selections; archive unchanged", len(maps))
 	for _, row := range maps {
+		if row.MapID == 8110 {
+			archive, e := loadArchive(path)
+			if e != nil {
+				t.Fatal(e)
+			}
+			raw, e := archive.raw(row.Script)
+			if e != nil {
+				t.Fatal(e)
+			}
+			for _, changed := range []string{"script", "runtime", "config"} {
+				candidate, runtime, catalog := raw, row.RuntimeHash, row.FosterTemplates
+				switch changed {
+				case "script":
+					candidate = append(append([]byte(nil), raw...), '\n')
+				case "runtime":
+					runtime = "different-runtime"
+				case "config":
+					catalog = &FosterTemplateCatalogue{ConfigHash: "different-config"}
+				}
+				if preview, e := fosterPlanPreview(candidate, runtime, catalog); e != nil || preview != nil {
+					t.Fatal("unverified combination received a Foster plan", changed, e)
+				}
+			}
+			p := row.FosterPreview
+			if p == nil || p.GlobalLimit != 32 || p.PlayerLimit != 6 || len(p.Groups) != 2 || len(p.Groups[0].Spawns) != 2 || len(p.Groups[1].Spawns) != 21 {
+				t.Fatal("missing native Foster parallel event plan", p)
+			}
+			counts := map[uint32]int{}
+			for _, g := range p.Groups {
+				if g.SubLimit != 2 || g.GroupLimit != 20 || g.TriggerBox != [6]float32{-2300, -5, -100, 1450, 10, 50} {
+					t.Fatal("Foster trigger or limits changed")
+				}
+				for _, spawn := range g.Spawns {
+					counts[spawn.Template]++
+				}
+			}
+			first, last := p.Groups[0].Spawns[0], p.Groups[1].Spawns[20]
+			if counts[251] != 16 || counts[0] != 6 || counts[51] != 1 || len(counts) != 3 || p.Groups[0].Block != 100 || p.Groups[1].Block != 0 || first.Position != [3]float32{-1610, -4, -15} || first.Direction != 2 || last.Position != [3]float32{-2260, -4, -15} || last.Direction != 0 {
+				t.Fatal("Foster native order/template/default direction changed", counts, first, last)
+			}
+		} else if row.FosterPreview != nil {
+			t.Fatal("unverified map got a Foster plan", row.MapID)
+		}
 		if row.MapType == 10 {
 			catalog := row.FosterTemplates
 			if catalog == nil || catalog.ConfigHash != fosterConfigHash || len(catalog.Names) != 262 || catalog.Names[0] != " 喽罗乙" || catalog.Names[254] != "喽罗乙" || catalog.Names[251] != "喽罗甲" {
