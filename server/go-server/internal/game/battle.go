@@ -203,6 +203,9 @@ func (hub *Hub) battleMessage(session *Session, channel *Channel, message protoc
 		return nil
 	}
 	member.BattleEvents[key] = battleSequence{sequence, string(payload)}
+	if id == protocol.BattleEventHealth {
+		room.trackFosterHealth(payload)
+	}
 	hub.broadcast(room, message, session.UID)
 	if id == 8121 || id == 8122 {
 		if time.Since(session.LastBattleNotice) > time.Second {

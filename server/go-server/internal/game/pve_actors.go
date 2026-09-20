@@ -10,6 +10,9 @@ const stageAssaultActorPoolSize = 100
 type pveActor struct {
 	sequence uint32
 	active   bool
+	// Receipt-based HP projection; zero maximum means no verified template.
+	// This is not an authoritative death/clear receipt.
+	reportedHP, maximumHP float32
 }
 
 func (r *Room) hasPVEActor(uid uint64) bool {
@@ -89,6 +92,12 @@ func (h *Hub) pveActorMessage(s *Session, message protocol.Message) error {
 	r.PVEActors[actor] = pveActor{sequence: sequence, active: create}
 	if fosterGroup >= 0 {
 		r.FosterSpawned[fosterGroup]++
+		if int(template) < len(r.FosterPlan.InitialHP) {
+			state := r.PVEActors[actor]
+			state.reportedHP = r.FosterPlan.InitialHP[template]
+			state.maximumHP = state.reportedHP
+			r.PVEActors[actor] = state
+		}
 	}
 	if create && r.StageWaves != nil {
 		r.StageWaves.spawned[template]++
