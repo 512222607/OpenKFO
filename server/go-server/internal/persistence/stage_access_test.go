@@ -186,6 +186,25 @@ func TestStageAccessLocalDatabase(t *testing.T) {
 	if err != nil || len(loaded.WavePlans) != 0 {
 		t.Fatal("wave clear ignored", err)
 	}
+	loaded.FosterPlans = []FosterConfig{{MapID: 8110, ScriptHash: strings.Repeat("b", 64), RuntimeHash: strings.Repeat("c", 64), ConfigHash: strings.Repeat("d", 64), Templates: []string{" Monster", "Monster"}, Plan: protocol.FosterPlan{PlayerLimit: 6, GlobalLimit: 32, Groups: []protocol.FosterGroup{{SubLimit: 2, GroupLimit: 20, Spawns: []protocol.FosterSpawn{{Template: 0, Direction: 2}}}}}}}
+	loaded, err = s.SaveStageAccess(loaded)
+	if err != nil {
+		t.Fatal("save Foster plan", err)
+	}
+	loaded.FosterPlans = nil
+	loaded, err = s.SaveStageAccess(loaded)
+	if err != nil || len(loaded.FosterPlans) != 1 {
+		t.Fatal("old GM erased Foster plan", err)
+	}
+	loaded, err = s.StageAccess()
+	if err != nil || len(loaded.FosterPlans) != 1 || loaded.FosterPlans[0].Templates[0] != " Monster" || loaded.FosterPlans[0].Plan.Groups[0].Spawns[0].Direction != 2 {
+		t.Fatal("Foster plan roundtrip", err)
+	}
+	loaded.FosterPlans = []FosterConfig{}
+	loaded, err = s.SaveStageAccess(loaded)
+	if err != nil || len(loaded.FosterPlans) != 0 {
+		t.Fatal("explicit Foster clear ignored", err)
+	}
 	loaded.PVEMaps = []uint32{}
 	loaded, err = s.SaveStageAccess(loaded)
 	if err != nil || len(loaded.PVEMaps) != 0 {

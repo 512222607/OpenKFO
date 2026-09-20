@@ -2,6 +2,7 @@ package desktop
 
 import (
 	"fmt"
+	"kungfu.local/server/internal/protocol"
 	"regexp"
 	"strconv"
 	"strings"
@@ -10,27 +11,12 @@ import (
 const fosterStreetEasyHash = "c227b5bf3dae47e461a2e59b3d0832065d83e52c3bd10f44f6dc6f72deb3c15f"
 const fosterRuntimeHash = "0a083607cab1456c0976038f1e78658a208607355c015060a4492259cde5280f"
 
-type FosterSpawn struct {
-	Template  uint32     `json:"template"`
-	Position  [3]float32 `json:"position"`
-	Direction uint32     `json:"direction"`
-}
-
-type FosterGroup struct {
-	Spawns     []FosterSpawn `json:"spawns"`
-	SubLimit   uint32        `json:"sub_limit"`
-	GroupLimit uint32        `json:"group_limit"`
-	TriggerBox [6]float32    `json:"trigger_box"`
-	Block      uint32        `json:"block,omitempty"`
-}
+type FosterSpawn = protocol.FosterSpawn
+type FosterGroup = protocol.FosterGroup
 
 // Preview is not a cleared-stage receipt or admission grant. Groups run
 // concurrently; their order must not be flattened into mode 21 wave counts.
-type FosterPlanPreview struct {
-	Groups      []FosterGroup `json:"groups"`
-	GlobalLimit uint32        `json:"global_limit"`
-	PlayerLimit uint32        `json:"player_limit"`
-}
+type FosterPlanPreview = protocol.FosterPlan
 
 // Only this exact map/config/runtime combination has been traced. Read the
 // explicit spawn literals; never execute Lua or infer another map's rules.
@@ -89,5 +75,5 @@ func fosterPlanPreview(raw []byte, runtime string, catalogue *FosterTemplateCata
 		}
 		p.Groups = append(p.Groups, group)
 	}
-	return p, nil
+	return p, p.Validate(len(catalogue.Names))
 }
