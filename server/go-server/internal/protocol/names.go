@@ -70,6 +70,7 @@ const (
 	ItemConsumable          = 64 // 消耗品
 	ItemExperienceCard      = 72 // 经验卡
 	ItemVIPCard             = 73 // VIP 卡
+	ItemWeaponSwitchCard    = 74 // 武器切换卡
 	SlotUnequipped          = 0
 	SlotPrimaryWeapon       = 8 // 主武器槽
 	SlotSecondaryWeapon     = 9 // 副武器槽
@@ -129,6 +130,8 @@ const (
 	MsgPlayerNotReady       = 4070
 	MsgBattleLoading        = 4080
 	MsgBattleStartFailed    = 4081
+	MsgWeaponSwitchRequest  = 4082 // 战斗中申请切换主副武器，无载荷
+	MsgWeaponSwitchResult   = 4083 // 20B：UID、保留、成功标志、剩余卡数
 	MsgTutorialComplete     = 4124
 	MsgTitleAward           = 4125
 	MsgClaimTitleReward     = 4126

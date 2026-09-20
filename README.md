@@ -10,7 +10,7 @@
 
 OpenKFO 基于 [liuyangyi0/kungfukid-local-server](https://github.com/liuyangyi0/kungfukid-local-server) 修改和扩展，感谢原项目作者开源并提供基础实现。
 
-特别感谢 **QQ：512222607 348159579。
+特别感谢 **QQ：512222607、348159579**。
 
 本仓库在原项目基础上进行了目录整理、Go 服务端扩展、登录器与GM管理器集成，以及构建打包流程调整。原项目已有实现的贡献归原作者，OpenKFO 的后续修改不代表原作者的观点或背书。
 
@@ -35,13 +35,26 @@ OpenKFO 基于 [liuyangyi0/kungfukid-local-server](https://github.com/liuyangyi0
 **当前运行链路不依赖 Python**：Go + MySQL 服务端、C# 在线登录器（内嵌 Go 桥接与客户端更新）、Flutter GM管理器（调用 Go 管理后端）。
 
 - `server/`：服务器源码，当前 Go 项目位于 `server/go-server`，包含服务端、协议、数据库访问、客户端桥接和管理后端，共用一个 Go 模块。
-- `gm`：Flutter GM 管理器，含 Windows 完整版及 macOS/Android 线上入口。
+- `gm/`：Flutter GM 管理器，含 Windows 完整版及 macOS/Android 线上入口。
 - `launcher/`：登录器源码；当前本地/线上共用 C# 项目位于 `launcher/launcher-online`。
 - `launcher/client-adapter`：C++ 登录界面与客户端适配代码。
-- `dist/GM管理器/GM管理器.exe`：构建后直接双击的 GM管理器入口。
-- `docs`：协议与开发参考，其中部分文档描述旧本地实现。
+- `tools/local-server-monitor/`：C# 本地服务器可视化日志窗口，含进程启停、筛选和原始数据 Tab。
+- `launcher/protocol-tester/`：C# 协议测试 APP，配合 Go 协议组件测试，无需启动游戏。
+- `tools/updater/`：独立 C# 更新助手，供登录器和 GM 更新使用。
+- `protocol/`：协议说明、实现进度和逆向参考；`docs/`：开发与部署补充说明。
+- `dist/`：本机构建输出，不提交 Git；GM 完整目录入口可命名为 `dist/GM管理器/GM管理器.exe`。
 
 `tools/` 存放构建、部署、更新助手等辅助工具。`server/kk_local`、`server/tests`、`requirements.txt`、`launcher/launcher`、旧本地启动/账号脚本以及 Go 模块中的 Python 迁移工具仅保留作历史参考；**使用当前版本无需安装 Python、创建 `.venv` 或启动旧 Python 服务**。旧迁移工具不属于下述运行流程。
+
+### 当前功能与验证范围
+
+- 账号不存在时自动注册，随后取名与创建角色；已有账号仍校验密码。
+- 房间、准备、战斗、结算与回房；经验、金币及成长奖励通过 GM 配置。
+- 好友添加、删除和列表读取；在线状态在查询时刷新，尚无自动上下线推送。
+- 装备和消耗品检查所属背包；武器切换卡接入 `4082/4083`，校验双武器和卡数后事务扣卡，失败也解除客户端等待。
+- 多人自由练习已处理已确认 NPC 的战斗事件同步；不代表任意 NPC、地图和全部玩法均已实现。
+
+协议细节见 [好友](protocol/FriendProtocol.md)、[背包校验](protocol/InventoryOwnershipChecks.md)、[练习 NPC](protocol/PracticeNPCProtocol.md)、[武器切换卡](protocol/WeaponSwitchCardProtocol.md)。其他缺口见 [实现清单](protocol/ImplementationBacklog.md)，旧逆向记录中的推测应以当前代码和实测修正为准。自动测试通过不等于全部原生客户端界面已验收。
 
 ## 构建与运行
 
@@ -52,7 +65,9 @@ OpenKFO 基于 [liuyangyi0/kungfukid-local-server](https://github.com/liuyangyi0
 | Go 服务器、服务端管理程序 | Linux / macOS / Windows | Go 1.26.0（见 go.mod）、MySQL 8 |
 | GM 完整桌面版 | Windows x64 | Flutter（Dart ^3.13.2）、Visual Studio C++、Go |
 | GM 线上版 | macOS / Android（也可构建 Windows） | Flutter、各平台工具链；服务器部署 GM HTTPS API |
-| 游戏登录器 | Windows | .NET 8 SDK、Go、VS 2022 x86 C++ 工具链 |
+| 游戏登录器 | Windows x64（游戏组件为 x86） | .NET 8 SDK、Go、VS 2022 x86 C++ 工具链 |
+| 本地日志窗口 | Windows x64 | .NET 8 SDK；运行游戏服务另需 Go 服务器与 MySQL |
+| 协议测试 APP | Windows x64 | .NET 8 SDK、Go |
 
 Go 服务器可在非 Windows 系统运行。GM 的 Windows 完整版仍可切换本地/线上；macOS、Android 使用独立线上入口 `lib/main_online.dart`，通过 HTTPS 管理接口连接，不依赖本机 Go EXE 或 SSH。macOS 工程需在 Mac 上构建验证。
 
@@ -77,7 +92,13 @@ go build -ldflags "-H windowsgui" -o ../../gm/build/windows/x64/runner/Release/k
 
 将 **整个 Release 文件夹**复制到仓库根目录 `dist/GM管理器`，可将 `kungfu_item_manager.exe` 重命名为 `GM管理器.exe`。保留 DLL、`data/`、Go 后端和其他生成文件；单独复制 EXE 无法运行。配置好后直接双击，无需 CMD 启动脚本。
 
-运行配置、同一个 EXE 切换本地/线上、奖励表和商城操作见 [GM 管理器说明](gm/README.md)。
+需要 GM 自更新时，从仓库根目录构建独立更新助手到同一个 Release 目录：
+
+```text
+dotnet publish tools/updater/Updater.csproj -c Release -o gm/build/windows/x64/runner/Release
+```
+
+再将完整 Release 目录一起复制，并按自己的发布服务配置 `updater-settings.json`；未配置更新服务时仍可直接运行 GM。运行配置、同一个 EXE 切换本地/线上、奖励表和商城操作见 [GM 管理器说明](gm/README.md)。
 
 ### GM 线上版：macOS / Android
 
@@ -120,7 +141,33 @@ kungfu-server.exe -config config.json -cert-dir certificates -listen 127.0.0.1:1
 
 **先创建数据库并准备匹配客户端的 `config.json`，再启动。** 上面的密码仅是占位文字。源码仓库不提供实际账号、客户端或可直接游玩的完整配置；Go 程序会建表，但不会创建数据库。
 
-`config.json` 的必需信息：客户端 `Data/config.spf2` 的 SHA-256（`config_hash`）、按 `模式:人数` 对应地图 ID 列表的 `pools`（非空）；还可配置地图 `groups` 与首次初始化奖励 `settlement`。详细准备、账号管理、日志及 Windows 双击调试模式见 [Go 服务端说明](server/go-server/README.md)。
+`config.json` 的必需信息：客户端 `Data/config.spf2` 的 SHA-256（`config_hash`）、按 `模式:人数` 对应地图 ID 列表的 `pools`（非空），以及创建角色候选 `character_choices`（有效七槽配置）；还可配置地图 `groups` 与首次初始化奖励 `settlement`。详细准备、账号管理、日志及 Windows 双击调试模式见 [Go 服务端说明](server/go-server/README.md)。
+
+### 本地服务器日志窗口：独立 C# EXE
+
+在 Windows 上，从仓库根目录执行：
+
+```text
+dotnet publish tools/local-server-monitor/LocalServerMonitor.csproj -c Release -r win-x64 --self-contained true -o dist/local-server
+go -C server/go-server build -o ../../dist/local-server/kungfu-server.exe ./cmd/server
+```
+
+双击 `dist/local-server/功夫小子本地服务器.exe`。同目录准备自己的 `settings.private.json`、`config.json` 和证书，具体格式见 [服务端说明](server/go-server/README.md)。这不是只靠两个 EXE 就能运行的免配置服务器。
+
+窗口提供启动/停止、时间/账号/玩家/收发方向列表、筛选，以及中文详情和原始 JSON/HEX。**Go 服务器负责统一生成日志，C# 窗口只读取本地文件**，没有向公网发送日志的接口。详细行为见 [日志窗口说明](tools/local-server-monitor/README.md)。
+
+本地双击模式自动保存 `logs/protocol-*.log`。普通命令启动 Go 服务器时，可增加 `-trace-protocol -protocol-log logs/protocol-current.log`，需先创建 `logs` 目录；线上是否启用跟踪由部署配置控制，详细载荷仅保存在服务器文件中。
+
+### 协议测试 APP：无需启动游戏
+
+Windows 上，从仓库根目录执行：
+
+```text
+go -C server/go-server build -o ../../dist/tester-components/ProtocolTesterCore.exe ./cmd/protocol-tester
+dotnet publish launcher/protocol-tester/ProtocolTester.csproj -c Release -o dist/协议测试器
+```
+
+先启动测试服，再打开 `dist/协议测试器/功夫小子协议测试器.exe`，选择本地登录器的 `bridge.json`，使用空闲测试账号连接。支持双账号、原始收发数据、资料/商城/房间/战斗等用例；会修改数据的用例应连接独立测试库。使用和回归范围见 [测试器说明](launcher/protocol-tester/README.md)。
 
 ### Windows 登录器
 
@@ -155,7 +202,7 @@ dotnet publish launcher/launcher-online/OnlineLauncher.csproj -c Release -o dist
 "dist\launcher\功夫小子登录器.exe" --root "C:\kfo-runtime"
 ```
 
-Cloudflare 部署见 [隧道说明](docs/CloudflareTunnel.md)。修改武器资源后，必须同步客户端、登录器与服务器允许的配置校验值，并重启读取旧配置的程序；只在 GM 应用资源不会自动完成服务端更新。
+线上可采用直接 TLS 或 WSS 接入，按自己的部署配置选择；健康检查响应时间不等于战斗网络延迟。修改武器资源后，必须同步客户端、登录器与服务器允许的配置校验值，并重启读取旧配置的程序；只在 GM 应用资源不会自动完成服务端更新。
 
 ### 可选的一键整理脚本
 
@@ -176,4 +223,4 @@ flutter analyze
 flutter test
 ```
 
-真实数据库测试需设置 `KK_TEST_MYSQL_DSN` 指向独立测试库，否则相应用例跳过。测试或构建通过不等于实机游戏和线上部署验证。运行配置、客户端资源、数据库、私钥、日志和构建产物不提交 Git；当前运行链路不依赖 Python。
+数据库用例按各自要求读取 `KK_TEST_MYSQL_DSN` 或 `OPENKFO_DEBUG_DSN`；新背包、好友与切换卡用例使用后者，并要求库名以 `openkfo_debug_` 开头。未设置时相应用例跳过，不代表数据库测试已通过。测试或构建通过不等于实机游戏和线上部署验证。运行配置、客户端资源、数据库、私钥、日志和构建产物不提交 Git；当前运行链路不依赖 Python。

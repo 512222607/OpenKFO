@@ -21,7 +21,7 @@ func (r *Room) hasPVEActor(uid uint64) bool {
 }
 
 func (r *Room) controlsBattleActor(s *Session, uid uint64) bool {
-	return uid == s.UID || (s.UID == r.Owner && r.hasPVEActor(uid))
+	return uid == s.UID || (s.UID == r.Owner && (r.hasPVEActor(uid) || r.hasPracticeDummy(uid)))
 }
 
 func (r *Room) stalePVEEvent(s *Session, uid uint64, sequence uint32) bool {

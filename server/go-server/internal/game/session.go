@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log"
 	"sync"
@@ -67,6 +68,7 @@ type Session struct {
 	Bound                bool
 	Port                 uint16
 	LastChat             time.Time
+	LastFriendRequest    time.Time
 	ConsumeIntents       map[uint32]bool
 	LastBattleNotice     time.Time
 	UDPPort              uint16
@@ -444,6 +446,9 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		session.Bound = true
 		return nil
 	}
+	if message.ID == protocol.MsgWeaponSwitchRequest {
+		return hub.switchWeapon(session, channel, payload)
+	}
 	if message.ID == 4201 || (message.ID == protocol.MsgBattleEvent && len(payload) >= 4 && (protocol.ReadUint32(payload, 0) == 8291 || protocol.ReadUint32(payload, 0) == 8292)) {
 		return hub.useTalisman(session, channel, message)
 	}
@@ -453,6 +458,9 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 	if handled, err := hub.roomMessage(session, channel, message); handled {
 
 		return err
+	}
+	if message.ID == msgFriends {
+		return hub.friends(session, payload)
 	}
 	if message.ID == 5000 || message.ID == 5002 {
 		if err := hub.chat(session, message); err != nil {
@@ -713,6 +721,12 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 			equip = hub.Store.EquipmentManager().EquipDefault
 		}
 		changed, err := equip(session.UID, protocol.ReadUint32(payload, 0), uint16(slot))
+		// Ownership and usability are checked against the authenticated owner's
+		// inventory in the equipment transaction. Never acknowledge or broadcast
+		// an item that was not admitted by that check.
+		if errors.Is(err, persistence.ErrDenied) {
+			return nil
+		}
 		if err != nil {
 			if message.ID == protocol.MsgEquipItem {
 				session.sendGame(protocol.Message{ID: protocol.MsgEquipError, Payload: []byte{38, 0}})
@@ -866,8 +880,14 @@ func (hub *Hub) relayDatagram(session *Session, frame tunnel.Frame) error {
 	extra := int(packet[23])
 	if session.P2P == 0 || !session.Bound || session.UDPPort != frame.Port || time.Now().After(session.P2PUntil) ||
 		protocol.ReadUint32(packet, 4) != session.P2P || protocol.ReadUint32(packet, 12) != session.P2P ||
-		extra == 0 || extra%4 != 0 || extra > 128 || len(packet) <= 24+extra {
+		extra%4 != 0 || extra > 128 || len(packet) <= 24+extra {
 		return protocol.ErrFrame
+	}
+	// SDP2P can emit a valid relay envelope with no recipients while equipment
+	// refresh rebuilds peer state. Nothing to forward; keep the session alive.
+	// Authentication, lease, source port and envelope checks above still apply.
+	if extra == 0 {
+		return nil
 	}
 	room := session.Room
 	if room == nil {

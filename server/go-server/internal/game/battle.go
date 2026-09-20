@@ -149,13 +149,18 @@ func (hub *Hub) battleMessage(session *Session, channel *Channel, message protoc
 		if room.stalePVEEvent(session, actor, protocol.ReadUint32(payload, 19)) {
 			return nil
 		}
-		// Practice and tutorial NPCs are local objects, not authenticated players. Ignore
-		// their events without disconnecting an otherwise valid player session.
-		if room.Members[actor] == nil && (tutorialRoom(room) || (len(room.Request) > 46 && room.Type() == protocol.FreePractice)) {
+		// Keep unknown local/tutorial entities isolated. The known practice
+		// dummy is shared: its controller's effects must reach the other clients.
+		if room.Members[actor] == nil && !room.hasPracticeDummy(actor) && (tutorialRoom(room) || (len(room.Request) > 46 && room.Type() == protocol.FreePractice)) {
 			return nil
 		}
-		if room.Members[actor] == nil && !room.hasPVEActor(actor) {
+		if room.Members[actor] == nil && !room.hasPVEActor(actor) && !room.hasPracticeDummy(actor) {
 			return fmt.Errorf("battle unknown actor id=%d actor=%d", id, actor)
+		}
+		// The controller reports damage to the dummy even when another player
+		// caused it. Accepting a second replica's report would double the damage.
+		if room.hasPracticeDummy(actor) && session.UID != room.Owner {
+			return nil
 		}
 		if id == 8121 || id == 8126 || id == 8150 {
 			attacker := protocol.ReadUint64(payload, 47)
@@ -170,10 +175,10 @@ func (hub *Hub) battleMessage(session *Session, channel *Channel, message protoc
 					cleanup = cleanup && protocol.ReadUint32(payload, offset) == 0
 				}
 			}
-			if attacker != 0 && room.Members[attacker] == nil && (tutorialRoom(room) || (len(room.Request) > 46 && room.Type() == protocol.FreePractice)) {
+			if attacker != 0 && room.Members[attacker] == nil && !room.hasPracticeDummy(attacker) && (tutorialRoom(room) || (len(room.Request) > 46 && room.Type() == protocol.FreePractice)) {
 				return nil
 			}
-			if (attacker != 0 && room.Members[attacker] == nil && !room.hasPVEActor(attacker)) ||
+			if (attacker != 0 && room.Members[attacker] == nil && !room.hasPVEActor(attacker) && !room.hasPracticeDummy(attacker)) ||
 				(!cleanup && !room.controlsBattleActor(session, actor) && !room.controlsBattleActor(session, attacker)) {
 				return fmt.Errorf("battle effect ownership id=%d uid=%d target=%d source=%d", id, session.UID, actor, attacker)
 			}

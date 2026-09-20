@@ -29,6 +29,7 @@ type Config struct {
 	Groups            map[string][]uint32              `json:"groups"`
 }
 type Member struct {
+	WeaponSwitch         weaponSwitchAttempt
 	NetworkDelay         uint32
 	TalismanEvents       map[uint64]uint32
 	BattleLevel          uint16

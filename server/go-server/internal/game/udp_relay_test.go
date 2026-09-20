@@ -2,6 +2,7 @@ package game
 
 import (
 	"bytes"
+	"encoding/hex"
 	"kungfu.local/server/internal/protocol"
 	"kungfu.local/server/internal/tunnel"
 	"testing"
@@ -65,5 +66,52 @@ func TestSDPRelayIsBoundToAuthenticatedRoom(t *testing.T) {
 	sender.P2PUntil = time.Now().Add(-time.Second)
 	if err := hub.Handle(sender, frame); err == nil {
 		t.Fatal("expired lease admitted")
+	}
+}
+
+// Captured during an equipment change, immediately before the old server
+// disconnected UID 10013. Recipient byte 23 is zero; the body remains present.
+func TestEquipmentRefreshEmptyRelayKeepsSession(t *testing.T) {
+	packet, err := hex.DecodeString("0100f003f003000000000000f00300000000000000000000eeaaa08828000000b0084f612e31a664323056c5546ae50d627a54c5546ae50d627a54025d6ae50d607a4c617e316664")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hub := NewHub(nil, Config{})
+	sender := &Session{UID: 10013, P2P: 1008, UDPPort: 18001, Bound: true, P2PUntil: time.Now().Add(time.Minute), Output: make(chan tunnel.Frame, 8), Done: make(chan struct{})}
+	hub.Sessions[sender.UID] = sender
+	frame := tunnel.Frame{Op: "udp", Port: sender.UDPPort, Data: packet}
+	if err := hub.Handle(sender, frame); err != nil {
+		t.Fatalf("empty recipient packet disconnects player: %v", err)
+	}
+	if len(sender.Output) != 0 {
+		t.Fatal("no-recipient packet must not generate a reply")
+	}
+	heartbeat := make([]byte, 28)
+	protocol.WriteUint16(heartbeat, 0, 1)
+	protocol.WriteUint16(heartbeat, 2, 1013)
+	protocol.WriteUint32(heartbeat, 4, sender.P2P)
+	protocol.WriteUint32(heartbeat, 12, sender.P2P)
+	if err := hub.Handle(sender, tunnel.Frame{Op: "udp", Port: sender.UDPPort, Data: heartbeat}); err != nil {
+		t.Fatal(err)
+	}
+	if len(sender.Output) != 1 {
+		t.Fatal("heartbeat did not continue after empty relay")
+	}
+	<-sender.Output
+	for _, mutate := range []func(*tunnel.Frame){
+		func(f *tunnel.Frame) { protocol.WriteUint32(f.Data, 12, 999) },
+		func(f *tunnel.Frame) { f.Port++ },
+		func(f *tunnel.Frame) { f.Data = f.Data[:24] },
+	} {
+		invalid := frame
+		invalid.Data = bytes.Clone(packet)
+		mutate(&invalid)
+		if err := hub.Handle(sender, invalid); err == nil {
+			t.Fatal("invalid empty relay accepted")
+		}
+	}
+	sender.P2PUntil = time.Now().Add(-time.Second)
+	if err := hub.Handle(sender, frame); err == nil {
+		t.Fatal("expired empty relay accepted")
 	}
 }

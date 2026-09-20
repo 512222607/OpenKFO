@@ -183,7 +183,7 @@ func TestBuffCanTargetOpponentWithoutImpersonatingThem(t *testing.T) {
 func TestMultiplayerPracticeNPCDoesNotKickOrBypassEnvelope(t *testing.T) {
 	hub, sender, peer, _ := combatFixture()
 	sender.Room.Request[46] = 5
-	message := combatPacket(8150, 87, sender.UID, 100, 79)
+	message := combatPacket(8150, 87, sender.UID, 999, 79)
 	if err := hub.battleMessage(sender, sender.game(), message); err != nil {
 		t.Fatal(err)
 	}

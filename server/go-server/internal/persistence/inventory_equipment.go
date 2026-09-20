@@ -1,6 +1,8 @@
 package persistence
 
 import (
+	"database/sql"
+	"errors"
 	"kungfu.local/server/internal/protocol"
 	"time"
 )
@@ -58,7 +60,14 @@ func (m *EquipmentManager) equip(uid uint64, instance uint32, slot uint16, autom
 		return nil, err
 	}
 	var record []byte
-	if err = transaction.QueryRow(`SELECT record FROM inventory WHERE uid=? AND instance=?`, uid, instance).Scan(&record); err != nil || len(record) != protocol.InventoryRecordSize {
+	err = transaction.QueryRow(`SELECT record FROM inventory WHERE uid=? AND instance=?`, uid, instance).Scan(&record)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrDenied
+	}
+	if err != nil {
+		return nil, err
+	}
+	if len(record) != protocol.InventoryRecordSize {
 		return nil, ErrDenied
 	}
 	if (automatic || slot != protocol.SlotUnequipped) && !usableItem(record) {
