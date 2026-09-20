@@ -3,8 +3,11 @@ package game
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"io"
 	"log"
 	"net"
@@ -15,6 +18,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"kungfu.local/server/internal/persistence"
 	"kungfu.local/server/internal/releases"
 	"kungfu.local/server/internal/tunnel"
 )
@@ -33,6 +37,12 @@ type Server struct {
 }
 
 func NewServer(hub *Hub, certificate tls.Certificate) *Server {
+	// Bind transport receipts to the origin identity, not a process lifetime.
+	// Password authentication is still required before a receipt is consumed.
+	if key, err := x509.MarshalPKCS8PrivateKey(certificate.PrivateKey); err == nil {
+		digest := sha256.Sum256(append([]byte("openkfo/peer-receipt/v1\x00"), key...))
+		hub.PeerKey = digest[:]
+	}
 	return &Server{Hub: hub, Certificate: certificate, connections: make(chan struct{}, 80), hashing: make(chan struct{}, 2), attempts: map[string]loginLimit{}}
 }
 
@@ -150,6 +160,7 @@ func (server *Server) serveConnection(connection *tls.Conn) {
 	}
 	encoder := json.NewEncoder(connection)
 	deny := func(reason string) {
+		log.Printf("login_rejected account=%q reason=%s", auth.Account, reason)
 		response := tunnel.Frame{Op: "auth", Error: reason}
 		probe.traceFrame("S->C", response)
 		encoder.Encode(response)
@@ -172,12 +183,21 @@ func (server *Server) serveConnection(connection *tls.Conn) {
 	<-server.hashing
 	auth.Password = ""
 	if err != nil {
-		deny("invalid_credentials")
+		if errors.Is(err, persistence.ErrDenied) {
+			deny("invalid_credentials")
+		} else {
+			log.Printf("login_database_failed account=%q error_type=%T", auth.Account, err)
+			deny("server_error")
+		}
 		return
 	}
 	session, err := server.Hub.Attach(account, auth.Port, auth.PeerReceipt)
 	if err != nil {
-		deny("account_already_online")
+		if errors.Is(err, errPeerReceipt) {
+			deny("peer_receipt_invalid_restart_game")
+		} else {
+			deny("account_already_online")
+		}
 		return
 	}
 	defer server.Hub.Detach(session)

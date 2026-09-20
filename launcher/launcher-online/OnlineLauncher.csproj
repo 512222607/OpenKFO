@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>功夫小子登录器</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="../../dist/launcher-components/LoginSkin.dll" LogicalName="LoginSkin.dll" />
+    <EmbeddedResource Include="../../dist/launcher-components/LoginSkinHost.exe" LogicalName="LoginSkinHost.exe" />
+    <EmbeddedResource Include="../../dist/updater/OpenKFO.Updater.exe" LogicalName="OpenKFO.Updater.exe" />
+    <Compile Include="../../tools/updater/UpdateEngine.cs" Link="Updates/UpdateEngine.cs" />
+    <Compile Include="../../tools/updater/UpdateForm.cs" Link="Updates/UpdateForm.cs" />
+    <EmbeddedResource Include="../../dist/launcher-components/OnlineBridge.exe" LogicalName="OnlineBridge.exe" />
+  </ItemGroup>
+</Project>

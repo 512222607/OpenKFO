@@ -107,6 +107,7 @@ const (
 	MsgPlayerList           = 2270
 	MsgRoomList             = 2280
 	MsgUnequipItem          = 2300
+	MsgItemUnequipped       = 2310
 	MsgCreateRoom           = 3010
 	MsgRoomCreated          = 3020
 	MsgRoomCreateError      = 3030
@@ -114,6 +115,7 @@ const (
 	MsgWatchGameRequest     = 3071 // A_WATCH_GAME_REQ; payload layout not yet confirmed
 	MsgWatchGameAck         = 3072 // A_WATCH_GAME_ACK; result layout not yet confirmed
 	MsgRoomEntered          = 3100 // 进入房间数据
+	MsgRoomMemberUpdated    = 3090 // 房间成员及装备外观
 	MsgLeaveRoom            = 3110
 	MsgRoomLeft             = 3115
 	MsgPlayerLeftRoom       = 3130

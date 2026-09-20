@@ -44,6 +44,25 @@ func run() error {
 	if err = releases.ValidatePackage(m, raw); err != nil {
 		return err
 	}
+	if m.Kind == "client" || m.Kind == "weapons" {
+		previous, loadErr := releases.Load(dir, "client")
+		if loadErr == nil {
+			oldPackage, e := os.ReadFile(filepath.Join(dir, previous.Package))
+			if e != nil {
+				return e
+			}
+			m, raw, err = releases.MergeClient(previous, oldPackage, m, raw)
+			if err != nil {
+				return err
+			}
+		} else if !os.IsNotExist(loadErr) {
+			return loadErr
+		}
+		m.Kind = "client"
+		if err = releases.ValidatePackage(m, raw); err != nil {
+			return err
+		}
+	}
 	pkg := filepath.Join(dir, m.Package)
 	if err = os.WriteFile(pkg+".next", raw, 0644); err != nil {
 		return err
@@ -68,7 +87,7 @@ func run() error {
 	if err = os.Rename(path+".next", path); err != nil {
 		return err
 	}
-	if m.Kind == "weapons" {
+	if m.Kind == "client" || m.Kind == "weapons" {
 		restart := func() error {
 			if output, e := exec.Command("systemctl", "restart", "kungfu-go").CombinedOutput(); e != nil {
 				return fmt.Errorf("restart: %s: %w", output, e)

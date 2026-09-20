@@ -114,7 +114,11 @@ func main() {
 			log.Fatal("character_choices must contain valid native character creation options: ", err)
 		}
 		if dir := os.Getenv("OPENKFO_UPDATES_DIR"); dir != "" {
-			if release, loadErr := releases.Load(dir, "weapons"); loadErr == nil {
+			release, loadErr := releases.Load(dir, "client")
+			if os.IsNotExist(loadErr) {
+				release, loadErr = releases.Load(dir, "weapons")
+			}
+			if loadErr == nil {
 				config.ConfigHash = release.ConfigHash
 			} else if !os.IsNotExist(loadErr) {
 				log.Fatal(loadErr)

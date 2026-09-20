@@ -32,16 +32,16 @@ OpenKFO 基于 [liuyangyi0/kungfukid-local-server](https://github.com/liuyangyi0
 
 ## 当前版本与目录
 
-**当前运行链路不依赖 Python**：Go + MySQL 服务端、C# 在线登录器（内嵌 Go 桥接与 C++ 登录界面）、Flutter GM管理器（调用 Go 管理后端）。
+**当前运行链路不依赖 Python**：Go + MySQL 服务端、C# 在线登录器（内嵌 Go 桥接与客户端更新）、Flutter GM管理器（调用 Go 管理后端）。
 
-- `server/go-server`：当前 Go 服务端、协议、数据库访问、客户端桥接和管理后端，共用一个 Go 模块。
-- `toosl/item-manager`：Flutter GM 管理器，含 Windows 完整版及 macOS/Android 线上入口。
-- `client/launcher-online`：当前 C# 在线登录器。
-- `client/client-adapter`：C++ 登录界面与客户端适配代码。
+- `server/`：服务器源码，当前 Go 项目位于 `server/go-server`，包含服务端、协议、数据库访问、客户端桥接和管理后端，共用一个 Go 模块。
+- `gm`：Flutter GM 管理器，含 Windows 完整版及 macOS/Android 线上入口。
+- `launcher/`：登录器源码；当前本地/线上共用 C# 项目位于 `launcher/launcher-online`。
+- `launcher/client-adapter`：C++ 登录界面与客户端适配代码。
 - `dist/GM管理器/GM管理器.exe`：构建后直接双击的 GM管理器入口。
 - `docs`：协议与开发参考，其中部分文档描述旧本地实现。
 
-`toosl` 为本仓库约定目录名。`server/kk_local`、`server/tests`、`requirements.txt`、`client/launcher`、旧本地启动/账号脚本以及 Go 模块中的 Python 迁移工具仅保留作历史参考；**使用当前版本无需安装 Python、创建 `.venv` 或启动旧 Python 服务**。旧迁移工具不属于下述运行流程。
+`tools/` 存放构建、部署、更新助手等辅助工具。`server/kk_local`、`server/tests`、`requirements.txt`、`launcher/launcher`、旧本地启动/账号脚本以及 Go 模块中的 Python 迁移工具仅保留作历史参考；**使用当前版本无需安装 Python、创建 `.venv` 或启动旧 Python 服务**。旧迁移工具不属于下述运行流程。
 
 ## 构建与运行
 
@@ -52,7 +52,7 @@ OpenKFO 基于 [liuyangyi0/kungfukid-local-server](https://github.com/liuyangyi0
 | Go 服务器、服务端管理程序 | Linux / macOS / Windows | Go 1.26.0（见 go.mod）、MySQL 8 |
 | GM 完整桌面版 | Windows x64 | Flutter（Dart ^3.13.2）、Visual Studio C++、Go |
 | GM 线上版 | macOS / Android（也可构建 Windows） | Flutter、各平台工具链；服务器部署 GM HTTPS API |
-| 游戏登录器 | Windows | .NET 8 SDK、VS 2022 x86 C++ 工具链、Go |
+| 游戏登录器 | Windows | .NET 8 SDK、Go、VS 2022 x86 C++ 工具链 |
 
 Go 服务器可在非 Windows 系统运行。GM 的 Windows 完整版仍可切换本地/线上；macOS、Android 使用独立线上入口 `lib/main_online.dart`，通过 HTTPS 管理接口连接，不依赖本机 Go EXE 或 SSH。macOS 工程需在 Mac 上构建验证。
 
@@ -61,27 +61,27 @@ Go 服务器可在非 Windows 系统运行。GM 的 Windows 完整版仍可切�
 在 Windows 的普通终端（CMD 等）执行：
 
 ```text
-cd toosl/item-manager
+cd gm
 flutter pub get
 flutter build windows --release
 ```
 
-界面产物位于 `toosl/item-manager/build/windows/x64/runner/Release/`，入口为 `kungfu_item_manager.exe`。建议将仓库放在英文路径（例如 `C:/src/OpenKFO`），避免 Flutter/MSBuild 的中文路径问题。
+界面产物位于 `gm/build/windows/x64/runner/Release/`，入口为 `kungfu_item_manager.exe`。建议将仓库放在英文路径（例如 `C:/src/OpenKFO`），避免 Flutter/MSBuild 的中文路径问题。
 
 GM 还需要 Go 管理后端。从仓库根目录执行：
 
 ```text
 cd server/go-server
-go build -ldflags "-H windowsgui" -o ../../toosl/item-manager/build/windows/x64/runner/Release/kungfu-desktop-admin.exe ./cmd/desktop-admin
+go build -ldflags "-H windowsgui" -o ../../gm/build/windows/x64/runner/Release/kungfu-desktop-admin.exe ./cmd/desktop-admin
 ```
 
 将 **整个 Release 文件夹**复制到仓库根目录 `dist/GM管理器`，可将 `kungfu_item_manager.exe` 重命名为 `GM管理器.exe`。保留 DLL、`data/`、Go 后端和其他生成文件；单独复制 EXE 无法运行。配置好后直接双击，无需 CMD 启动脚本。
 
-运行配置、同一个 EXE 切换本地/线上、奖励表和商城操作见 [GM 管理器说明](toosl/item-manager/README.md)。
+运行配置、同一个 EXE 切换本地/线上、奖励表和商城操作见 [GM 管理器说明](gm/README.md)。
 
 ### GM 线上版：macOS / Android
 
-以下均在 `toosl/item-manager` 目录执行，首次先运行 `flutter pub get`：
+以下均在 `gm` 目录执行，首次先运行 `flutter pub get`：
 
 | 目标平台 | 构建所用环境 | 命令 | 输出 |
 | --- | --- | --- | --- |
@@ -130,11 +130,12 @@ kungfu-server.exe -config config.json -cert-dir certificates -listen 127.0.0.1:1
 cd server/go-server
 go build -o ../../dist/launcher-components/OnlineBridge.exe ./cmd/bridge
 cd ../..
-client\client-adapter\build-login-skin.cmd
-dotnet publish client/launcher-online/OnlineLauncher.csproj -c Release -o dist/launcher
+launcher\client-adapter\build-login-skin.cmd
+dotnet publish tools/updater/Updater.csproj -c Release -o dist/updater
+dotnet publish launcher/launcher-online/OnlineLauncher.csproj -c Release -o dist/launcher
 ```
 
-C++ 脚本使用 VS 2022 Build Tools 默认安装路径；安装位置不同时调整 `vcvars32.bat` 路径。组件源码和构建依赖见 [登录器说明](client/launcher-online/README.md)。
+定制登录界面组件和独立更新助手必须先构建；组件自动释放，玩家无需复制 DLL。源码和构建依赖见 [登录器说明](launcher/launcher-online/README.md)。
 
 将发布的登录器放到游戏目录，并在同目录准备 `bridge.json`：
 
@@ -158,7 +159,7 @@ Cloudflare 部署见 [隧道说明](docs/CloudflareTunnel.md)。修改武器资�
 
 ### 可选的一键整理脚本
 
-`toosl/Build-Dist.ps1` 和 `toosl/Install-Dist.ps1` 是 Windows 上可选的批量构建、安装工具，不是 Go 服务器或 GM 的必需构建步骤。前者会将发布包整理到 `dist/launcher`、`dist/launcher-components`、`dist/server`、`dist/GM管理器`；也可按上面的命令独立构建、手动复制完整产物。
+`tools/Build-Dist.ps1` 和 `tools/Install-Dist.ps1` 是 Windows 上可选的批量构建、安装工具，不是 Go 服务器或 GM 的必需构建步骤。前者会将发布包整理到 `dist/launcher`、`dist/launcher-components`、`dist/server`、`dist/GM管理器`；也可按上面的命令独立构建、手动复制完整产物。
 
 ### 开发验证
 
@@ -168,7 +169,7 @@ Cloudflare 部署见 [隧道说明](docs/CloudflareTunnel.md)。修改武器资�
 go test ./...
 ```
 
-在 `toosl/item-manager` 运行：
+在 `gm` 运行：
 
 ```text
 flutter analyze

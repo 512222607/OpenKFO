@@ -22,7 +22,7 @@
 安装 Visual Studio C++ 工具及 Windows SDK，在 **x86 Native Tools Command Prompt** 中打开发布仓库根目录：
 
 ```bat
-client/client-adapter\build.cmd
+launcher/client-adapter\build.cmd
 ```
 
 构建输出仅在本地 `build\adapter`，不会加入 Git。编译成功只证明源码可构建，不证明当前用户客户端版本兼容。

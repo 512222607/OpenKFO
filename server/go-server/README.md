@@ -31,7 +31,7 @@ go build -o ../../dist/local-server/kungfu-server.exe ./cmd/server
 窗口使用 .NET C#，在仓库根目录构建：
 
 ```sh
-dotnet publish toosl/local-server-monitor/LocalServerMonitor.csproj -c Release -o dist/local-server
+dotnet publish tools/local-server-monitor/LocalServerMonitor.csproj -c Release -o dist/local-server
 ```
 
 双击同目录 `功夫小子本地服务器.exe`，点击启动；新版本地登录器启动按钮也会优先打开此窗口。保留本地目录的 `settings.private.json`、`config.json`、`certificates` 和引用的 SSH 配置/密钥，不要提交或分发私有凭据。
@@ -42,7 +42,7 @@ dotnet publish toosl/local-server-monitor/LocalServerMonitor.csproj -c Release -
 - 「隐藏心跳」「清空显示」只改变窗口显示。窗口保留最近 5000 条 / 32 MB，完整日志保留在同目录 `logs`，认证敏感字段仍脱敏。
 - 关闭窗口会停止由它启动的本地服务器；接入此前已运行的服务器时不停止它。启动失败会留在窗口，原始错误也写入 `monitor-startup.log`。
 
-Go 本地与线上使用同一日志格式，窗口只读取本地文件，不新增公网日志端口。Linux/macOS 服务运行方式不变。详情见[窗口说明](../../toosl/local-server-monitor/README.md)。
+Go 本地与线上使用同一日志格式，窗口只读取本地文件，不新增公网日志端口。Linux/macOS 服务运行方式不变。详情见[窗口说明](../../tools/local-server-monitor/README.md)。
 
 ## 准备数据库与配置
 

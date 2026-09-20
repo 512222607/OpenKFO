@@ -42,16 +42,25 @@ func (h *Hub) exchangeSeat(s *Session, m protocol.Message) error {
 	sourceID, targetID := protocol.ReadUint64(p, 0), protocol.ReadUint64(p, 8)
 	source, target := r.Members[sourceID], r.Members[targetID]
 	from, to := protocol.ReadUint32(p, 16), protocol.ReadUint32(p, 20)
-	if source == nil || source.Session.Room != r || sourceID == targetID || len(r.Request) != 81 || from >= 8 || to >= uint32(r.Request[37]) || from == to || uint32(source.Slot) != from || source.Ready {
+	positionLimit := uint32(8)
+	if len(r.Request) == 81 && !r.Type().IsTeam() {
+		positionLimit = uint32(r.Request[37])
+	}
+	if source == nil || source.Session.Room != r || sourceID == targetID || len(r.Request) != 81 || from >= 8 || to >= positionLimit || from == to || uint32(source.Spawn) != from || source.Ready {
 		reject()
 		return nil
 	}
-	if targetID != 0 && (target == nil || target.Session.Room != r || uint32(target.Slot) != to || target.Ready) {
+	// Native empty-seat movement preserves Team; crossing sides uses 3230.
+	if targetID == 0 && r.Type().IsTeam() && byte(to)/teamSideSize != source.Team {
+		reject()
+		return nil
+	}
+	if targetID != 0 && (target == nil || target.Session.Room != r || uint32(target.Spawn) != to || target.Ready) {
 		reject()
 		return nil
 	}
 	for uid, member := range r.Members {
-		if uint32(member.Slot) == to && uid != targetID {
+		if uint32(member.Spawn) == to && uid != targetID {
 			reject()
 			return nil
 		}
@@ -85,13 +94,13 @@ func (h *Hub) exchangeSeat(s *Session, m protocol.Message) error {
 			return nil
 		}
 	}
-	// 825B30 swaps entity position and team for occupied slots; moving to an
-	// empty slot preserves the mover's team. Spawn is a separate native field.
+	// Native 0x45C4C0 / 0x453950 read/write entity+0x1B04 (Spawn).
+	// 3265 changes that position and team, never the entity roster Slot.
 	if target != nil {
-		source.Slot, target.Slot = target.Slot, source.Slot
+		source.Spawn, target.Spawn = target.Spawn, source.Spawn
 		source.Team, target.Team = target.Team, source.Team
 	} else {
-		source.Slot = byte(to)
+		source.Spawn = byte(to)
 	}
 	h.clearRoomReady(r)
 	h.broadcast(r, protocol.Message{ID: 3265, Payload: bytes.Clone(p)}, 0)

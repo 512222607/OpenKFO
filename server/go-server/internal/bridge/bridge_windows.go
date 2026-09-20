@@ -324,7 +324,7 @@ func (bridge *Bridge) connect(account, password string, identity Identity) (*rem
 func (bridge *Bridge) login(raw net.Conn, certificate tls.Certificate) {
 	identity, err := tcpIdentity(raw, bridge.Image)
 	if err != nil {
-		log.Print("login identity rejected")
+		log.Printf("login identity rejected: %v", err)
 		return
 	}
 	connection := tls.Server(raw, &tls.Config{Certificates: []tls.Certificate{certificate}, MinVersion: tls.VersionTLS12})

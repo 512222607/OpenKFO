@@ -19,22 +19,27 @@ func checkEquipmentRefreshTLS(t *testing.T, host, peer *client, uid uint64, send
 		send(host, opcode, p)
 		own := drain(host)
 		found := false
-		var equipped []byte
-		for _, m := range own {
+		var selfRoom []byte
+		unequipIndex, equipIndex := -1, -1
+		for i, m := range own {
 			if m.ID == ack {
 				found = true
 			}
 			if m.ID == protocol.MsgInventoryList {
-				if len(m.Payload)%protocol.InventoryRecordSize != 0 {
-					t.Fatal("invalid own inventory stride")
-				}
-				for off := 0; off < len(m.Payload); off += protocol.InventoryRecordSize {
-					item := m.Payload[off : off+protocol.InventoryRecordSize]
-					if protocol.ReadUint16(item, 17) != 0 {
-						equipped = append(equipped, item...)
-					}
-				}
+				t.Fatal("live equip sent login inventory")
 			}
+			if m.ID == protocol.MsgRoomMemberUpdated {
+				selfRoom = m.Payload
+			}
+			if m.ID == protocol.MsgEquipmentChanged {
+				equipIndex = i
+			}
+			if m.ID == protocol.MsgItemUnequipped && protocol.ReadUint32(m.Payload, 0) == 1 {
+				unequipIndex = i
+			}
+		}
+		if instance == 2 && (unequipIndex < 0 || equipIndex <= unequipIndex) {
+			t.Fatal("replacement did not unequip first", own)
 		}
 		if !found {
 			t.Fatal("equipment request not acknowledged", own)
@@ -44,8 +49,7 @@ func checkEquipmentRefreshTLS(t *testing.T, host, peer *client, uid uint64, send
 			t.Fatal("missing peer equipment refresh", remote)
 		}
 		r := remote[0].Payload
-		count := len(equipped) / protocol.InventoryRecordSize
-		if len(r) != 149+len(equipped) || protocol.ReadUint64(r, 0) != uid || r[8] >= 8 || r[76] != 0 || int(r[64]) != count || !bytes.Equal(r[149:], equipped) {
+		if len(r) < 149 || len(r) != 149+int(r[64])*protocol.InventoryRecordSize || protocol.ReadUint64(r, 0) != uid || r[8] >= 8 || r[76] != 0 || !bytes.Equal(r, selfRoom) {
 			t.Fatal("refresh changed player identity or native equipment stride", remote)
 		}
 		weapons := 0

@@ -28,7 +28,7 @@
 - `dist/协议测试器/purchase-test.json`：补齐测试点券后购买专项通过记录。
 - `dist/协议测试器/acceptance-summary.json`：合并上述证据，明确保留未验证的游戏画面和冰冻自然结束状态。
 - `dist/协议测试器/logs`：逐包发送/接收日志，包含商品、库存、结算数据。
-- `client/protocol-tester/AcceptanceSmoke.cs`：可重复运行的协议验收。设置 `OPENKFO_TEST_PASSWORD` 后，EXE参数 `--acceptance-test` 跑综合流程；`--purchase-test` 仅重跑购买装备。需要空闲测试账号及足够余额，不自动赠送测试货币。它会实际修改测试账号数据。
+- `launcher/protocol-tester/AcceptanceSmoke.cs`：可重复运行的协议验收。设置 `OPENKFO_TEST_PASSWORD` 后，EXE参数 `--acceptance-test` 跑综合流程；`--purchase-test` 仅重跑购买装备。需要空闲测试账号及足够余额，不自动赠送测试货币。它会实际修改测试账号数据。
 
 Go的 game、persistence、protocol-tester 测试已用 `-count=1` 通过。未设置独立测试DSN的MySQL单测会跳过；上表数据库持久化证据来自真实协议重登及本地GM只读核对，不能混写成全部MySQL单测通过。
 

@@ -108,7 +108,7 @@ func TestRoomTeamRetryPreservesReadiness(t *testing.T) {
 	roomRequest(t, hub, peer, 3230, []byte{0})
 	for _, player := range []*Session{host, peer} {
 		p := roomOutputs(t, player, 3250)[0].Payload
-		if len(p) != 10 || protocol.ReadUint64(p, 0) != peer.UID || p[8] != 0 || p[9] != 3 {
+		if len(p) != 10 || protocol.ReadUint64(p, 0) != peer.UID || p[8] != 0 || p[9] != 1 {
 			t.Fatal("3250 native layout incorrect")
 		}
 	}
@@ -122,8 +122,8 @@ func TestRoomTeamRetryPreservesReadiness(t *testing.T) {
 	roomRequest(t, hub, peer, 3230, []byte{1})
 	roomOutputs(t, host, 3250, 4070)
 	roomOutputs(t, peer, 3250, 4070)
-	if member.Ready || member.Spawn != 3 {
-		t.Fatal("team change did not preserve spawn and reset readiness")
+	if member.Ready || member.Spawn != 4 {
+		t.Fatal("team change did not allocate the opposite side and reset readiness")
 	}
 }
 

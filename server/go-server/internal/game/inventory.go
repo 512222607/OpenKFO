@@ -14,6 +14,28 @@ func (s *Session) rememberInventory(records [][]byte) {
 	}
 }
 
+// 1120 initializes login inventory; native live equipment uses 2310/2090.
+// In particular, 2090 only changes its own instance, so displaced equipment
+// must receive 2310 before the new item is equipped (native 9C0E10).
+func (s *Session) syncEquipmentChange(request protocol.Message, changed []byte, records [][]byte) {
+	instance := protocol.ReadUint32(changed, 0)
+	for _, record := range records {
+		id := protocol.ReadUint32(record, 0)
+		old := s.Inventory[id]
+		if id != instance && len(old) == protocol.InventoryRecordSize && protocol.ReadUint16(old, 17) != protocol.SlotUnequipped && protocol.ReadUint16(record, 17) == protocol.SlotUnequipped {
+			s.sendGame(protocol.Message{ID: protocol.MsgItemUnequipped, Payload: append(protocol.Uint32Bytes(id), record...)})
+		}
+	}
+	prefix := bytes.Clone(request.Payload)
+	if request.ID == protocol.MsgEquipItem {
+		protocol.WriteUint32(prefix, 4, uint32(protocol.ReadUint16(changed, 17)))
+	}
+	s.sendGame(protocol.Message{ID: request.ID + 10, Payload: append(prefix, changed...)})
+	// Preserve incremental updates for expiry/other inventory changes committed
+	// by the equipment transaction; do not rely on a login-only inventory packet.
+	s.syncInventory(records)
+}
+
 // Apply equipment removals only after returning to a safe lobby/room phase.
 func (s *Session) syncUnequippedInventory(records [][]byte) bool {
 	changedEquipment := false

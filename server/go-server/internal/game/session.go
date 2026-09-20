@@ -728,20 +728,8 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		if err != nil {
 			return err
 		}
-		prefix := bytes.Clone(payload)
-		if message.ID == protocol.MsgEquipItem {
-			protocol.WriteUint32(prefix, 4, uint32(protocol.ReadUint16(changed, 17)))
-		}
-		ack := protocol.Message{ID: message.ID + 10, Payload: append(prefix, changed...)}
-		if message.ID == protocol.MsgUnequipItem {
-			session.sendGame(ack)
-		}
-		session.sendGame(protocol.Message{ID: protocol.MsgInventoryList, Payload: account.InventoryBytes()})
-		session.rememberInventory(account.Inventory)
-		if message.ID == protocol.MsgEquipItem {
-			session.sendGame(ack)
-		}
-		hub.equipmentChanged(session)
+		session.syncEquipmentChange(message, changed, account.Inventory)
+		hub.broadcastEquipment(session, account)
 	case 1232, 20546:
 		if len(payload) != 0 {
 			return protocol.ErrFrame

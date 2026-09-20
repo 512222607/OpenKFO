@@ -5,9 +5,10 @@
 ```text
 client/                  游戏客户端，唯一一份
 server/                  OpenKFO 仓库
-  client/                登录器等客户端工具的源码，不是游戏资源
+  launcher/              登录器源码，不是游戏资源
   server/go-server/      Go 服务端源码
-  toosl/item-manager/    GM 管理器源码
+  gm/                    GM 管理器源码
+  tools/                 构建、部署、更新助手等辅助工具
   protocol/             协议资料
   dist/                 构建后的程序与运行配置
   runtime-local/        本机工具、证书、管理配置和武器编辑状态

@@ -19,7 +19,7 @@
 1. 本机回环 `/health` 返回 `kungfu-go` / `ok`。
 2. 隧道已连接，公网 HTTPS `/health` 返回同样结果。
 3. 使用 `dist/server/latency-probe.exe` 对 WSS 入口验证固定证书和加密后的源站应答。
-4. 执行 `toosl/Switch-WssServer.ps1 -ConfigPaths <全部线上 bridge.json 路径> -CertificatePath <origin.crt 路径>`。脚本只有健康检查和三次 WSS 内层 TLS 检测全通过才备份并更新配置。本地调试 `bridge.json` 不参与切换。
+4. 执行 `tools/Switch-WssServer.ps1 -ConfigPaths <全部线上 bridge.json 路径> -CertificatePath <origin.crt 路径>`。脚本只有健康检查和三次 WSS 内层 TLS 检测全通过才备份并更新配置。本地调试 `bridge.json` 不参与切换。
 5. 用真实客户端验证登录、双人进房和战斗；不能用健康检查代替游戏测试。
 
 ## 管理入口及源站收口

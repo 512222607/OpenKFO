@@ -5,14 +5,16 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"kungfu.local/server/internal/persistence"
+	"errors"
 	"kungfu.local/server/internal/protocol"
 	"kungfu.local/server/internal/tunnel"
 	"time"
 )
 
-// A transport-only capability, never an account login token. Valid only for
-// this server lifetime; the bridge retains it only for the same native process.
+var errPeerReceipt = errors.New("invalid or occupied transport receipt")
+
+// A transport-only capability, never an account login token. Bound to the
+// origin certificate; the bridge retains it only for the same native process.
 func (hub *Hub) peerReceipt(id uint32) string {
 	mac := hmac.New(sha256.New, hub.PeerKey)
 	body := protocol.Uint32Bytes(id)
@@ -27,18 +29,21 @@ func (hub *Hub) resumePeer(s *Session, receipt string) error {
 	}
 	data, err := hex.DecodeString(receipt)
 	if err != nil || len(data) != 36 {
-		return persistence.ErrDenied
+		return errPeerReceipt
 	}
 	id := protocol.ReadUint32(data, 0)
 	if id == 0 || !hmac.Equal([]byte(receipt), []byte(hub.peerReceipt(id))) {
-		return persistence.ErrDenied
+		return errPeerReceipt
 	}
 	for _, other := range hub.Sessions {
 		if other != s && !other.LoggedOut && other.P2P == id {
-			return persistence.ErrDenied
+			return errPeerReceipt
 		}
 	}
 	s.P2P, s.P2PUntil = id, time.Now().Add(time.Minute)
+	if hub.NextPlayer <= id {
+		hub.NextPlayer = id + 1
+	}
 	return nil
 }
 

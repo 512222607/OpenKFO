@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -75,20 +76,24 @@ type Identity struct {
 }
 
 func processIdentity(pid uint32, expectedImage string) (Identity, error) {
-	handle, _, _ := kernel.NewProc("OpenProcess").Call(0x1000, 0, uintptr(pid))
+	handle, _, openErr := kernel.NewProc("OpenProcess").Call(0x1000, 0, uintptr(pid))
 	if handle == 0 {
-		return Identity{}, errIdentity
+		return Identity{}, fmt.Errorf("open client pid=%d: %w", pid, openErr)
 	}
 	defer kernel.NewProc("CloseHandle").Call(handle)
 	name := make([]uint16, 32768)
 	length := uint32(len(name))
-	result, _, _ := kernel.NewProc("QueryFullProcessImageNameW").Call(handle, 0, uintptr(unsafe.Pointer(&name[0])), uintptr(unsafe.Pointer(&length)))
+	result, _, queryErr := kernel.NewProc("QueryFullProcessImageNameW").Call(handle, 0, uintptr(unsafe.Pointer(&name[0])), uintptr(unsafe.Pointer(&length)))
 	if result == 0 {
-		return Identity{}, errIdentity
+		return Identity{}, fmt.Errorf("query client path pid=%d: %w", pid, queryErr)
 	}
 	actualImage := syscall.UTF16ToString(name[:length])
 	if !strings.EqualFold(filepath.Clean(actualImage), filepath.Clean(expectedImage)) {
-		return Identity{}, errIdentity
+		actual, actualErr := os.Stat(actualImage)
+		expected, expectedErr := os.Stat(expectedImage)
+		if actualErr != nil || expectedErr != nil || !os.SameFile(actual, expected) {
+			return Identity{}, fmt.Errorf("client image mismatch pid=%d actual=%q expected=%q actual_error=%v expected_error=%v", pid, actualImage, expectedImage, actualErr, expectedErr)
+		}
 	}
 	var created, exited, kernelTime, userTime syscall.Filetime
 	result, _, _ = kernel.NewProc("GetProcessTimes").Call(handle, uintptr(unsafe.Pointer(&created)), uintptr(unsafe.Pointer(&exited)), uintptr(unsafe.Pointer(&kernelTime)), uintptr(unsafe.Pointer(&userTime)))

@@ -207,7 +207,31 @@ func (hub *Hub) install(room *Room, session *Session) error {
 	if err != nil {
 		return err
 	}
-	member := &Member{Session: session, Slot: slot, Spawn: slot, Team: slot % 2}
+	// A seat exchange changes Spawn without changing the roster Slot.
+	// New members must use a free position as well as a free roster entry.
+	spawn := byte(0)
+	for {
+		used := false
+		for _, member := range room.Members {
+			used = used || member.Spawn == spawn
+		}
+		if !used {
+			break
+		}
+		spawn++
+	}
+	member := &Member{Session: session, Slot: slot, Spawn: spawn, Team: slot % 2}
+	if room.Type().IsTeam() {
+		position, ok := room.freeTeamPosition(member.Team, session.UID)
+		if !ok {
+			member.Team ^= 1
+			position, ok = room.freeTeamPosition(member.Team, session.UID)
+		}
+		if !ok {
+			return protocol.ErrFrame
+		}
+		member.Spawn = position
+	}
 	own := fighter(account, member)
 	var peers []roomPeer
 	for _, member := range room.Members {
@@ -339,7 +363,20 @@ func (hub *Hub) equipmentChanged(session *Session) {
 	if err != nil {
 		return
 	}
-	hub.broadcast(session.Room, protocol.Message{ID: 3090, Payload: fighter(account, session.Room.Members[session.UID])}, session.UID)
+	hub.broadcastEquipment(session, account)
+}
+
+func (hub *Hub) broadcastEquipment(session *Session, account persistence.Account) {
+	if session.Room == nil || session.Room.Stage != "room" {
+		return
+	}
+	member := session.Room.Members[session.UID]
+	if member == nil {
+		return
+	}
+	// Native 81EEA0 -> 81CF10 -> 81CB00 replaces the actor in its room slot.
+	// Include self: 2090 updates the inventory actor, not every room actor.
+	hub.broadcast(session.Room, protocol.Message{ID: protocol.MsgRoomMemberUpdated, Payload: fighter(account, member)}, 0)
 }
 func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol.Message) (bool, error) {
 	payload := message.Payload
@@ -562,6 +599,14 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		if member.Team == payload[0] {
 			session.sendGame(protocol.Message{ID: 3250, Payload: roomTeam(member)})
 			return true, nil
+		}
+		if room.Type().IsTeam() {
+			position, ok := room.freeTeamPosition(payload[0], uid)
+			if !ok {
+				session.sendGame(notice("目标队伍没有空位。"))
+				return true, nil
+			}
+			member.Spawn = position
 		}
 		member.Team = payload[0]
 		hub.broadcast(room, protocol.Message{ID: 3250, Payload: roomTeam(member)}, 0)

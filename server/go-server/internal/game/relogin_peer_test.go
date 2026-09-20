@@ -121,6 +121,34 @@ func TestPeerReceiptIsolation(t *testing.T) {
 	}
 }
 
+func TestPeerReceiptSurvivesServerRestartWithSameCertificate(t *testing.T) {
+	certificate, err := tunnel.Certificate(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := NewHub(nil, Config{})
+	NewServer(old, certificate)
+	receipt := old.peerReceipt(1042)
+	restarted := NewHub(nil, Config{})
+	NewServer(restarted, certificate)
+	s, err := restarted.Attach(persistence.Account{UID: 123}, 18001, receipt)
+	if err != nil || s.P2P != 1042 || restarted.NextPlayer != 1043 {
+		t.Fatal("server restart invalidated transport identity", err)
+	}
+	if _, err = restarted.Attach(persistence.Account{UID: 124}, 18001, receipt); err == nil {
+		t.Fatal("occupied peer was stolen")
+	}
+	otherCertificate, err := tunnel.Certificate(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := NewHub(nil, Config{})
+	NewServer(other, otherCertificate)
+	if _, err = other.Attach(persistence.Account{UID: 123}, 18001, receipt); err == nil {
+		t.Fatal("another server accepted receipt")
+	}
+}
+
 func TestPeerRegistrationBeforeGameChannel(t *testing.T) {
 	hub := NewHub(nil, Config{})
 	s, err := hub.Attach(persistence.Account{UID: 1}, 18001)

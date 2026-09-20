@@ -4,7 +4,7 @@
 
 实现位置：
 
-- `client/launcher-online/InstanceManager.cs`：窗口独立保存账号，使用进程 ID 和创建时间识别窗口，向共享网络组件提交窗口启动请求。
+- `launcher/launcher-online/InstanceManager.cs`：窗口独立保存账号，使用进程 ID 和创建时间识别窗口，向共享网络组件提交窗口启动请求。
 - `server/go-server/internal/bridge/shared_windows.go`：以挂起状态创建经过校验的游戏进程，核对内存中的 `KungfuKid`，写入基于进程 ID 的独立名称，再恢复线程。失败时终止刚创建的进程，不修改游戏磁盘文件。
 - `server/go-server/internal/bridge/bridge_windows.go`：共用本地监听端口，以经过校验的进程身份选择 TCP、UDP 和重新登录会话。
 
