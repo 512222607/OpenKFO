@@ -88,6 +88,14 @@ func TestStageCatalogueClientArchive(t *testing.T) {
 			if catalog == nil || catalog.ConfigHash != fosterConfigHash || len(catalog.Names) != 262 || catalog.Names[0] != " 喽罗乙" || catalog.Names[254] != "喽罗乙" || catalog.Names[251] != "喽罗甲" {
 				t.Fatal("Foster native indices or whitespace lost", row.MapID)
 			}
+			if len(catalog.InitialHP) != len(catalog.Names) || catalog.InitialHP[251] != 8 || catalog.InitialHP[51] != 75 {
+				t.Fatal("Foster initial HP was scaled or detached from native template indices", row.MapID)
+			}
+			for _, hp := range catalog.InitialHP {
+				if hp <= 0 {
+					t.Fatal("missing initial HP in verified template catalogue")
+				}
+			}
 			if row.RuntimeScript != "script/pve/include" || row.RuntimeHash != "0a083607cab1456c0976038f1e78658a208607355c015060a4492259cde5280f" {
 				t.Fatalf("mode 10 must bind the loaded bytecode, not a loose Lua source: %+v", row)
 			}
