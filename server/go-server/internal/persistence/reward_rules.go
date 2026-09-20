@@ -122,6 +122,9 @@ func (m *RewardManager) SaveBattleRewards(revision uint64, rules RewardRules) (R
 		}
 		// Reject an unusable native selector while the GM is saving, rather
 		// than discovering its missing/conflicting catalogue at guide completion.
+		if len(choices) == 0 {
+			return RewardSettings{}, ErrTutorialWeaponRequired
+		}
 		if len(choices) > 0 {
 			tx, err := m.store.DB.Begin()
 			if err != nil {

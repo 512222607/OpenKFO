@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -68,6 +69,33 @@ func TestTutorialBundleLocalDatabase(t *testing.T) {
 		}
 		exec("REPLACE INTO battle_reward_rules(id,rules) VALUES(1,?)", raw)
 	}
+	configured := rules
+	for _, bundle := range []*RewardBundle{nil, {}, {Gold: 100, Tickets: 50}, {Items: []uint32{2, 3}, Gold: 100}} {
+		rules.Tutorial = bundle
+		save()
+		if _, err = store.RewardManager().CompleteTutorial(1, ""); !errors.Is(err, ErrTutorialWeaponRequired) {
+			t.Fatal("empty weapon selector accepted", err)
+		}
+		if bundle != nil {
+			gmRules := rules
+			gmRules.LevelGifts, gmRules.StageRewards = []LevelGift{}, []StageMapRewards{}
+			if _, err = store.RewardManager().SaveBattleRewards(1, gmRules); !errors.Is(err, ErrTutorialWeaponRequired) {
+				t.Fatal("GM accepted an empty weapon selector", err)
+			}
+		}
+		var stored []byte
+		var gold, tickets, receipts, items int
+		if err = db.QueryRow("SELECT profile,gold,tickets FROM accounts WHERE uid=1").Scan(&stored, &gold, &tickets); err != nil || !bytes.Equal(stored, profile) || gold != 10 || tickets != 20 {
+			t.Fatal("missing weapon changed progress or balances", err)
+		}
+		if err = db.QueryRow("SELECT COUNT(*) FROM tutorial_rewards").Scan(&receipts); err != nil || receipts != 0 {
+			t.Fatal("missing weapon consumed completion", err)
+		}
+		if err = db.QueryRow("SELECT COUNT(*) FROM inventory").Scan(&items); err != nil || items != 0 {
+			t.Fatal("missing weapon granted partial inventory", err)
+		}
+	}
+	rules = configured
 	save()
 	if _, err = store.RewardManager().CompleteTutorial(1, ""); err == nil {
 		t.Fatal("missing definition accepted")
