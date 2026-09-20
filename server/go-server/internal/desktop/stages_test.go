@@ -64,6 +64,9 @@ func TestStageCatalogueClientArchive(t *testing.T) {
 				}
 			}
 			p := row.FosterPreview
+			if p == nil || len(p.InitialHP) != 262 || p.InitialHP[251] != 8 || p.InitialHP[51] != 75 {
+				t.Fatal("Foster preview lost HP catalogue")
+			}
 			if p == nil || p.GlobalLimit != 32 || p.PlayerLimit != 6 || len(p.Groups) != 2 || len(p.Groups[0].Spawns) != 2 || len(p.Groups[1].Spawns) != 21 {
 				t.Fatal("missing native Foster parallel event plan", p)
 			}

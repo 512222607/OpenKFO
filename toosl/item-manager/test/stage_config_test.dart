@@ -105,6 +105,7 @@ void main() {
                         'names': [' Monster', 'Monster'],
                       },
                       'foster_preview': {
+                        if (imports > 1) 'initial_hp': [8, 75],
                         'global_limit': 32,
                         'player_limit': 6,
                         'groups': [
@@ -206,6 +207,7 @@ void main() {
       expect(foster['plan']['groups'][0]['spawns'][0]['template'], 0);
       expect(foster['plan']['groups'][0]['block'], 100);
       expect(foster['plan']['groups'][0]['sub_limit'], 2);
+      expect(foster['plan']['initial_hp'], [8, 75]);
       expect(access['wave_plans'][0]['map_id'], 8111);
       expect(access['wave_plans'][0]['variants'][0]['waves'][0]['monsters'], {
         '0': 2,

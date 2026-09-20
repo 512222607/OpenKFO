@@ -78,7 +78,7 @@ func TestStageSettlementRouteLocalDatabase(t *testing.T) {
 	// Mode 10 reads its separate persisted plan, with the same reward gate.
 	fosterAccess := access
 	fosterAccess.WavePlans = nil
-	fosterAccess.FosterPlans = []persistence.FosterConfig{{MapID: 20051, ScriptHash: h.Config.ConfigHash, RuntimeHash: h.Config.ConfigHash, ConfigHash: h.Config.ConfigHash, Templates: []string{"Monster"}, Plan: protocol.FosterPlan{PlayerLimit: 6, GlobalLimit: 32, Groups: []protocol.FosterGroup{{SubLimit: 2, GroupLimit: 20, Spawns: []protocol.FosterSpawn{{Direction: 4}}}}}}}
+	fosterAccess.FosterPlans = []persistence.FosterConfig{{MapID: 20051, ScriptHash: h.Config.ConfigHash, RuntimeHash: h.Config.ConfigHash, ConfigHash: h.Config.ConfigHash, Templates: []string{"Monster"}, Plan: protocol.FosterPlan{InitialHP: []float32{8}, PlayerLimit: 6, GlobalLimit: 32, Groups: []protocol.FosterGroup{{SubLimit: 2, GroupLimit: 20, Spawns: []protocol.FosterSpawn{{Direction: 4}}}}}}}
 	fosterData, err := json.Marshal(fosterAccess)
 	if err != nil {
 		t.Fatal(err)

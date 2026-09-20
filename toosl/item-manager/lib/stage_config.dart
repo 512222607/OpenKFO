@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 class StageConfigPage extends StatefulWidget {
   const StageConfigPage({
@@ -148,6 +149,30 @@ class _StageConfigPageState extends State<StageConfigPage> {
           };
         }
         final foster = r['foster_preview'];
+        // Upgrade a saved plan without replacing the operator's spawn/limit edits.
+        final existing = fosterPlans[id];
+        final catalogueForUpgrade = r['foster_templates'];
+        if (foster is Map &&
+            existing != null &&
+            existing['plan'] is Map &&
+            ((existing['plan']['initial_hp'] as List?)?.isEmpty ?? true) &&
+            foster['initial_hp'] is List &&
+            catalogueForUpgrade is Map &&
+            existing['script_hash'] == r['script_hash'] &&
+            existing['runtime_hash'] == r['runtime_hash'] &&
+            existing['config_hash'] == catalogueForUpgrade['config_hash'] &&
+            listEquals(
+              existing['templates'] as List?,
+              catalogueForUpgrade['names'] as List?,
+            )) {
+          fosterPlans[id] = {
+            ...existing,
+            'plan': {
+              ...existing['plan'],
+              'initial_hp': List.of(foster['initial_hp']),
+            },
+          };
+        }
         if (foster is Map && !fosterPlans.containsKey(id)) {
           if (wavePlans.containsKey(id)) {
             throw const FormatException('地图已有波次计划，不能覆盖为事件计划');

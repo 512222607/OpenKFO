@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"kungfu.local/server/internal/protocol"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -40,7 +41,10 @@ func fosterPlanPreview(raw []byte, runtime string, catalogue *FosterTemplateCata
 		indices[name] = uint32(i)
 	}
 	spawnPattern := regexp.MustCompile(`\{n="([^"]+)",p=\{(-?[0-9]+),(-?[0-9]+),(-?[0-9]+)\}(?:,\s*d=([0-9]+))?\}`)
-	p := &FosterPlanPreview{GlobalLimit: 32, PlayerLimit: 6}
+	if len(catalogue.InitialHP) != len(catalogue.Names) {
+		return nil, fmt.Errorf("Foster initial HP catalogue is missing")
+	}
+	p := &FosterPlanPreview{GlobalLimit: 32, PlayerLimit: 6, InitialHP: slices.Clone(catalogue.InitialHP)}
 	for groupIndex, section := range groups[1:] {
 		// This verified script has one sub-list per group. Runtime corpse
 		// accounting affects the global/group limits, not this sub-list limit.

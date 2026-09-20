@@ -22,6 +22,7 @@ type FosterGroup struct {
 }
 
 type FosterPlan struct {
+	InitialHP   []float32     `json:"initial_hp,omitempty"` // Native template index, not display units.
 	Groups      []FosterGroup `json:"groups"`
 	GlobalLimit uint32        `json:"global_limit"`
 	PlayerLimit uint32        `json:"player_limit"`
@@ -34,6 +35,15 @@ func (p FosterPlan) Validate(templateCount int) error {
 		return fmt.Errorf("模式10计划人数、怪物容量或事件组无效")
 	}
 	finite := func(v float32) bool { return !math.IsNaN(float64(v)) && !math.IsInf(float64(v), 0) }
+	// Old saved plans remain readable; battle preparation requires the new data.
+	if len(p.InitialHP) != 0 && len(p.InitialHP) != templateCount {
+		return fmt.Errorf("模式10血量目录与模板数量不一致")
+	}
+	for _, hp := range p.InitialHP {
+		if !finite(hp) || hp <= 0 {
+			return fmt.Errorf("模式10怪物初始血量必须是有限正数")
+		}
+	}
 	blocks := map[uint32]bool{}
 	total := 0
 	for _, group := range p.Groups {

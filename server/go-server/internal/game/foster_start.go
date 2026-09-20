@@ -26,6 +26,10 @@ func (c Config) persistedFosterPlan(access persistence.StageAccess, mapID uint32
 			return nil, fmt.Errorf("当前人数超过关卡事件计划限制")
 		}
 		plan := config.Plan
+		if len(plan.InitialHP) != len(config.Templates) {
+			return nil, fmt.Errorf("关卡事件计划缺少怪物初始血量，请在GM中重新读取客户端地图条件并保存")
+		}
+		plan.InitialHP = slices.Clone(plan.InitialHP)
 		plan.Groups = slices.Clone(plan.Groups)
 		for i := range plan.Groups {
 			plan.Groups[i].Spawns = slices.Clone(plan.Groups[i].Spawns)
