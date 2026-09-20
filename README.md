@@ -29,198 +29,224 @@ OpenKFO 基于 [liuyangyi0/kungfukid-local-server](https://github.com/liuyangyi0
 
 法律参考：[2025 年“两高”《关于办理侵犯知识产权刑事案件适用法律若干问题的解释》](https://www.court.gov.cn/zixun/xiangqing/463291.html)。本项目不将其中的入罪数额标准视为允许侵权的范围。
 
+---
 
-## 当前版本与目录
+## 先看这一页：按什么顺序做
 
-**当前运行链路不依赖 Python**：Go + MySQL 服务端、C# 在线登录器（内嵌 Go 桥接与客户端更新）、Flutter GM管理器（调用 Go 管理后端）。
+**准备客户端与数据库 → 启动 Go 服务器 → 构建并配置登录器 → 验证游戏登录 → 构建并连接 GM 管理器。**
 
-- `server/`：服务器源码，当前 Go 项目位于 `server/go-server`，包含服务端、协议、数据库访问、客户端桥接和管理后端，共用一个 Go 模块。
-- `gm/`：Flutter GM 管理器，含 Windows 完整版及 macOS/Android 线上入口。
-- `launcher/`：登录器源码；当前本地/线上共用 C# 项目位于 `launcher/launcher-online`。
-- `launcher/client-adapter`：C++ 登录界面与客户端适配代码。
-- `tools/local-server-monitor/`：C# 本地服务器可视化日志窗口，含进程启停、筛选和原始数据 Tab。
-- `launcher/protocol-tester/`：C# 协议测试 APP，配合 Go 协议组件测试，无需启动游戏。
-- `tools/updater/`：独立 C# 更新助手，供登录器和 GM 更新使用。
-- `protocol/`：协议说明、实现进度和逆向参考；`docs/`：开发与部署补充说明。
-- `dist/`：本机构建输出，不提交 Git；GM 完整目录入口可命名为 `dist/GM管理器/GM管理器.exe`。
+先把本地连接跑通，再改线上地址。日志窗口、协议测试 APP、自动更新都是后续可选项，不要一开始混在一起部署。当前运行不依赖 Python，也不要求使用 PowerShell。
 
-`tools/` 存放构建、部署、更新助手等辅助工具。`server/kk_local`、`server/tests`、`requirements.txt`、`launcher/launcher`、旧本地启动/账号脚本以及 Go 模块中的 Python 迁移工具仅保留作历史参考；**使用当前版本无需安装 Python、创建 `.venv` 或启动旧 Python 服务**。旧迁移工具不属于下述运行流程。
+给接手项目的 AI：先确认用户已有的客户端目录、数据库和配置，保留现有数据；不要凭空填写地图、角色选项或哈希，不要把历史 Python 服务当成当前入口。缺少配置就明确指出缺哪项，不能把“编译成功”说成“可以登录”。
 
-### 当前功能与验证范围
+## 第 1 步：找到源码，安装工具
 
-- 账号不存在时自动注册，随后取名与创建角色；已有账号仍校验密码。
-- 房间、准备、战斗、结算与回房；经验、金币及成长奖励通过 GM 配置。
-- 好友添加、删除和列表读取；在线状态在查询时刷新，尚无自动上下线推送。
-- 装备和消耗品检查所属背包；武器切换卡接入 `4082/4083`，校验双武器和卡数后事务扣卡，失败也解除客户端等待。
-- 多人自由练习已处理已确认 NPC 的战斗事件同步；不代表任意 NPC、地图和全部玩法均已实现。
-
-协议细节见 [好友](protocol/FriendProtocol.md)、[背包校验](protocol/InventoryOwnershipChecks.md)、[练习 NPC](protocol/PracticeNPCProtocol.md)、[武器切换卡](protocol/WeaponSwitchCardProtocol.md)。其他缺口见 [实现清单](protocol/ImplementationBacklog.md)，旧逆向记录中的推测应以当前代码和实测修正为准。自动测试通过不等于全部原生客户端界面已验收。
-
-## 构建与运行
-
-各部分独立构建，不需要先运行 PowerShell 脚本。以下 `cd` 均以仓库根目录为起点；执行另一组命令前回到仓库根目录。
-
-| 程序 | 当前支持平台 | 构建环境 |
+| 要做什么 | 当前源码入口 | 需要什么 |
 | --- | --- | --- |
-| Go 服务器、服务端管理程序 | Linux / macOS / Windows | Go 1.26.0（见 go.mod）、MySQL 8 |
-| GM 完整桌面版 | Windows x64 | Flutter（Dart ^3.13.2）、Visual Studio C++、Go |
-| GM 线上版 | macOS / Android（也可构建 Windows） | Flutter、各平台工具链；服务器部署 GM HTTPS API |
-| 游戏登录器 | Windows x64（游戏组件为 x86） | .NET 8 SDK、Go、VS 2022 x86 C++ 工具链 |
-| 本地日志窗口 | Windows x64 | .NET 8 SDK；运行游戏服务另需 Go 服务器与 MySQL |
-| 协议测试 APP | Windows x64 | .NET 8 SDK、Go |
+| 游戏服务器、数据库、协议逻辑 | `server/go-server/cmd/server`、`internal/game`、`internal/persistence` | Go 1.26.0、MySQL 8；Windows/Linux/macOS |
+| 本地和线上登录器（同一份源码） | `launcher/launcher-online` | Windows、.NET 8 SDK、Go |
+| 游戏内登录界面组件 | `launcher/client-adapter` | Windows、VS 2022 x86 C++ 工具链 |
+| GM 完整版 | `gm/lib/main.dart` + `server/go-server/cmd/desktop-admin` | Windows、Flutter（Dart ^3.13.2）、VS C++、Go |
+| GM macOS/Android 线上版 | `gm/lib/main_online.dart` | Flutter、目标平台工具链、已部署 GM HTTPS API |
+| 本地服务器日志窗口 | `tools/local-server-monitor` | Windows、.NET 8 SDK |
+| 协议测试 APP | `launcher/protocol-tester` + `server/go-server/cmd/protocol-tester` | Windows、.NET 8 SDK、Go |
+| 独立更新助手 | `tools/updater` | Windows、.NET 8 SDK |
 
-Go 服务器可在非 Windows 系统运行。GM 的 Windows 完整版仍可切换本地/线上；macOS、Android 使用独立线上入口 `lib/main_online.dart`，通过 HTTPS 管理接口连接，不依赖本机 Go EXE 或 SSH。macOS 工程需在 Mac 上构建验证。
+`protocol/` 是协议及实现进度，`docs/` 是补充资料，`dist/` 是构建输出。**`launcher/launcher`、`server/kk_local`、`server/tests` 和 Python 脚本是历史实现，不用于下面的启动流程。**
 
-### GM 管理器：直接打包
+以下每个命令块都从**仓库根目录**开始。推荐源码放在英文路径，例如 `C:/src/OpenKFO`，游戏资源另放，避免 Flutter/MSBuild 的路径兼容问题。
 
-在 Windows 的普通终端（CMD 等）执行：
+## 数据库和配置填写入口
+
+首次部署先读 [数据库结构与初始化](docs/DatabaseSchema.md)，再按 [配置填写手册](docs/Configuration.md) 填文件。手册包含本机MySQL、SSH独立测试库、登录器和GM的完整配置示例，明确文件放哪里、字段填什么、相对路径按哪里解析。
+
+- 数据库：51张表的用途、全部字段/主键/外键SQL、创建数据库与初始化顺序。
+- 配置：`settings.private.json`、`ssh.private.json`、`config.json`、`bridge.json`/`bridge.local.json`、`gm-settings.json`、`online-admin.json`和`updater-settings.json`。
+- 首次空库先导入 [database-schema.sql](docs/database-schema.sql)，再启动Go服务；已有库不要删库重建。
+
+## 第 2 步：先准备服务器配置
+
+1. 自行合法取得兼容客户端，确认 `gfld.dat` 和 `Data/config.spf2` 存在。游戏资源不放进 Git。
+2. 按 [数据库初始化步骤](docs/DatabaseSchema.md) 创建数据库和专用用户，并导入表结构。本地和线上统一使用 `kungfu_game`，分别连接独立 MySQL 实例；不能通过同一实例的不同地址来隔离数据。
+3. 创建 `dist/server`，在其中放入与这份客户端匹配的 `config.json`。
+
+`config.json` 至少要有：
+
+| 字段 | 怎么准备 |
+| --- | --- |
+| `config_hash` | 当前 `Data/config.spf2` 的 SHA-256，64 位小写十六进制 |
+| `pools` | `模式:人数` → 地图 ID 数组，不能为空；从对应客户端核对 |
+| `character_choices` | 创建角色的有效七槽候选，必须与客户端物品配置对应 |
+
+不要用空 JSON 或随意编造编号来绕过检查。其他地图、奖励字段和数据库说明见 [服务端配置说明](server/go-server/README.md#准备数据库与配置)。服务器会建表，但**不会替你创建数据库**。
+
+**完成条件：数据库可连接，`dist/server/config.json` 已准备好。**
+
+## 第 3 步：构建并启动服务器
+
+Windows CMD：
+
+```bat
+go -C server/go-server build -o ../../dist/server/kungfu-server.exe ./cmd/server
+go -C server/go-server build -o ../../dist/server/kungfu-admin.exe ./cmd/admin
+set "KK_MYSQL_DSN=kfo:替换为自己的密码@tcp(127.0.0.1:3306)/kungfu_game"
+dist\server\kungfu-server.exe -config dist/server/config.json -cert-dir dist/server/certificates -listen 127.0.0.1:19090 -tls-listen 127.0.0.1:19091
+```
+
+Linux/macOS（bash/zsh）：
+
+```sh
+go -C server/go-server build -o ../../dist/server/kungfu-server ./cmd/server
+go -C server/go-server build -o ../../dist/server/kungfu-admin ./cmd/admin
+export KK_MYSQL_DSN='kfo:替换为自己的密码@tcp(127.0.0.1:3306)/kungfu_game'
+./dist/server/kungfu-server -config dist/server/config.json -cert-dir dist/server/certificates -listen 127.0.0.1:19090 -tls-listen 127.0.0.1:19091
+```
+
+保持进程运行，在另一终端检查：
+
+```text
+curl http://127.0.0.1:19090/health
+```
+
+首次启动生成服务器 `origin.crt` 与 `origin.key`。登录器只需要服务器公有证书 `origin.crt`，不要分发 `origin.key`。`kungfu-admin` 是管理工具调用的程序，不需要单独保持运行。
+
+**完成条件：健康检查返回 `status: ok`。这时才开始配置登录器。**
+
+## 第 4 步：构建登录器，验证游戏登录
+
+### 4.1 按依赖顺序构建（Windows）
+
+在仓库根目录执行；先创建 `dist/launcher-components`：
+
+```bat
+go -C server/go-server build -o ../../dist/launcher-components/OnlineBridge.exe ./cmd/bridge
+launcher\client-adapter\build-login-skin.cmd
+dotnet publish tools/updater/Updater.csproj -c Release -o dist/updater
+dotnet publish launcher/launcher-online/OnlineLauncher.csproj -c Release -o dist/launcher
+```
+
+顺序不能反：最后一步会嵌入前面构建的桥接 EXE、登录界面组件和更新助手。C++ 脚本默认使用 VS 2022 BuildTools 的安装路径，安装位置不同需调整脚本中的工具链路径。
+
+产物：`dist/launcher/功夫小子登录器.exe`。本地/线上登录器来自同一个 C# 项目，并非两套源码；Go 桥接负责网络连接，C++ 组件负责游戏内登录界面。
+
+### 4.2 把登录器放到游戏目录，准备连接配置
+
+推荐运行目录：
+
+```text
+游戏目录/
+  功夫小子登录器.exe
+  bridge.json
+  gfld.dat
+  Data/                         # 自行提供的完整客户端资源
+  certificates/                 # bridge.json 引用的证书
+```
+
+`bridge.json` 的主要字段：
+
+| 字段 | 填什么 |
+| --- | --- |
+| `url` | 本地 `tls://127.0.0.1:19091`；线上示例 `wss://域名/kk/tunnel`，也支持部署好的直接 TLS 入口 |
+| `client_directory` | 登录器与游戏同目录时填 `.` |
+| `shared_client` | `true`，多个窗口共用同一份游戏资源 |
+| `client_sha256` | `gfld.dat` 的 SHA-256 |
+| `config_hash` | `Data/config.spf2` 的 SHA-256，与服务端一致 |
+| `server_certificate` | 固定校验用的服务器公有证书 `origin.crt` 路径 |
+| `login_certificate`、`login_key` | 桥接本地登录接口使用的匹配证书/私钥，**不是服务器 origin.key** |
+| `trace_protocol` | 调试时可设为 `true` |
+
+证书和哈希需由部署者准备，不能从别人的电脑直接照抄绝对路径。相对路径以配置文件目录为基准。登录器会准备内嵌组件并把原生登录需要的 `zz.crt` 放到游戏目录，玩家不用自己复制 DLL。
+
+如果同时提供两个入口：线上入口读取 `bridge.json`；文件名带“本地”或“线下”的入口优先读取 `bridge.local.json`。两个配置使用同一客户端目录，分别配置连接地址和证书；本地游戏仍需要运行第 3 步的服务器。
+
+### 4.3 启动并验收
+
+双击登录器，填写账号密码并启动游戏。账号不存在时自动注册，随后进入取名/创建角色；已有账号校验原密码。每个窗口的账号密码在本机加密保存。
+
+**完成条件：能进入大厅。** 卡在连接时先核对服务器是否运行、证书、哈希、目标地址及日志，不要先修改商城或战斗代码。详细配置、更新和多窗口行为见 [登录器说明](launcher/launcher-online/README.md)。
+
+## 第 5 步：构建 GM，连接同一套数据
+
+### 5.1 Windows 完整版：同一个 EXE 切换本地/线上
+
+先构建 Flutter 界面；以下命令结束后回到仓库根目录：
 
 ```text
 cd gm
 flutter pub get
 flutter build windows --release
+cd ..
 ```
 
-界面产物位于 `gm/build/windows/x64/runner/Release/`，入口为 `kungfu_item_manager.exe`。建议将仓库放在英文路径（例如 `C:/src/OpenKFO`），避免 Flutter/MSBuild 的中文路径问题。
-
-GM 还需要 Go 管理后端。从仓库根目录执行：
+再构建管理后端到界面输出目录：
 
 ```text
-cd server/go-server
-go build -ldflags "-H windowsgui" -o ../../gm/build/windows/x64/runner/Release/kungfu-desktop-admin.exe ./cmd/desktop-admin
+go -C server/go-server build -ldflags "-H windowsgui" -o ../../gm/build/windows/x64/runner/Release/kungfu-desktop-admin.exe ./cmd/desktop-admin
 ```
 
-将 **整个 Release 文件夹**复制到仓库根目录 `dist/GM管理器`，可将 `kungfu_item_manager.exe` 重命名为 `GM管理器.exe`。保留 DLL、`data/`、Go 后端和其他生成文件；单独复制 EXE 无法运行。配置好后直接双击，无需 CMD 启动脚本。
+将 `gm/build/windows/x64/runner/Release/` **整个目录**保存为 `dist/GM管理器/`。入口 `kungfu_item_manager.exe` 可以改名为 `GM管理器.exe`，但必须保留 DLL、`data/` 和 `kungfu-desktop-admin.exe`。
 
-需要 GM 自更新时，从仓库根目录构建独立更新助手到同一个 Release 目录：
+按 [GM 运行配置](gm/README.md#运行配置) 准备 `gm-settings.json`：
 
-```text
-dotnet publish tools/updater/Updater.csproj -c Release -o gm/build/windows/x64/runner/Release
-```
+1. `root` 指向管理资源根目录，其中 `runtime-local/client` 提供道具与武器资源；可以链接到已有客户端，避免复制多份。
+2. `local_settings` 指向含 `dsn`、`database` 的私有配置，本地模式连接第 2 步的独立库。GM 不负责启动数据库或建立 SSH 隧道。
+3. 需要线上管理时，再配置 `root/runtime-local/online-admin.json` 和服务器端 `kungfu-admin`；仅本地测试可先不配置线上。
 
-再将完整 Release 目录一起复制，并按自己的发布服务配置 `updater-settings.json`；未配置更新服务时仍可直接运行 GM。运行配置、同一个 EXE 切换本地/线上、奖励表和商城操作见 [GM 管理器说明](gm/README.md)。
+打开 GM，先选“本地测试服”，确认能读到刚才创建的账号，再设置奖励、商城或背包。Windows 完整版可以在同一个 EXE 内切换本地/线上；每次保存前核对目标环境。
 
-### GM 线上版：macOS / Android
+**完成条件：GM 能读到目标环境的账号，保存后重新读取能看到修改。**
 
-以下均在 `gm` 目录执行，首次先运行 `flutter pub get`：
+### 5.2 macOS / Android：后续需要时再构建
 
-| 目标平台 | 构建所用环境 | 命令 | 输出 |
+这两个平台使用 `lib/main_online.dart`，通过 HTTPS 管理 API 连接，不使用 Windows 的本机 Go EXE/SSH 模式。先部署 [GM HTTPS API](server/go-server/README.md#gm-https-管理接口)，再在 `gm` 目录运行 `flutter pub get` 和对应命令：
+
+| 平台 | 构建环境 | 命令 | 输出 |
 | --- | --- | --- | --- |
-| macOS | Mac、Flutter、Xcode 与命令行工具 | `flutter build macos --release --target lib/main_online.dart` | `build/macos/Build/Products/Release/OpenKFO-GM.app` |
-| Android APK | Windows/Linux/macOS、Flutter、Android SDK、JDK 17 或兼容版本 | `flutter build apk --release --target lib/main_online.dart` | `build/app/outputs/flutter-apk/app-release.apk` |
-| Android AAB | 同上，发布前配置自己的签名 | `flutter build appbundle --release --target lib/main_online.dart` | `build/app/outputs/bundle/release/app-release.aab` |
-| Windows 线上版 | Windows、Flutter、Visual Studio C++ | `flutter build windows --release --target lib/main_online.dart` | `build/windows/x64/runner/Release/` 完整目录 |
+| macOS | Mac、Flutter、Xcode | `flutter build macos --release --target lib/main_online.dart` | `build/macos/Build/Products/Release/OpenKFO-GM.app` |
+| Android APK | Windows/Linux/macOS、Flutter、Android SDK、兼容 JDK | `flutter build apk --release --target lib/main_online.dart` | `build/app/outputs/flutter-apk/app-release.apk` |
+| Android AAB | 同上，自行配置发布签名 | `flutter build appbundle --release --target lib/main_online.dart` | `build/app/outputs/bundle/release/app-release.aab` |
 
-Android 工程默认使用开发签名用于测试；正式分发前需配置自己的签名。macOS 签名、公证需在自己的 Mac/Apple 开发环境处理。不同入口的构建会复用同一输出目录，分别发布时请各自保存完整产物。
+启动后填写自己的 GM API 地址和管理令牌，不能填写游戏的 `/kk/tunnel` 地址。此入口不含本机武器资源编辑；Android 默认开发签名，macOS 构建和签名需在 Mac 上验证。详情见 [GM 平台说明](gm/README.md)。
 
-线上版启动后填写自己的 `https://管理域名/gm/api` 和管理令牌。服务端需先部署 [GM HTTPS 管理接口](server/go-server/README.md#gm-https-管理接口)，不能把游戏 `/kk/tunnel` 地址当成管理接口。
+## 第 6 步：按需要添加调试和更新工具
 
-支持账号背包、发放道具、商城、钱包、奖励表；不提供本机武器资源编辑、本地数据库切换。手机采用可滚动的宽表格，建议横屏；奖励 CSV 支持粘贴导入与复制导出。令牌仅保留在本次会话，不内置个人域名、IP、数据库密码或 SSH 密钥。
-
-### Go 服务器：直接构建与启动
-
-Linux/macOS，从仓库根目录执行：
-
-```sh
-cd server/go-server
-go build -o kungfu-server ./cmd/server
-go build -o kungfu-admin ./cmd/admin
-export KK_MYSQL_DSN='kfo:替换为自己的密码@tcp(127.0.0.1:3306)/openkfo_debug_local'
-./kungfu-server -config config.json -cert-dir certificates -listen 127.0.0.1:19090 -tls-listen 127.0.0.1:19091
-```
-
-Windows CMD，从仓库根目录执行：
-
-```bat
-cd server/go-server
-go build -o kungfu-server.exe ./cmd/server
-go build -o kungfu-admin.exe ./cmd/admin
-set "KK_MYSQL_DSN=kfo:替换为自己的密码@tcp(127.0.0.1:3306)/openkfo_debug_local"
-kungfu-server.exe -config config.json -cert-dir certificates -listen 127.0.0.1:19090 -tls-listen 127.0.0.1:19091
-```
-
-**先创建数据库并准备匹配客户端的 `config.json`，再启动。** 上面的密码仅是占位文字。源码仓库不提供实际账号、客户端或可直接游玩的完整配置；Go 程序会建表，但不会创建数据库。
-
-`config.json` 的必需信息：客户端 `Data/config.spf2` 的 SHA-256（`config_hash`）、按 `模式:人数` 对应地图 ID 列表的 `pools`（非空），以及创建角色候选 `character_choices`（有效七槽配置）；还可配置地图 `groups` 与首次初始化奖励 `settlement`。详细准备、账号管理、日志及 Windows 双击调试模式见 [Go 服务端说明](server/go-server/README.md)。
-
-### 本地服务器日志窗口：独立 C# EXE
-
-在 Windows 上，从仓库根目录执行：
+### 本地日志窗口（C#，可选）
 
 ```text
-dotnet publish tools/local-server-monitor/LocalServerMonitor.csproj -c Release -r win-x64 --self-contained true -o dist/local-server
-go -C server/go-server build -o ../../dist/local-server/kungfu-server.exe ./cmd/server
+dotnet publish tools/local-server-monitor/LocalServerMonitor.csproj -c Release -r win-x64 --self-contained true -o dist/server
 ```
 
-双击 `dist/local-server/功夫小子本地服务器.exe`。同目录准备自己的 `settings.private.json`、`config.json` 和证书，具体格式见 [服务端说明](server/go-server/README.md)。这不是只靠两个 EXE 就能运行的免配置服务器。
+入口：`dist/server/功夫小子本地服务器.exe`。Go 统一输出日志，窗口只读取本地文件，显示账号、玩家、方向、协议和原始 JSON/HEX，不向公网传送日志。
 
-窗口提供启动/停止、时间/账号/玩家/收发方向列表、筛选，以及中文详情和原始 JSON/HEX。**Go 服务器负责统一生成日志，C# 窗口只读取本地文件**，没有向公网发送日志的接口。详细行为见 [日志窗口说明](tools/local-server-monitor/README.md)。
+如果服务器按第 3 步启动：先创建 `dist/server/logs`，在启动命令追加 `-trace-protocol -protocol-log dist/server/logs/protocol-current.log`，窗口可接入该日志。
 
-本地双击模式自动保存 `logs/protocol-*.log`。普通命令启动 Go 服务器时，可增加 `-trace-protocol -protocol-log logs/protocol-current.log`，需先创建 `logs` 目录；线上是否启用跟踪由部署配置控制，详细载荷仅保存在服务器文件中。
+**窗口中的一键“启动服务器”走额外的 Windows 调试模式**，需要 `settings.private.json`、SSH 配置和独立测试库，不能把普通本机 MySQL 配置直接当成这个模式。配置见 [Windows 双击模式](server/go-server/README.md)，界面行为见 [日志窗口说明](tools/local-server-monitor/README.md)。
 
-### 协议测试 APP：无需启动游戏
-
-Windows 上，从仓库根目录执行：
+### 协议测试 APP（可选）
 
 ```text
 go -C server/go-server build -o ../../dist/tester-components/ProtocolTesterCore.exe ./cmd/protocol-tester
 dotnet publish launcher/protocol-tester/ProtocolTester.csproj -c Release -o dist/协议测试器
 ```
 
-先启动测试服，再打开 `dist/协议测试器/功夫小子协议测试器.exe`，选择本地登录器的 `bridge.json`，使用空闲测试账号连接。支持双账号、原始收发数据、资料/商城/房间/战斗等用例；会修改数据的用例应连接独立测试库。使用和回归范围见 [测试器说明](launcher/protocol-tester/README.md)。
+入口：`dist/协议测试器/功夫小子协议测试器.exe`。先启动测试服，再选择本地登录器的 `bridge.json`，使用空闲测试账号；无需打开游戏即可测试收发协议。用例可能修改账号数据，使用独立测试库。详见 [测试器说明](launcher/protocol-tester/README.md)。
 
-### Windows 登录器
+### 自动更新（可选）
 
-登录器依赖 Windows 客户端与原生组件，不能在 Linux/macOS 上直接运行。先在仓库根目录准备 `dist/launcher-components` 文件夹，然后执行以下 Windows CMD 命令：
+登录器已在第 4 步嵌入独立更新助手；启动时检查登录器更新，启动游戏前检查客户端更新。需部署者另外配置发布服务，不是构建 EXE 就自动拥有更新源。
 
-```bat
-cd server/go-server
-go build -o ../../dist/launcher-components/OnlineBridge.exe ./cmd/bridge
-cd ../..
-launcher\client-adapter\build-login-skin.cmd
-dotnet publish tools/updater/Updater.csproj -c Release -o dist/updater
-dotnet publish launcher/launcher-online/OnlineLauncher.csproj -c Release -o dist/launcher
-```
-
-定制登录界面组件和独立更新助手必须先构建；组件自动释放，玩家无需复制 DLL。源码和构建依赖见 [登录器说明](launcher/launcher-online/README.md)。
-
-将发布的登录器放到游戏目录，并在同目录准备 `bridge.json`：
-
-| 字段 | 含义 |
-| --- | --- |
-| `url` | 本地 `tls://127.0.0.1:19091`；线上示例 `wss://域名/kk/tunnel` |
-| `client_directory` | 自行准备的兼容客户端目录 |
-| `client_sha256` | 客户端 `gfld.dat` 的 SHA-256 |
-| `config_hash` | 客户端 `Data/config.spf2` 的 SHA-256，须与服务器一致 |
-| `server_certificate` | 固定校验用的 `origin.crt` 路径 |
-| `login_certificate`、`login_key` | 本地登录接口所需的匹配证书与私钥，不是服务端私钥 |
-| `trace_protocol` | `true` 时将协议跟踪写入各窗口的 `online-client.log` |
-
-路径相对 `bridge.json` 所在目录解析。双击运行，或在 CMD 中指定配置目录：
-
-```bat
-"dist\launcher\功夫小子登录器.exe" --root "C:\kfo-runtime"
-```
-
-线上可采用直接 TLS 或 WSS 接入，按自己的部署配置选择；健康检查响应时间不等于战斗网络延迟。修改武器资源后，必须同步客户端、登录器与服务器允许的配置校验值，并重启读取旧配置的程序；只在 GM 应用资源不会自动完成服务端更新。
-
-### 可选的一键整理脚本
-
-`tools/Build-Dist.ps1` 和 `tools/Install-Dist.ps1` 是 Windows 上可选的批量构建、安装工具，不是 Go 服务器或 GM 的必需构建步骤。前者会将发布包整理到 `dist/launcher`、`dist/launcher-components`、`dist/server`、`dist/GM管理器`；也可按上面的命令独立构建、手动复制完整产物。
-
-### 开发验证
-
-在 `server/go-server` 运行：
+GM 需要自更新时，先构建助手，再把它连同整个 GM 目录一起发布：
 
 ```text
-go test ./...
+dotnet publish tools/updater/Updater.csproj -c Release -o dist/GM管理器
 ```
 
-在 `gm` 运行：
+按自己的发布服务准备 `updater-settings.json`。只改本地客户端资源不等于线上更新完成；客户端、登录器和服务端允许的配置校验值必须一致。
 
-```text
-flutter analyze
-flutter test
-```
+## 给开发者和 AI 的最后检查
 
-数据库用例按各自要求读取 `KK_TEST_MYSQL_DSN` 或 `OPENKFO_DEBUG_DSN`；新背包、好友与切换卡用例使用后者，并要求库名以 `openkfo_debug_` 开头。未设置时相应用例跳过，不代表数据库测试已通过。测试或构建通过不等于实机游戏和线上部署验证。运行配置、客户端资源、数据库、私钥、日志和构建产物不提交 Git；当前运行链路不依赖 Python。
+- 服务器逻辑改 `server/go-server`；登录器改 `launcher/launcher-online`；GM 界面改 `gm`；日志窗口改 `tools/local-server-monitor`。不要改错历史目录。
+- Go 验证：仓库根目录运行 `go -C server/go-server test ./...`。数据库用例需另配 `KK_TEST_MYSQL_DSN` 或 `OPENKFO_DEBUG_DSN`，未配置会跳过，不能称为数据库验证通过。
+- GM 验证：在 `gm` 目录运行 `flutter analyze`、`flutter test`。Windows/Linux 构建结果不代表 macOS/Android 实机验证。
+- 源码、测试、构建描述提交 Git；真实连接配置、密钥、日志、数据库、游戏资源及 `dist/` 不提交。
+- [实现清单](protocol/ImplementationBacklog.md) 记录缺口；[好友](protocol/FriendProtocol.md)、[背包校验](protocol/InventoryOwnershipChecks.md)、[练习 NPC](protocol/PracticeNPCProtocol.md)、[切换卡](protocol/WeaponSwitchCardProtocol.md) 说明近期实现边界。部分玩法仍待实现，不要把兼容服务器描述为原版完整复刻。

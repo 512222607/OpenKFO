@@ -7,7 +7,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -38,13 +37,9 @@ func (admin *Admin) local(request persistence.AdminRequest) (json.RawMessage, er
 	if json.Unmarshal(bytes.TrimPrefix(data, []byte{239, 187, 191}), &config) != nil {
 		return nil, fmt.Errorf("本地配置无效")
 	}
-	dsn, err := mysql.ParseDSN(config.DSN)
+	dsn, err := localDatabaseDSN(config.DSN, config.Database)
 	if err != nil {
 		return nil, fmt.Errorf("本地数据库连接配置无效")
-	}
-	host, _, err := net.SplitHostPort(dsn.Addr)
-	if err != nil || dsn.Net != "tcp" || (host != "127.0.0.1" && host != "localhost" && host != "::1") || dsn.DBName != config.Database || !strings.HasPrefix(dsn.DBName, "openkfo_debug_") {
-		return nil, fmt.Errorf("本地环境只允许回环地址上的 openkfo_debug_ 独立测试库")
 	}
 	dsn.Timeout, dsn.ReadTimeout, dsn.WriteTimeout = 5*time.Second, 15*time.Second, 15*time.Second
 	store, err := persistence.OpenExisting(dsn.FormatDSN())
@@ -57,4 +52,16 @@ func (admin *Admin) local(request persistence.AdminRequest) (json.RawMessage, er
 		return nil, err
 	}
 	return json.Marshal(result)
+}
+
+func localDatabaseDSN(value, database string) (*mysql.Config, error) {
+	dsn, err := mysql.ParseDSN(value)
+	if err != nil {
+		return nil, err
+	}
+	host, _, err := net.SplitHostPort(dsn.Addr)
+	if err != nil || dsn.Net != "tcp" || (host != "127.0.0.1" && host != "localhost" && host != "::1") || dsn.DBName != database || dsn.DBName == "" {
+		return nil, fmt.Errorf("本地数据库必须使用回环地址，且 DSN 库名必须非空并与 database 一致")
+	}
+	return dsn, nil
 }
