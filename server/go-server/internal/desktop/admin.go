@@ -266,7 +266,7 @@ func (admin *Admin) Call(request Request) (any, error) {
 		}
 		return map[string]any{"source": "client_titlemission", "missions": missions}, nil
 	}
-	items, err := catalog(client, request.Operation == "catalog")
+	items, err := catalog(client, request.Operation == "catalog" || request.Operation == "weapon_catalog")
 	if err != nil {
 		return nil, err
 	}

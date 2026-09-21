@@ -83,6 +83,22 @@ func TestPurchaseExpiryLocalDatabase(t *testing.T) {
 	if !found {
 		t.Fatal("policy not returned or lost on legacy save")
 	}
+	// The compatibility weapon shelf must return the original sale key; buying
+	// through it must exercise the same pricing, expiry and retry behavior below.
+	aliases, err := s.ShopManager().Offers(253, 25)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found = false
+	for _, alias := range aliases {
+		if alias.Key == o.Key {
+			found = protocol.ReadUint32(alias.Record, 9) == o.Key && protocol.ReadUint32(alias.Record, 38) == 77
+		}
+	}
+	if !found {
+		t.Fatal("compatibility shelf lost purchase identity or price")
+	}
+	save("after-alias") // Displaying aliases must not create duplicate GM sale specs.
 	p := make([]byte, 169)
 	protocol.WriteUint32(p, 0, 109)
 	protocol.WriteUint64(p, 4, uid)

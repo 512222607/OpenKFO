@@ -32,7 +32,8 @@ var kinds = map[byte][2]string{
 func stackable(kind byte) bool { return kind == 64 || kind == 71 || kind == 74 }
 func timed(kind byte) bool {
 	switch kind {
-	case 12, 13, 14, 15, 16, 17, 18, 20, 21, 25, protocol.ItemTalisman:
+	case 12, 13, 14, 15, 16, 17, 18, 20, 21, 25, protocol.ItemTalisman,
+		protocol.ItemDecorativeTitle, protocol.ItemPhantomCard, protocol.ItemPersonalIcon:
 		return true
 	}
 	return false

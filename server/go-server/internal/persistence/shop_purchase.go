@@ -104,6 +104,9 @@ func (m *ShopManager) Purchase(uid uint64, operationID string, request []byte) (
 }
 
 func (m *ShopManager) Offers(category, variant int) ([]Offer, error) {
+	if kinds := compatibleShelfKinds(category, variant); kinds != nil {
+		return m.compatibleOffers(category, variant, kinds)
+	}
 	query := `SELECT catalog_key,category,variant,record,grant_record FROM offers WHERE enabled=TRUE`
 	args := []any{}
 	if category == protocol.ShopCategoryRecommended {

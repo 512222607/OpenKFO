@@ -247,13 +247,16 @@ func (server *Server) serveConnection(connection *tls.Conn) {
 		}
 		encoded, err := tunnel.ReadFrame(reader, 100000)
 		if err != nil {
+			log.Printf("session_read_end uid=%d account=%q error=%v", session.UID, session.Account, err)
 			break
 		}
 		var frame tunnel.Frame
 		if json.Unmarshal(encoded, &frame) != nil {
+			log.Printf("session_bad_frame uid=%d account=%q bytes=%d", session.UID, session.Account, len(encoded))
 			break
 		}
 		if err = server.Hub.Handle(session, frame); err != nil {
+			log.Printf("session_rejected uid=%d account=%q op=%q channel=%d kind=%q error=%v", session.UID, session.Account, frame.Op, frame.Channel, frame.Kind, err)
 			break
 		}
 	}

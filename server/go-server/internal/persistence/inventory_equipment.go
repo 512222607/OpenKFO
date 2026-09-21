@@ -8,7 +8,7 @@ import (
 )
 
 // Native warehouse 8B3919/8B3924 selects slot 37 for type 30 before 2080.
-var Slots = map[byte][]uint16{protocol.ItemTop: {4}, protocol.ItemFace: {3}, protocol.ItemShoes: {7}, protocol.ItemHair: {2}, protocol.ItemPants: {6}, protocol.ItemGloves: {5}, 18: {4}, 20: {10}, 21: {11}, protocol.ItemWeapon: {protocol.SlotPrimaryWeapon, protocol.SlotSecondaryWeapon}, protocol.ItemTalisman: {protocol.SlotPrimaryTalisman, protocol.SlotSecondaryTalisman}, protocol.ItemConsumable: {protocol.SlotPrimaryConsumable, protocol.SlotSecondaryConsumable}}
+var Slots = map[byte][]uint16{protocol.ItemTop: {4}, protocol.ItemFace: {3}, protocol.ItemShoes: {7}, protocol.ItemHair: {2}, protocol.ItemPants: {6}, protocol.ItemGloves: {5}, 18: {4}, 20: {10}, 21: {11}, protocol.ItemWeapon: {protocol.SlotPrimaryWeapon, protocol.SlotSecondaryWeapon}, protocol.ItemTalisman: {protocol.SlotPrimaryTalisman, protocol.SlotSecondaryTalisman}, protocol.ItemConsumable: {protocol.SlotPrimaryConsumable, protocol.SlotSecondaryConsumable}, protocol.ItemPhantomCard: {protocol.SlotPhantomCard}, protocol.ItemPersonalIcon: {protocol.SlotPersonalIcon}, protocol.ItemDecorativeTitle: {protocol.SlotDecorativeTitle}}
 
 // Current native 660CE0 default-slot switch. Only include types whose explicit
 // equipment paths are already supported here; suits and consumables differ.
@@ -32,6 +32,12 @@ func defaultEquipmentSlot(kind byte) uint16 {
 		return 11
 	case protocol.ItemWeapon:
 		return protocol.SlotPrimaryWeapon
+	case protocol.ItemPhantomCard:
+		return protocol.SlotPhantomCard
+	case protocol.ItemPersonalIcon:
+		return protocol.SlotPersonalIcon
+	case protocol.ItemDecorativeTitle:
+		return protocol.SlotDecorativeTitle
 	}
 	return 0
 }

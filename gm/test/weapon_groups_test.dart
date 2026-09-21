@@ -24,7 +24,7 @@ void main() {
     })));
     await tester.pumpAndSettle();
     expect(find.text('该武器默认连招'), findsNothing);
-    expect(find.text('其他动作（1）'), findsOneWidget);
+    expect(find.text('动作说明（1）'), findsOneWidget);
     await tester.tap(find.text('CCCX')); await tester.pumpAndSettle();
     await tester.tap(find.text('第 1 段 · CCCX')); await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextFormField, '3000'), '5000');

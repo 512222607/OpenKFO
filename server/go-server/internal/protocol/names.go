@@ -83,6 +83,8 @@ const (
 	ItemExperienceCard              = 72 // 经验卡
 	ItemVIPCard                     = 73 // VIP 卡
 	ItemWeaponSwitchCard            = 74 // 武器切换卡
+	ItemPhantomCard                 = 77 // 幻影卡
+	ItemPersonalIcon                = 79 // 个性图标
 	SlotUnequipped                  = 0
 	SlotPrimaryWeapon               = 8 // 主武器槽
 	SlotSecondaryWeapon             = 9 // 副武器槽
@@ -91,6 +93,8 @@ const (
 	SlotPrimaryConsumable           = 27
 	SlotSecondaryConsumable         = 28
 	SlotDecorativeTitle             = 42
+	SlotPhantomCard                 = 29
+	SlotPersonalIcon                = 40
 )
 
 // Native message IDs. Values are explicit wire contracts, never iota indexes.

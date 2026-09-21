@@ -304,17 +304,46 @@ type Stage struct {
 	Reason      string   `json:"reason"`
 }
 type Weapon struct {
-	ID      int              `json:"id"`
-	Name    string           `json:"name"`
-	Stages  []Stage          `json:"stages"`
-	Combos  []Combo          `json:"combos"`
-	BuffIDs []int            `json:"buff_ids"`
-	Allowed map[string][]int `json:"allowed_values"`
+	ID          int              `json:"id"`
+	Name        string           `json:"name"`
+	Icon        string           `json:"icon"`
+	Description string           `json:"description"`
+	Type        string           `json:"type"`
+	Stages      []Stage          `json:"stages"`
+	Combos      []Combo          `json:"combos"`
+	BuffIDs     []int            `json:"buff_ids"`
+	Allowed     map[string][]int `json:"allowed_values"`
 }
 type block struct {
 	original string
 	node     *xmlNode
 }
+
+// item.txt column 2 is the weapon subtype; retain unknown values explicitly.
+func weaponType(item Item) string {
+	if len(item.Fields) <= 2 || item.Fields[2] == "" || item.Fields[2] == "#" {
+		return "未分类"
+	}
+	switch item.Fields[2] {
+	case "1":
+		return "刀类"
+	case "2":
+		return "剑类"
+	case "3":
+		return "长柄"
+	case "4":
+		return "拳套"
+	case "5":
+		return "拳脚"
+	case "6":
+		return "重型"
+	case "7":
+		return "奇门"
+	default:
+		return "类型 " + item.Fields[2]
+	}
+}
+
 type inspection struct {
 	weapons    []Weapon
 	blocks     map[string][]block
@@ -438,14 +467,14 @@ func inspect(a *archive, items []Item) (*inspection, error) {
 		}
 		sort.Ints(allowed[field.Key])
 	}
-	names := map[string]string{}
+	names := map[string]Item{}
 	for _, item := range items {
 		if item.Kind == 25 {
-			names[strconv.FormatUint(uint64(item.ID), 10)] = item.Name
+			names[strconv.FormatUint(uint64(item.ID), 10)] = item
 		}
 	}
 	for _, row := range lines[1:] {
-		name, ok := names[row[0]]
+		item, ok := names[row[0]]
 		if !ok {
 			continue
 		}
@@ -465,7 +494,7 @@ func inspect(a *archive, items []Item) (*inspection, error) {
 		if err != nil {
 			return nil, err
 		}
-		weapon := Weapon{ID: id, Name: name, Stages: []Stage{}, Combos: sequences, BuffIDs: buffIDs, Allowed: allowed}
+		weapon := Weapon{ID: id, Name: item.Name, Icon: item.Icon, Description: item.Description, Type: weaponType(item), Stages: []Stage{}, Combos: sequences, BuffIDs: buffIDs, Allowed: allowed}
 		for _, state := range states {
 			column, ok := columns[state]
 			if !ok || column >= len(row) {

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 class WeaponConfigPage extends StatefulWidget {
@@ -12,6 +14,7 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
   final form = GlobalKey<FormState>();
   List<Map<String, dynamic>> rules = [];
   String query = '', message = '';
+  String weaponType = '全部类型';
   bool busy = true, dirty = false, failed = false;
   String? selectedAction;
   int editorVersion = 0;
@@ -465,10 +468,33 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
     );
   }
 
+  Widget weaponIcon(Map<dynamic, dynamic> value, double size) {
+    final path = '${value['icon'] ?? ''}';
+    final fallback = Icon(Icons.sports_martial_arts, size: size * .6);
+    return SizedBox(
+      width: size,
+      height: size,
+      child: path.isEmpty
+          ? fallback
+          : Image.file(
+              File(path),
+              fit: BoxFit.contain,
+              errorBuilder: (_, error, stack) => fallback,
+            ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final weapons = (data?['weapons'] as List? ?? [])
-        .where((w) => '${w['name']} ${w['id']}'.contains(query))
+    final allWeapons = data?['weapons'] as List? ?? [];
+    final types =
+        allWeapons.map((w) => '${w['type'] ?? '未分类'}').toSet().toList()..sort();
+    final weapons = allWeapons
+        .where(
+          (w) =>
+              '${w['name']} ${w['id']}'.contains(query.trim()) &&
+              (weaponType == '全部类型' || '${w['type'] ?? '未分类'}' == weaponType),
+        )
         .toList();
     final combos = weapon?['combos'] as List? ?? [];
     final stageIndices = <String, int>{
@@ -525,7 +551,7 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   SizedBox(
-                    width: 260,
+                    width: 300,
                     child: Column(
                       children: [
                         Padding(
@@ -538,16 +564,44 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                             onChanged: (value) => setState(() => query = value),
                           ),
                         ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: DropdownButtonFormField<String>(
+                            key: ValueKey('weapon-type-$weaponType'),
+                            initialValue:
+                                ['全部类型', ...types].contains(weaponType)
+                                ? weaponType
+                                : '全部类型',
+                            decoration: const InputDecoration(
+                              labelText: '武器类型',
+                            ),
+                            items: ['全部类型', ...types]
+                                .map(
+                                  (type) => DropdownMenuItem(
+                                    value: type,
+                                    child: Text(type),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (value) =>
+                                setState(() => weaponType = value ?? '全部类型'),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Text('共 ${weapons.length} 件武器'),
+                        ),
                         Expanded(
                           child: ListView.builder(
                             itemCount: weapons.length,
                             itemBuilder: (context, index) {
                               final value = weapons[index];
                               return ListTile(
+                                leading: weaponIcon(value, 40),
                                 selected: weapon?['id'] == value['id'],
                                 title: Text(value['name']),
                                 subtitle: Text(
-                                  '${value['id']} · ${(value['stages'] as List).length} 个招式',
+                                  '${value['type'] ?? '未分类'} · ${value['id']}\n${(value['stages'] as List).length} 个招式',
                                 ),
                                 onTap: busy
                                     ? null
@@ -580,11 +634,66 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
+                                SizedBox(
+                                  height: 160,
+                                  child: Card(
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(12),
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          weaponIcon(weapon!, 72),
+                                          const SizedBox(width: 16),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  '${weapon!['name']}',
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .titleLarge,
+                                                ),
+                                                Text(
+                                                  '${weapon!['type'] ?? '未分类'} · ${weapon!['id']}',
+                                                ),
+                                                const SizedBox(height: 6),
+                                                const Text(
+                                                  '武器简介',
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                                Expanded(
+                                                  child: SingleChildScrollView(
+                                                    key: ValueKey(
+                                                      'weapon-description-${weapon!['id']}',
+                                                    ),
+                                                    child: SelectableText(
+                                                      '${weapon!['description'] ?? ''}'
+                                                              .trim()
+                                                              .isEmpty
+                                                          ? '暂无武器简介'
+                                                          : '${weapon!['description']}',
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
                                 Text(
-                                  '${weapon!['name']} · 连招与命中效果',
+                                  '连招与命中效果',
                                   style: Theme.of(context)
                                       .textTheme
-                                      .headlineSmall,
+                                      .titleMedium,
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
