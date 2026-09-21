@@ -41,8 +41,18 @@ func TestEquippedLifetimeActivation(t *testing.T) {
 			if tc.state == inventoryActive {
 				protocol.WriteUint16(r, 17, 0)
 				projectItemMinutes(r, tc.deadline, 1061)
-				if tc.deadline.Valid && protocol.ReadUint32(r, 13) != 1 {
-					t.Fatal("unequipping reset countdown")
+				want := permanentDisplayMinutes
+				if tc.deadline.Valid {
+					want = 1
+				}
+				if protocol.ReadUint32(r, 13) != want || protocol.ReadUint16(r, 23) != 10000 {
+					t.Fatal("unequipped talisman lost duration or real quota")
+				}
+				if tc.deadline.Valid {
+					projectItemMinutes(r, tc.deadline, 1121)
+					if protocol.ReadUint32(r, 19) != inventoryExpired {
+						t.Fatal("quota display bypassed real expiry")
+					}
 				}
 			}
 		})
@@ -58,5 +68,19 @@ func TestEquippedLifetimeActivation(t *testing.T) {
 		if activateEquippedItem(r, sql.NullInt64{}, 1000) {
 			t.Fatal("invalid item revived")
 		}
+	}
+}
+
+func TestEquipmentTimeDisplayRemainsForNonTalisman(t *testing.T) {
+	r := make([]byte, protocol.InventoryRecordSize)
+	r[4] = protocol.ItemWeapon
+	protocol.WriteUint32(r, 19, inventoryActive)
+	projectItemMinutes(r, sql.NullInt64{}, 1000)
+	if protocol.ReadUint32(r, 13) != permanentDisplayMinutes {
+		t.Fatal("permanent weapon time changed")
+	}
+	projectItemMinutes(r, sql.NullInt64{Int64: 1121, Valid: true}, 1000)
+	if protocol.ReadUint32(r, 13) != 3 {
+		t.Fatal("finite weapon countdown changed")
 	}
 }

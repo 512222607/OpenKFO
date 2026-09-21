@@ -1,0 +1,24 @@
+test_distinct_server_choice_and_local_id (__main__.RoleTests.test_distinct_server_choice_and_local_id) ... ok
+test_persistence_and_concurrent_retry (__main__.RoleTests.test_persistence_and_concurrent_retry) ... ok
+test_preserve_opaque_fields_and_existing_role (__main__.RoleTests.test_preserve_opaque_fields_and_existing_role) ... ok
+test_real_capture_and_wire_equivalence (__main__.RoleTests.test_real_capture_and_wire_equivalence) ... ok
+test_real_tcp_fragmentation_create_and_reconnect (__main__.RoleTests.test_real_tcp_fragmentation_create_and_reconnect) ... ok
+test_reject_malformed_and_unoffered (__main__.RoleTests.test_reject_malformed_and_unoffered) ... ok
+test_session_create_ack_and_reconnect (__main__.RoleTests.test_session_create_ack_and_reconnect) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 1.205s
+
+OK
+
+test_configured_login_sequence_sizes (__main__.GameProtocolTests.test_configured_login_sequence_sizes) ... ok
+test_create_request_uses_safe_observation_response (__main__.GameProtocolTests.test_create_request_uses_safe_observation_response) ... ok
+test_decodes_real_login_and_heartbeat (__main__.GameProtocolTests.test_decodes_real_login_and_heartbeat) ... ok
+test_outer_guard_matches_capture (__main__.GameProtocolTests.test_outer_guard_matches_capture) ... ok
+test_round_trip_all_keys_and_padding_boundaries (__main__.GameProtocolTests.test_round_trip_all_keys_and_padding_boundaries) ... ok
+test_stream_reassembles_fragmented_and_concatenated_frames (__main__.GameProtocolTests.test_stream_reassembles_fragmented_and_concatenated_frames) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.002s
+
+OK

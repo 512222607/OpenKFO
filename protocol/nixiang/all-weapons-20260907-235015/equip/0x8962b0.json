@@ -1,0 +1,30 @@
+{
+  "addr": "0x8962b0",
+  "code": "int __fastcall sub_8962B0(int a1)\n{\n  unsigned int v1; // eax\n  int v4; // [esp+4h] [ebp-8h] BYREF\n  unsigned int i; // [esp+8h] [ebp-4h]\n\n  for ( i = 0; ; ++i ) /*0x8962b9*/\n  {\n    v1 = sub_4F6840(a1: a1 + 1404); /*0x8962d4*/\n    if ( i >= v1 ) /*0x8962dc*/\n      break; /*0x8962dc*/\n    if ( *(_DWORD *)(a1 + 1584) == *(_DWORD *)(sub_4F6880(a1: i) + 16) ) /*0x896300*/\n    {\n      if ( *(_BYTE *)(sub_4F6880(a1: i) + 124) != 0 && *(_BYTE *)(sub_4F6880(a1: 3) + 124) != 0 ) /*0x896336*/\n      {\n        v4 = *(_DWORD *)(sub_4F6880(a1: 3) + 8); /*0x89634b*/\n        *(_DWORD *)(a1 + 1624) = v4; /*0x896354*/\n      }\n      else\n      {\n        v4 = *(_DWORD *)(sub_4F6880(a1: i) + 8); /*0x896371*/\n        *(_DWORD *)(a1 + 1624) = v4; /*0x89637a*/\n      }\n      if ( *(_DWORD *)(sub_4F6880(a1: i) + 16) == 25 && dword_17C86CC != 0 ) /*0x89639f*/\n        sub_8939C0(); /*0x8963a4*/\n      sub_A2C950(a1: 2300, a2: 0, a3: (int)&v4, a4: 4); /*0x8963b6*/\n    }\n  }\n  return sub_896060(a1); /*0x8963cb*/\n}",
+  "refs": [
+    {
+      "addr": "0x4f6840",
+      "name": "sub_4F6840"
+    },
+    {
+      "addr": "0x4f6880",
+      "name": "sub_4F6880"
+    },
+    {
+      "addr": "0x8939c0",
+      "name": "sub_8939C0"
+    },
+    {
+      "addr": "0x17c86cc",
+      "name": "dword_17C86CC"
+    },
+    {
+      "addr": "0xa2c950",
+      "name": "sub_A2C950"
+    },
+    {
+      "addr": "0x896060",
+      "name": "sub_896060"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "addr": "0x92b6b0",
+  "code": "int __fastcall sub_92B6B0(int a1)\n{\n  int v1; // eax\n  int v2; // eax\n  int v3; // eax\n\n  (*(void (__fastcall **)(_DWORD))(**(_DWORD **)(a1 + 4) + 452))(a1: *(_DWORD *)(a1 + 4)); /*0x92b6cd*/\n  v1 = sub_93BF10(); /*0x92b6cf*/\n  sub_93CE30(a1: v1); /*0x92b6d6*/\n  v2 = sub_93BF10(); /*0x92b6db*/\n  sub_93CC70(a1: v2); /*0x92b6e2*/\n  v3 = sub_93BF10(); /*0x92b6e7*/\n  sub_93BD90(a1: v3); /*0x92b6ee*/\n  return sub_92A530(a1: 1); /*0x92b6fd*/\n}",
+  "refs": [
+    {
+      "addr": "0x93bf10",
+      "name": "sub_93BF10"
+    },
+    {
+      "addr": "0x93ce30",
+      "name": "sub_93CE30"
+    },
+    {
+      "addr": "0x93cc70",
+      "name": "sub_93CC70"
+    },
+    {
+      "addr": "0x93bd90",
+      "name": "sub_93BD90"
+    },
+    {
+      "addr": "0x92a530",
+      "name": "sub_92A530"
+    }
+  ]
+}

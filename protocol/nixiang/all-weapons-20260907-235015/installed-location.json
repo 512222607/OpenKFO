@@ -1,0 +1,22 @@
+{
+  "case_directory": "C:\\Users\\24032\\Desktop\\code\\kungfu-mock-server\\research\\2026-09-07\\all-weapons-20260907-235015",
+  "uid": 1001,
+  "name": "t07",
+  "added_weapons": 273,
+  "total_weapons": 274,
+  "total_items": 280,
+  "role_rows_unchanged": true,
+  "backup_database_sha256": "9b8a7bf23c80a7577fe646979fac3e4013116537a827e92cf41c783fc6fd4df6",
+  "database_before_sha256": "583fb68309f137f5eb672d9c4f2f94b25f4fd35826cae29030cad18da9f28342",
+  "database_after_sha256": "5c943b81739008c43db458c643ac7ea5cf47ceee892819a115c8b517df031f88",
+  "original_files": {
+    "role_protocol.py": "ea7c295882b1371b8fe891c856015d5a0b4dc7ba473d1efaaa32e94fcc290cbf"
+  },
+  "installed": {
+    "role_protocol.py": "88b5508c18e9c9a6d9d1229f1b0164e4a2cbeeeb1006c71b6404c1d9f99f800a",
+    "inventory_protocol.py": "e202f54112768d53c28fccd6d807044ab2946c682562bbc25d72dab4fb2a46cf",
+    "test_inventory_protocol.py": "c98bd4ad63c281af15838ec29d0dd701920794894d42c414a2cfa902a6867017",
+    "test_inventory_store.py": "d6299eb7752bfa3fb7d414e08586340c983ba2f99dc7404fa18bc1f9537b2f9b",
+    "weapon_ids.json": "fde38888aa7c7383f88c17da0e6438f2328dc9a053c9dc47538c559ef71fc978"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "addr": "0x9758c0",
+  "code": "BOOL __fastcall sub_9758C0(int a1)\n{\n  void *v1; // eax\n  BOOL result; // eax\n  _BYTE v4[8]; // [esp+4h] [ebp-10h] BYREF\n  _BYTE v5[8]; // [esp+Ch] [ebp-8h] BYREF\n\n  sub_5404A0(a1: v5); /*0x9758d3*/\n  while ( 1 ) /*0x9758ec*/\n  {\n    v1 = sub_44ABB0(this: (int *)(a1 + 56), a2: v4); /*0x9758ec*/\n    result = sub_49B8F0(a1: (int)v1); /*0x9758f5*/\n    if ( !result ) /*0x9758ff*/\n      break; /*0x9758ff*/\n    sub_4205B0(a1: (int)v5); /*0x975906*/\n    sub_96E1F0(a1: 1); /*0x97590e*/\n    sub_4568E0(a1: v5); /*0x9758dd*/\n  }\n  return result; /*0x975915*/\n}",
+  "refs": [
+    {
+      "addr": "0x5404a0",
+      "name": "sub_5404A0"
+    },
+    {
+      "addr": "0x44abb0",
+      "name": "sub_44ABB0"
+    },
+    {
+      "addr": "0x49b8f0",
+      "name": "sub_49B8F0"
+    },
+    {
+      "addr": "0x4205b0",
+      "name": "sub_4205B0"
+    },
+    {
+      "addr": "0x96e1f0",
+      "name": "sub_96E1F0"
+    },
+    {
+      "addr": "0x4568e0",
+      "name": "sub_4568E0"
+    }
+  ]
+}

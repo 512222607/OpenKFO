@@ -71,7 +71,9 @@ func (m *RoleManager) Snapshot(uid uint64) (Account, error) {
 		if len(record) != 68 {
 			return account, ErrDenied
 		}
-		account.Inventory = append(account.Inventory, record)
+		if protocol.ReadUint32(record, 19) != 0xffffffff {
+			account.Inventory = append(account.Inventory, record)
+		}
 	}
 	if len(account.Profile) != 360 {
 		return account, ErrDenied

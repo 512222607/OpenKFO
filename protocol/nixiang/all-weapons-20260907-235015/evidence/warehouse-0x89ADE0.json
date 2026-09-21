@@ -1,0 +1,119 @@
+{
+  "addr": "0x89ADE0",
+  "code": "int __thiscall sub_89ADE0(_DWORD *this, int a2, int a3)\n{\n  int result; // eax\n  int v4; // eax\n  int *v5; // eax\n  _DWORD *v6; // eax\n  int v7; // eax\n  int v8; // eax\n  int v9; // eax\n  int v10; // [esp-Ch] [ebp-1C8h]\n  int v11; // [esp-8h] [ebp-1C4h]\n  char v12; // [esp-4h] [ebp-1C0h]\n  int v13; // [esp-4h] [ebp-1C0h]\n  char v14; // [esp-4h] [ebp-1C0h]\n  unsigned int v15; // [esp+4h] [ebp-1B8h]\n  int v16; // [esp+8h] [ebp-1B4h]\n  _BYTE v18[28]; // [esp+14h] [ebp-1A8h] BYREF\n  _BYTE v19[8]; // [esp+30h] [ebp-18Ch] BYREF\n  _BYTE v20[12]; // [esp+38h] [ebp-184h] BYREF\n  _BYTE v21[32]; // [esp+44h] [ebp-178h] BYREF\n  int v22; // [esp+64h] [ebp-158h]\n  int v23; // [esp+68h] [ebp-154h]\n  int v24; // [esp+6Ch] [ebp-150h]\n  _DWORD v25[3]; // [esp+70h] [ebp-14Ch] BYREF\n  int v26; // [esp+7Ch] [ebp-140h]\n  int v27; // [esp+84h] [ebp-138h]\n  int v28; // [esp+90h] [ebp-12Ch]\n  int i; // [esp+F0h] [ebp-CCh]\n  _BYTE v30[27]; // [esp+F4h] [ebp-C8h] BYREF\n  bool v31; // [esp+10Fh] [ebp-ADh]\n  _BYTE v32[156]; // [esp+110h] [ebp-ACh] BYREF\n  unsigned int v33; // [esp+1B0h] [ebp-Ch]\n  int v34; // [esp+1B8h] [ebp-4h]\n\n  result = sub_9BD390(a1: dword_17C86FC);\n  if ( result != 0 )\n  {\n    v31 = false;\n    if ( a2 == 67 )\n      v31 = a3 == 97;\n    v4 = sub_44E200(a1: dword_17C86FC);\n    sub_44E480(a1: v4);\n    v34 = 0;\n    v12 = v20[11];\n    v5 = (int *)sub_4E2590(a1: v20);\n    v11 = v5[1];\n    v10 = *v5;\n    v6 = (_DWORD *)sub_4C6050(a1: v19);\n    sub_4F7440(a1: *v6, a2: v6[1], a3: v10, a4: v11, a5: v12);\n    sub_4B4330(a1: v32);\n    LOBYTE(v34) = 1;\n    for ( i = 0; ; ++i )\n    {\n      v7 = sub_5471D0(a1: v30);\n      if ( i >= v7 )\n        break;\n      v24 = sub_549130(a1: i);\n      sub_501950(a1: v25);\n      LOBYTE(v34) = 2;\n      sub_656960(a1: v25, a2: 0, a3: 128);\n      if ( (*(_WORD *)(v24 + 17) == 0\n         || *(_BYTE *)(v24 + 4) == 73\n         || *(_BYTE *)(v24 + 4) == 75\n         || *(_BYTE *)(v24 + 4) == 76)\n        && *(_DWORD *)(v24 + 19) != -1\n        && (*(unsigned __int8 *)(v24 + 4) >= a2 && *(unsigned __int8 *)(v24 + 4) <= a3\n         || *(_BYTE *)(v24 + 4) == 50 && v31) )\n      {\n        sub_893760(a1: v24, a2: v25);\n        v13 = *(_DWORD *)(v24 + 5);\n        sub_A11B30();\n        v23 = sub_A0E560(a1: v13);\n        if ( v23 != 0 )\n        {\n          sub_653BEB(a1: v21, a2: 32, a3: &unk_BAEEEC, *(_DWORD *)(v24 + 5));\n          sub_3F5710(a1: (int)v21);\n          v8 = sub_443F50(a1: v23 + 12);\n          sub_3F5710(a1: v8);\n          v9 = sub_443F50(a1: v23 + 68);\n          sub_3F5710(a1: v9);\n        }\n        else\n        {\n          sub_3F5710(a1: (int)&aBattlemodeDoac[5]);\n          v16 = sub_401C90(a1: v18, a2: v24);\n          LOBYTE(v34) = 3;\n          sub_3F56F0(a1: v16);\n          LOBYTE(v34) = 2;\n          sub_3F56D0(a1: v18);\n        }\n        v22 = 0;\n        v14 = v26;\n        sub_A11B30();\n        v22 = sub_A0E560(a1: v14);\n        if ( v22 != 0 && (v25[0] == 30 || v27 != 0 || v28 != 0) )\n          sub_4F68B0(a1: v25);\n      }\n      LOBYTE(v34) = 1;\n      sub_501980(a1: v25);\n    }\n    if ( sub_4F6840(a1: this + 357) != 0 )\n      v15 = (sub_4F6840(a1: this + 357) + 23) / 0x18u;\n    else\n      v15 = 1;\n    *(this + 403) = v15;\n    LOBYTE(v34) = 0;\n    sub_4B4370(a1: v32);\n    v34 = -1;\n    result = sub_45EA80(a1: v30);\n  }\n  __writefsdword(0, v33);\n  return result;\n}",
+  "refs": [
+    {
+      "addr": "0x9bd390",
+      "name": "sub_9BD390"
+    },
+    {
+      "addr": "0x17c86fc",
+      "name": "dword_17C86FC"
+    },
+    {
+      "addr": "0x44e200",
+      "name": "sub_44E200"
+    },
+    {
+      "addr": "0x44e480",
+      "name": "sub_44E480"
+    },
+    {
+      "addr": "0x4e2590",
+      "name": "sub_4E2590"
+    },
+    {
+      "addr": "0x4c6050",
+      "name": "sub_4C6050"
+    },
+    {
+      "addr": "0x4f7440",
+      "name": "sub_4F7440"
+    },
+    {
+      "addr": "0x4b4330",
+      "name": "sub_4B4330"
+    },
+    {
+      "addr": "0x5471d0",
+      "name": "sub_5471D0"
+    },
+    {
+      "addr": "0x549130",
+      "name": "sub_549130"
+    },
+    {
+      "addr": "0x501950",
+      "name": "sub_501950"
+    },
+    {
+      "addr": "0x656960",
+      "name": "sub_656960"
+    },
+    {
+      "addr": "0x893760",
+      "name": "sub_893760"
+    },
+    {
+      "addr": "0xa11b30",
+      "name": "sub_A11B30"
+    },
+    {
+      "addr": "0xa0e560",
+      "name": "sub_A0E560"
+    },
+    {
+      "addr": "0x653beb",
+      "name": "sub_653BEB"
+    },
+    {
+      "addr": "0xbaeeec",
+      "name": "unk_BAEEEC"
+    },
+    {
+      "addr": "0x3f5710",
+      "name": "sub_3F5710"
+    },
+    {
+      "addr": "0x443f50",
+      "name": "sub_443F50"
+    },
+    {
+      "addr": "0xb96694",
+      "name": "aBattlemodeDoac",
+      "string": "BattleMode:DoAction"
+    },
+    {
+      "addr": "0x401c90",
+      "name": "sub_401C90"
+    },
+    {
+      "addr": "0x3f56f0",
+      "name": "sub_3F56F0"
+    },
+    {
+      "addr": "0x3f56d0",
+      "name": "sub_3F56D0"
+    },
+    {
+      "addr": "0x4f68b0",
+      "name": "sub_4F68B0"
+    },
+    {
+      "addr": "0x501980",
+      "name": "sub_501980"
+    },
+    {
+      "addr": "0x4f6840",
+      "name": "sub_4F6840"
+    },
+    {
+      "addr": "0x4b4370",
+      "name": "sub_4B4370"
+    },
+    {
+      "addr": "0x45ea80",
+      "name": "sub_45EA80"
+    }
+  ]
+}

@@ -182,6 +182,14 @@ func (hub *Hub) battleMessage(session *Session, channel *Channel, message protoc
 				(!cleanup && !room.controlsBattleActor(session, actor) && !room.controlsBattleActor(session, attacker)) {
 				return fmt.Errorf("battle effect ownership id=%d uid=%d target=%d source=%d", id, session.UID, actor, attacker)
 			}
+		} else if id == protocol.BattleEventAction && protocol.ReadUint32(payload, 47) == 10 && (protocol.ReadUint32(payload, 51) == 3 || protocol.ReadUint32(payload, 51) == 4) {
+			// Native 98AFF0 is gated by the scene controller (44B3F0), then
+			// scans all eight players. 98B103/98B20D publish object interactions
+			// for the affected player at +39, not necessarily the sender.
+			// Only the room controller may report these cross-player actions.
+			if session.UID != room.Owner || room.Members[actor] == nil {
+				return nil
+			}
 		} else if !room.controlsBattleActor(session, actor) {
 			return fmt.Errorf("battle actor id=%d actor=%d expected=%d", id, actor, session.UID)
 		}

@@ -1,0 +1,25 @@
+{
+  "source": "synthetic TCP smoke, NOT real Client.exe relogin",
+  "start": 1788714233.8679676,
+  "end": 1788714234.2267036,
+  "local_peer": [
+    "127.0.0.1",
+    7221
+  ],
+  "messages": [
+    {
+      "id": 1020,
+      "size": 37
+    },
+    {
+      "id": 1120,
+      "size": 476
+    },
+    {
+      "id": 1130,
+      "size": 360
+    }
+  ],
+  "persisted_name": "t07",
+  "passed": true
+}

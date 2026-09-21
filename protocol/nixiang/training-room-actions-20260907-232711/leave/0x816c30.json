@@ -1,0 +1,26 @@
+{
+  "addr": "0x816c30",
+  "code": "int __thiscall sub_816C30(void *this, int a2, unsigned int a3)\n{\n  int result; // eax\n  signed int i; // [esp+8h] [ebp-34h]\n  signed int v7; // [esp+10h] [ebp-2Ch]\n  _BYTE v8[28]; // [esp+14h] [ebp-28h] BYREF\n  unsigned int v9; // [esp+30h] [ebp-Ch]\n  int v10; // [esp+38h] [ebp-4h]\n\n  v7 = a3 / 0x153; /*0x816c6a*/\n  sub_4F4D60(a1: v8, a2: a3 % 0x153); /*0x816c70*/\n  v10 = 0; /*0x816c75*/\n  for ( i = 0; i < v7; ++i ) /*0x816c7c*/\n  {\n    sub_538FA0(a1: a2); /*0x816ca8*/\n    a2 += 339; /*0x816c96*/\n  }\n  sub_4D76B0(); /*0x816cb3*/\n  sub_8ACC80(a1: v8); /*0x816cba*/\n  (*(void (__thiscall **)(void *))(*(_DWORD *)this + 16))(a1: this); /*0x816cca*/\n  result = sub_5227C0(a1: -1); /*0x816cd6*/\n  __writefsdword(0, v9); /*0x816cde*/\n  return result; /*0x816ce6*/\n}",
+  "refs": [
+    {
+      "addr": "0x4f4d60",
+      "name": "sub_4F4D60"
+    },
+    {
+      "addr": "0x538fa0",
+      "name": "sub_538FA0"
+    },
+    {
+      "addr": "0x4d76b0",
+      "name": "sub_4D76B0"
+    },
+    {
+      "addr": "0x8acc80",
+      "name": "sub_8ACC80"
+    },
+    {
+      "addr": "0x5227c0",
+      "name": "sub_5227C0"
+    }
+  ]
+}

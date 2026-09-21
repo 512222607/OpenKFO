@@ -701,6 +701,27 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		}
 		session.sendGame(protocol.Message{ID: 9050, Payload: catalog})
 		log.Printf("purchase uid=%d instance=%d", session.UID, protocol.ReadUint32(item, 0))
+	case 2130:
+		if len(payload) != 4 {
+			return protocol.ErrFrame
+		}
+		if session.Room != nil {
+			member := session.Room.Members[session.UID]
+			if session.Room.Stage != "room" || member == nil || member.Ready {
+				return nil
+			}
+		}
+		instance := protocol.ReadUint32(payload, 0)
+		if err := hub.Store.InventoryManager().Discard(session.UID, instance); err != nil {
+			log.Printf("discard_rejected uid=%d instance=%d error=%v", session.UID, instance, err)
+			session.sendGame(notice("丢弃失败：道具不存在、已装备、状态不允许，或是最后一件必需装备。"))
+			return nil
+		}
+		// Only acknowledge after commit. 2162 removes exactly one local instance
+		// and refreshes warehouse UI, including after a lost/rebuilt local cache.
+		session.sendGame(protocol.Message{ID: 2162, Payload: protocol.Uint32Bytes(instance)})
+		delete(session.Inventory, instance)
+		log.Printf("discard uid=%d instance=%d", session.UID, instance)
 	case protocol.MsgEquipItem, protocol.MsgUnequipItem:
 		if (message.ID == protocol.MsgEquipItem && len(payload) != 16) || (message.ID == protocol.MsgUnequipItem && len(payload) != 4) {
 			return protocol.ErrFrame
@@ -913,6 +934,7 @@ func (hub *Hub) relayDatagram(session *Session, frame tunnel.Frame) error {
 			reply[23] = 0
 			reply = append(reply, packet[24+extra:]...)
 			peer.emit(tunnel.Frame{Op: "udp", Port: peer.UDPPort, Data: reply})
+			hub.observePeerProbe(session, peer, packet[24+extra:], time.Now())
 			session.UDPRelayed++
 		}
 	}

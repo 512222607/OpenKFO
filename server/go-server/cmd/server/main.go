@@ -32,6 +32,7 @@ func main() {
 	configPath := flag.String("config", "config.json", "admitted client configuration")
 	certificateDirectory := flag.String("cert-dir", "certificates", "private server certificate directory")
 	operation := flag.String("operation", "serve", "serve, import, create-account, reset-password, wallet, snapshot")
+	udpAddress := flag.String("udp-listen", "", "authenticated UDP relay address; empty keeps TLS-only mode")
 	traceProtocol := flag.Bool("trace-protocol", false, "print every decoded protocol packet (sensitive login fields redacted)")
 	protocolLog := flag.String("protocol-log", "", "append console and protocol logs to this file")
 	flag.Parse()
@@ -164,6 +165,15 @@ func main() {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
 		watchLocalMonitor(stop)
+		if *udpAddress != "" {
+			closeUDP, udpErr := gameServer.ListenDatagrams(*udpAddress)
+			if udpErr != nil {
+				log.Fatal(udpErr)
+			}
+			defer closeUDP()
+			go func() { <-ctx.Done(); closeUDP() }()
+			log.Printf("kungfu-go authenticated UDP listening on %s", *udpAddress)
+		}
 		if *tlsAddress != "" {
 			listener, listenErr := net.Listen("tcp", *tlsAddress)
 			if listenErr != nil {

@@ -1,0 +1,14 @@
+[
+  {
+    "file": "slot-zero-0x8a3890.json",
+    "sha256": "35858d70d6de74f05d94b7e72d45aeb70082b1958c4c3917b0f6adf19d5be13f"
+  },
+  {
+    "file": "equip-failure-0xa19e30.json",
+    "sha256": "2657c66fd2f00c5fa2177d3bf1c17b06690c43741a5135143367c193ad6530ed"
+  },
+  {
+    "file": "equip-failure-messages.json",
+    "sha256": "57cbb697fad792f6686efb013216b4b61da7d18b82ba9e41b8cd6915991f471d"
+  }
+]

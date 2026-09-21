@@ -13,18 +13,48 @@ internal static class SelfTests
         try
         {
             var resources = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceNames();
+            string fresh = Path.Combine(testRoot, "fresh-install");
+            Bootstrap.Prepare(fresh);
+            Require(File.Exists(Path.Combine(fresh, "bridge.json")) && File.Exists(Path.Combine(fresh, "launcher-certificates", "online", "login.key")), "standalone launcher prepares configuration and certificates");
+            File.WriteAllText(Path.Combine(fresh, "bridge.json"), "custom configuration");
+            File.Delete(Path.Combine(fresh, "launcher-certificates", "online", "origin.crt"));
+            Bootstrap.Prepare(fresh);
+            Require(File.ReadAllText(Path.Combine(fresh, "bridge.json")) == "custom configuration" && File.Exists(Path.Combine(fresh, "launcher-certificates", "online", "origin.crt")), "restore missing resources without replacing existing settings");
             Require(resources.Contains("LoginSkin.dll") && resources.Contains("LoginSkinHost.exe") && resources.Contains("OpenKFO.Updater.exe"), "independent updater and presentation-only login skin embedded");
             TestCredentials(testRoot);
-            Require(!InstanceManager.CanShowAccountTitle(false, false, false, false), "startup keeps native caption before login creation");
-            Require(!InstanceManager.CanShowAccountTitle(false, true, false, false), "hidden precreated dialog is not a completed login");
-            Require(!InstanceManager.CanShowAccountTitle(true, true, true, false), "login view keeps native caption");
-            Require(InstanceManager.CanShowAccountTitle(true, true, false, false), "completed login can show account");
-            Require(!InstanceManager.CanShowAccountTitle(true, false, false, false) && !InstanceManager.CanShowAccountTitle(true, true, false, true), "relogin or browser initialization restores native caption");
+            string connectionTest = Path.Combine(testRoot, "connection-test");
+            Directory.CreateDirectory(Path.Combine(connectionTest, "Data"));
+            string connectionXML = Path.Combine(connectionTest, "Data", "config.xml");
+            File.WriteAllText(connectionXML, "original configuration");
+            string oldConfigHash = InstanceManager.FileHash(connectionXML);
+            File.WriteAllText(Path.Combine(connectionTest,"Settings.xml"), "<Settings><LoginServer Index=\"2\"/><Sound Volume=\"77\"/></Settings>");
+            InstanceManager.PrepareConnectionFiles(connectionTest, 2);
+            Require(File.ReadAllText(Path.Combine(connectionTest,"Settings.xml")) == "<Settings><LoginServer Index=\"0\"/><Sound Volume=\"77\"/></Settings>", "stale server index repaired without changing other settings");
+            Require(File.ReadAllText(connectionXML).Contains("127.0.0.1") && File.ReadAllText(connectionXML).Contains("18100"), "embedded SDK configuration uses local per-window endpoint");
+            Require(File.ReadAllText(Path.Combine(connectionTest,"server.ini")).Contains("18184"), "native authentication endpoint prepared");
+            Require(File.Exists(Path.Combine(connectionTest,"launcher-components","connection-backups",oldConfigHash,"Data","config.xml")), "previous connection configuration backed up");
+            InstanceManager.PrepareConnectionFiles(connectionTest, 2);
+
+            string bridgeInstall = Path.Combine(testRoot, "bridge-test.exe");
+            InstanceManager.InstallBridge(bridgeInstall, [1, 2, 3]);
+            InstanceManager.InstallBridge(bridgeInstall, [1, 2, 3]);
+            InstanceManager.InstallBridge(bridgeInstall, [4, 5, 6]);
+            Require(File.ReadAllBytes(bridgeInstall).SequenceEqual(new byte[] { 4, 5, 6 }), "bridge component replaced atomically");
+
+            string native = Path.Combine(testRoot, "native-component-test");
+            Directory.CreateDirectory(native);
+            File.WriteAllText(Path.Combine(native, "SDError.dll"), "original login component");
+            string previous = InstanceManager.FileHash(Path.Combine(native, "SDError.dll"));
+            InstanceManager.PrepareNativeLogin(native);
+            Require(File.Exists(Path.Combine(native, "launcher-components", "native-login-backups", previous, "SDError.dll")), "original login component backed up");
+            string installed = InstanceManager.FileHash(Path.Combine(native, "SDError.dll"));
+            InstanceManager.PrepareNativeLogin(native);
+            Require(InstanceManager.FileHash(Path.Combine(native, "SDError.dll")) == installed && File.Exists(Path.Combine(native, "libssl-1_1.dll")), "native login components installed idempotently");
             string source = Path.Combine(testRoot, "client"); Directory.CreateDirectory(Path.Combine(source, "Data"));
             Directory.CreateDirectory(Path.Combine(source, "OpenKFO", "backups"));
             File.WriteAllText(Path.Combine(source, "OpenKFO", "backups", "private.json"), "must not copy");
             File.WriteAllText(Path.Combine(source, "private-token.txt"), "must not copy");
-            foreach (string name in new[] { "gfld.dat", "server.ini", "Data/config.xml", "Data/config.spf2" }) File.Copy(Path.Combine(real.SourceDirectory, name), Path.Combine(source, name));
+            foreach (string name in new[] { "gfld.dat", "server.ini", "Data/config.xml", "Data/config.spf2" }) File.Copy(Path.Combine(real.SourceDirectory, name == "gfld.dat" ? InstanceManager.ImageName(real.SourceDirectory) : name), Path.Combine(source, name));
             var config = new JsonObject
             {
                 ["url"] = "wss://example.invalid/kk/tunnel", ["client_directory"] = "client",
@@ -124,6 +154,20 @@ internal static class SelfTests
             Require(shared.WindowCount == 8 && shared.ClientDirectory(3) == source, "shared client multi-window");
             Require(!Directory.Exists(Path.Combine(testRoot, "instances", "client-3")) && InstanceManager.FileHash(Path.Combine(source, "gfld.dat")) == originalHash, "no duplicate client or disk mutex patch");
             Require(sharedConfig["login_port"]!.GetValue<int>() == 18084 && sharedConfig["control_directory"]!.GetValue<string>().EndsWith("shared"), "shared listener routing");
+            Require(sharedConfig["client_executable"]!.GetValue<string>() == "gfld.dat", "gfld selected");
+            File.Move(Path.Combine(source, "gfld.dat"), Path.Combine(source, "gfxz.dat"));
+            bool gfxzRejected = false;
+            try { shared.ValidateInstallation(); }
+            catch (IOException error) { gfxzRejected = error.Message.Contains("gfld.dat"); }
+            Require(gfxzRejected, "gfxz-only installation rejected with missing gfld message");
+            shared.PrepareClientImage();
+            Require(InstanceManager.FileHash(Path.Combine(source, "gfld.dat")) == originalHash, "embedded gfld extracted");
+            shared.PrepareClientImage();
+            File.WriteAllText(Path.Combine(source, "gfld.dat"), "different client");
+            bool overwriteRejected = false;
+            try { shared.PrepareClientImage(); } catch (IOException) { overwriteRejected = true; }
+            Require(overwriteRejected && File.ReadAllText(Path.Combine(source, "gfld.dat")) == "different client", "unknown existing image preserved");
+            Require(InstanceManager.FileHash(Path.Combine(source, "gfxz.dat")) == originalHash, "unsupported image unchanged");
             File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "self-test-result.json"), new JsonObject { ["status"] = "passed", ["checks"] = 14, ["credential_checks"] = "encrypted persistence, window isolation, restore, clear, native edits, password masking, no auto-submit", ["real_game_login_tested"] = false, ["time"] = DateTimeOffset.Now.ToString("O") }.ToJsonString());
         }
         finally { Directory.Delete(testRoot, true); }

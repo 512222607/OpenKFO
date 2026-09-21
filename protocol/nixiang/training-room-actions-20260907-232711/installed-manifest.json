@@ -1,0 +1,19 @@
+{
+  "case_directory": "C:\\Users\\24032\\Desktop\\code\\kungfu-mock-server\\research\\2026-09-07\\training-room-actions-20260907-232711",
+  "backup": "C:\\Users\\24032\\Desktop\\code\\kungfu-mock-server\\research\\2026-09-07\\training-room-actions-20260907-232711\\backup",
+  "installed": [
+    {
+      "name": "room_protocol.py",
+      "sha256": "D9AFD2D586C5849F9024EE2D6F05DA852A434D04D253A2255C5603A6585F4F97"
+    },
+    {
+      "name": "test_training_protocol.py",
+      "sha256": "D391A9097A2473C0A6192DEF7343789D1286CE5EB277AD86FB8816E73097ED87"
+    },
+    {
+      "name": "training-create-captured.json",
+      "sha256": "9083D8B5854C2D06B884AD9E29A4C09625A9293D67C24FA9E62157B7777C9F22"
+    }
+  ],
+  "database_sha256": "583FB68309F137F5EB672D9C4F2F94B25F4FD35826CAE29030CAD18DA9F28342"
+}

@@ -1,0 +1,14 @@
+{
+  "addr": "0x91bc30",
+  "code": "char __fastcall sub_91BC30(int a1)\n{\n  (*(void (__thiscall **)(int, int))(*(_DWORD *)a1 + 284))(a1, a2: a1); /*0x91bc45*/\n  if ( dword_17C8710 != 0 ) /*0x91bc4e*/\n    sub_A2CA00(a1: 3110, a2: 0); /*0x91bc57*/\n  return 1; /*0x91bc61*/\n}",
+  "refs": [
+    {
+      "addr": "0xa2ca00",
+      "name": "sub_A2CA00"
+    },
+    {
+      "addr": "0x17c8710",
+      "name": "dword_17C8710"
+    }
+  ]
+}

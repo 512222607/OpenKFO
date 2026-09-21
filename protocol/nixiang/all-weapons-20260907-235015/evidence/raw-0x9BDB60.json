@@ -1,0 +1,18 @@
+{
+  "addr": "0x9BDB60",
+  "code": "int __stdcall sub_9BDB60(int *a1, int a2, int a3)\n{\n  int result; // eax\n  unsigned int v4; // [esp+8h] [ebp-64h]\n  int v5; // [esp+10h] [ebp-5Ch]\n  int i; // [esp+14h] [ebp-58h]\n  int v7; // [esp+18h] [ebp-54h]\n  _BYTE v8[68]; // [esp+1Ch] [ebp-50h] BYREF\n  int v9; // [esp+68h] [ebp-4h]\n\n  v7 = *a1;\n  v9 = a1[1];\n  qmemcpy(v8, a1 + 2, sizeof(v8));\n  sub_656960(a1, a2: 0, a3: 1232);\n  *a1 = v7;\n  a1[1] = v9;\n  qmemcpy(a1 + 2, v8, 68);\n  for ( i = 0; ; ++i )\n  {\n    result = sub_5471D0(a1: a3);\n    if ( i >= result )\n      break;\n    v5 = sub_549130(a1: i);\n    if ( *(_WORD *)(v5 + 17) != 0 )\n    {\n      v4 = *(unsigned __int8 *)(v5 + 4) - 12;\n      if ( v4 <= 0x41 )\n        __asm { jmp dword ptr ds:loc_9CDE70+4[edx*4] }\n    }\n  }\n  return result;\n}",
+  "refs": [
+    {
+      "addr": "0x656960",
+      "name": "sub_656960"
+    },
+    {
+      "addr": "0x5471d0",
+      "name": "sub_5471D0"
+    },
+    {
+      "addr": "0x549130",
+      "name": "sub_549130"
+    }
+  ]
+}

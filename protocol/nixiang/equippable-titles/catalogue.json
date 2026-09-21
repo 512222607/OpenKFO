@@ -1,0 +1,386 @@
+[
+  {
+    "kind": 31,
+    "id": 313101,
+    "name": "天下第一",
+    "display": "Animation\\TitleAnm\\313101.png",
+    "icon": "Picture\\ItemIcon\\313101.png",
+    "description": "#"
+  },
+  {
+    "kind": 31,
+    "id": 313102,
+    "name": "大富豪",
+    "display": "Animation\\TitleAnm\\313102.png",
+    "icon": "Picture\\ItemIcon\\313102.png",
+    "description": "财富榜每周排名前三的玩家所获得的奖励。"
+  },
+  {
+    "kind": 31,
+    "id": 313103,
+    "name": "连击之王",
+    "display": "Animation\\TitleAnm\\313103.png",
+    "icon": "Picture\\ItemIcon\\313103.png",
+    "description": "#"
+  },
+  {
+    "kind": 31,
+    "id": 313104,
+    "name": "独霸天下",
+    "display": "Animation\\TitleAnm\\313104.png",
+    "icon": "Picture\\ItemIcon\\313104.png",
+    "description": "极道格斗大赛单区冠军的奖励。"
+  },
+  {
+    "kind": 31,
+    "id": 313105,
+    "name": "秘宝领主",
+    "display": "Animation\\TitleAnm\\313105.png",
+    "icon": "Picture\\ItemIcon\\313105.png",
+    "description": "探宝活动累计探宝值开启5号宝箱获得的奖励。"
+  },
+  {
+    "kind": 31,
+    "id": 313106,
+    "name": "秘宝统治者",
+    "display": "Animation\\TitleAnm\\313106.png",
+    "icon": "Picture\\ItemIcon\\313106.png",
+    "description": "探宝排行榜每周排名第一的玩家所获得的奖励。"
+  },
+  {
+    "kind": 31,
+    "id": 313107,
+    "name": "地狱终结者",
+    "display": "Animation\\TitleAnm\\313107.png",
+    "icon": "Picture\\ItemIcon\\313107.png",
+    "description": "通过守卫丹炉获得魔物之心兑换的终极奖励。"
+  },
+  {
+    "kind": 31,
+    "id": 313108,
+    "name": "纪念武器大师",
+    "display": "Animation\\TitleAnm\\313108.png",
+    "icon": "Picture\\ItemIcon\\313108.png",
+    "description": "纪念武器收集狂所获得的高级称号。"
+  },
+  {
+    "kind": 31,
+    "id": 313109,
+    "name": "嫁给我吧？",
+    "display": "Animation\\TitleAnm\\313109.png",
+    "icon": "Picture\\ItemIcon\\313109.png",
+    "description": "情人节男生专用称号。"
+  },
+  {
+    "kind": 31,
+    "id": 313110,
+    "name": "来追我呀！",
+    "display": "Animation\\TitleAnm\\313110.png",
+    "icon": "Picture\\ItemIcon\\313110.png",
+    "description": "情人节女生专用称号。"
+  },
+  {
+    "kind": 31,
+    "id": 313111,
+    "name": "弑神者",
+    "display": "Animation\\TitleAnm\\313111.png",
+    "icon": "Picture\\ItemIcon\\313111.png",
+    "description": "灭神诛仙，终极奖励。"
+  },
+  {
+    "kind": 31,
+    "id": 313201,
+    "name": "签王之王",
+    "display": "Animation\\TitleAnm\\313201.png",
+    "icon": "Picture\\ItemIcon\\313201.png",
+    "description": "完成累积签到成就获得的终极奖励。"
+  },
+  {
+    "kind": 31,
+    "id": 313202,
+    "name": "极度狂热",
+    "display": "Animation\\TitleAnm\\313202.png",
+    "icon": "Picture\\ItemIcon\\313202.png",
+    "description": "完成活跃指数成就获得的终极奖励。"
+  },
+  {
+    "kind": 31,
+    "id": 313203,
+    "name": "武器大师",
+    "display": "Animation\\TitleAnm\\313203.png",
+    "icon": "Picture\\ItemIcon\\313203.png",
+    "description": "收集100把武器获得的成就奖励。"
+  },
+  {
+    "kind": 31,
+    "id": 313204,
+    "name": "闪耀之星",
+    "display": "Animation\\TitleAnm\\313204.png",
+    "icon": "Picture\\ItemIcon\\313204.png",
+    "description": "收集200件装扮获得的成就奖励。"
+  },
+  {
+    "kind": 31,
+    "id": 313205,
+    "name": "萌",
+    "display": "Animation\\TitleAnm\\313205.png",
+    "icon": "Picture\\ItemIcon\\313205.png",
+    "description": "收集20种宠物获得的成就奖励。"
+  },
+  {
+    "kind": 31,
+    "id": 313206,
+    "name": "最强传说",
+    "display": "Animation\\TitleAnm\\313206.png",
+    "icon": "Picture\\ItemIcon\\313206.png",
+    "description": "参加传说武器擂台赛，获得玄冰组第一名。"
+  },
+  {
+    "kind": 31,
+    "id": 313207,
+    "name": "最强传说",
+    "display": "Animation\\TitleAnm\\313207.png",
+    "icon": "Picture\\ItemIcon\\313207.png",
+    "description": "参加传说武器擂台赛，获得霸王组第一名。"
+  },
+  {
+    "kind": 31,
+    "id": 313208,
+    "name": "最强传说",
+    "display": "Animation\\TitleAnm\\313208.png",
+    "icon": "Picture\\ItemIcon\\313208.png",
+    "description": "参加传说武器擂台赛，获得怨灵组第一名。"
+  },
+  {
+    "kind": 31,
+    "id": 313209,
+    "name": "最强传说",
+    "display": "Animation\\TitleAnm\\313209.png",
+    "icon": "Picture\\ItemIcon\\313209.png",
+    "description": "参加传说武器擂台赛，获得天罡组第一名。"
+  },
+  {
+    "kind": 31,
+    "id": 313210,
+    "name": "最强传说",
+    "display": "Animation\\TitleAnm\\313210.png",
+    "icon": "Picture\\ItemIcon\\313210.png",
+    "description": "参加传说武器擂台赛，获得凌云组第一名。"
+  },
+  {
+    "kind": 31,
+    "id": 313211,
+    "name": "最强传说",
+    "display": "Animation\\TitleAnm\\313211.png",
+    "icon": "Picture\\ItemIcon\\313211.png",
+    "description": "参加传说武器擂台赛，获得麒麟组第一名。"
+  },
+  {
+    "kind": 31,
+    "id": 313212,
+    "name": "齐天大圣",
+    "display": "Animation\\TitleAnm\\313212.png",
+    "icon": "Picture\\ItemIcon\\313212.png",
+    "description": "齐天大圣的礼物。"
+  },
+  {
+    "kind": 31,
+    "id": 313213,
+    "name": "傲视群雄",
+    "display": "Animation\\TitleAnm\\313213.png",
+    "icon": "Picture\\ItemIcon\\313213.png",
+    "description": "极道格斗大赛单区亚军、季军的奖励。"
+  },
+  {
+    "kind": 31,
+    "id": 313214,
+    "name": "女神",
+    "display": "Animation\\TitleAnm\\313214.png",
+    "icon": "Picture\\ItemIcon\\313214.png",
+    "description": "女生节的礼物。"
+  },
+  {
+    "kind": 31,
+    "id": 313215,
+    "name": "高富帅",
+    "display": "Animation\\TitleAnm\\313215.png",
+    "icon": "Picture\\ItemIcon\\313215.png",
+    "description": "女生节超级礼包（男）中的礼物。"
+  },
+  {
+    "kind": 31,
+    "id": 313216,
+    "name": "白富美",
+    "display": "Animation\\TitleAnm\\313216.png",
+    "icon": "Picture\\ItemIcon\\313216.png",
+    "description": "女生节超级礼包（女）中的礼物。"
+  },
+  {
+    "kind": 31,
+    "id": 313217,
+    "name": "男神",
+    "display": "Animation\\TitleAnm\\313217.png",
+    "icon": "Picture\\ItemIcon\\313217.png",
+    "description": "#"
+  },
+  {
+    "kind": 31,
+    "id": 313218,
+    "name": "愚者",
+    "display": "Animation\\TitleAnm\\313218.png",
+    "icon": "Picture\\ItemIcon\\313218.png",
+    "description": "愚人节愚者礼包中的礼物。"
+  },
+  {
+    "kind": 31,
+    "id": 313219,
+    "name": "宝物猎手",
+    "display": "Animation\\TitleAnm\\313219.png",
+    "icon": "Picture\\ItemIcon\\313219.png",
+    "description": "探宝活动累计探宝值开启3号宝箱获得的奖励。"
+  },
+  {
+    "kind": 31,
+    "id": 313220,
+    "name": "财宝达人",
+    "display": "Animation\\TitleAnm\\313220.png",
+    "icon": "Picture\\ItemIcon\\313220.png",
+    "description": "探宝活动累计探宝值开启4号宝箱获得的奖励。"
+  },
+  {
+    "kind": 31,
+    "id": 313221,
+    "name": "KK元老",
+    "display": "Animation\\TitleAnm\\313221.png",
+    "icon": "Picture\\ItemIcon\\313221.png",
+    "description": "KK老玩家的奖励。"
+  },
+  {
+    "kind": 31,
+    "id": 313222,
+    "name": "伏魔天师",
+    "display": "Animation\\TitleAnm\\313222.png",
+    "icon": "Picture\\ItemIcon\\313222.png",
+    "description": "通过守卫丹炉获得魔物之心兑换的奖励。"
+  },
+  {
+    "kind": 31,
+    "id": 313223,
+    "name": "武器设计师",
+    "display": "Animation\\TitleAnm\\313223.png",
+    "icon": "Picture\\ItemIcon\\313223.png",
+    "description": "武器作者获得的奖励。"
+  },
+  {
+    "kind": 31,
+    "id": 313224,
+    "name": "丽天收集者",
+    "display": "Animation\\TitleAnm\\313224.png",
+    "icon": "Picture\\ItemIcon\\313224.png",
+    "description": "购买丽天礼包的奖励。"
+  },
+  {
+    "kind": 31,
+    "id": 313225,
+    "name": "后羿",
+    "display": "Animation\\TitleAnm\\313225.png",
+    "icon": "Picture\\ItemIcon\\313225.png",
+    "description": "后羿的礼物。"
+  },
+  {
+    "kind": 31,
+    "id": 313301,
+    "name": "签到之星",
+    "display": "Animation\\TitleAnm\\313301.png",
+    "icon": "Picture\\ItemIcon\\313301.png",
+    "description": "完成累积签到成就获得的奖励。"
+  },
+  {
+    "kind": 31,
+    "id": 313302,
+    "name": "签到之王",
+    "display": "Animation\\TitleAnm\\313302.png",
+    "icon": "Picture\\ItemIcon\\313302.png",
+    "description": "完成累积签到成就获得的奖励。"
+  },
+  {
+    "kind": 31,
+    "id": 313303,
+    "name": "活跃之星",
+    "display": "Animation\\TitleAnm\\313303.png",
+    "icon": "Picture\\ItemIcon\\313303.png",
+    "description": "完成活跃指数成就获得的奖励。"
+  },
+  {
+    "kind": 31,
+    "id": 313304,
+    "name": "活跃达人",
+    "display": "Animation\\TitleAnm\\313304.png",
+    "icon": "Picture\\ItemIcon\\313304.png",
+    "description": "完成活跃指数成就获得的奖励。"
+  },
+  {
+    "kind": 31,
+    "id": 313305,
+    "name": "KK攻略组",
+    "display": "Animation\\TitleAnm\\313305.png",
+    "icon": "Picture\\ItemIcon\\313305.png",
+    "description": "帮助新人，热心投稿，总有一天你也可以得到。"
+  },
+  {
+    "kind": 31,
+    "id": 313306,
+    "name": "KK超级粉丝",
+    "display": "Animation\\TitleAnm\\313306.png",
+    "icon": "Picture\\ItemIcon\\313306.png",
+    "description": "加入KK超级粉丝团（QQ群212326995）的奖励。"
+  },
+  {
+    "kind": 31,
+    "id": 313307,
+    "name": "微信天使",
+    "display": "Animation\\TitleAnm\\313307.png",
+    "icon": "Picture\\ItemIcon\\313307.png",
+    "description": "添加KK官方微信，发表优秀意见或建议的奖励。"
+  },
+  {
+    "kind": 31,
+    "id": 313308,
+    "name": "无名的旅人",
+    "display": "Animation\\TitleAnm\\313308.png",
+    "icon": "Picture\\ItemIcon\\313308.png",
+    "description": "探宝活动累计探宝值开启1号宝箱获得的奖励。"
+  },
+  {
+    "kind": 31,
+    "id": 313309,
+    "name": "探索者",
+    "display": "Animation\\TitleAnm\\313309.png",
+    "icon": "Picture\\ItemIcon\\313309.png",
+    "description": "探宝活动累计探宝值开启2号宝箱获得的奖励。"
+  },
+  {
+    "kind": 31,
+    "id": 313310,
+    "name": "狩魔猎人",
+    "display": "Animation\\TitleAnm\\313310.png",
+    "icon": "Picture\\ItemIcon\\313310.png",
+    "description": "通过守卫丹炉获得魔物之心兑换的奖励。"
+  },
+  {
+    "kind": 31,
+    "id": 313311,
+    "name": "天使杀手",
+    "display": "Animation\\TitleAnm\\313311.png",
+    "icon": "Picture\\ItemIcon\\313311.png",
+    "description": "通过天界之战获得天使之心兑换的奖励。"
+  },
+  {
+    "kind": 31,
+    "id": 313312,
+    "name": "屠魔者",
+    "display": "Animation\\TitleAnm\\313312.png",
+    "icon": "Picture\\ItemIcon\\313312.png",
+    "description": "斩妖除魔，至高奖励。"
+  }
+]

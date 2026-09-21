@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 
 namespace KungFuLauncher;
 
@@ -15,6 +15,7 @@ internal static class Program
             string root = AppContext.BaseDirectory;
             int rootOption = Array.IndexOf(args, "--root");
             if (rootOption >= 0 && rootOption + 1 < args.Length) root = Path.GetFullPath(args[rootOption + 1]);
+            Bootstrap.Prepare(root);
             var instances = new InstanceManager(root);
             int healthOption = Array.IndexOf(args, "--check-server");
             if (healthOption >= 0 && healthOption + 1 < args.Length)
@@ -39,6 +40,7 @@ internal static class Program
                 return;
             }
             if (!args.Contains("--preview") && !instances.CheckLauncherUpdate()) return;
+            if (!args.Contains("--preview")) instances.PrepareClientImage();
             int startOption = Array.IndexOf(args, "--start");
             int[] startWindows = startOption >= 0 && startOption + 1 < args.Length ? args[startOption + 1].Split(',').Select(int.Parse).ToArray() : [];
             using var form = new LauncherForm(instances, startWindows);
@@ -65,7 +67,7 @@ internal static class Program
             }
             else MessageBox.Show(exception is UnauthorizedAccessException
                 ? "登录器无法读写当前文件夹。请把整个游戏文件夹解压到可写目录后再启动，不要在压缩包中运行。"
-                : exception.Message, "功夫小子登录器", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                : exception.Message, "启动器", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 }

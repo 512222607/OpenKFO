@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"path/filepath"
 
 	"kungfu.local/server/internal/persistence"
+	"kungfu.local/server/internal/releases"
 )
 
 func main() {
@@ -19,7 +21,21 @@ func main() {
 		store, err = persistence.Open(os.Getenv("KK_MYSQL_DSN"))
 		if err == nil {
 			defer store.DB.Close()
-			result, err = store.Admin(request)
+			if request.Operation == "stages_get" || request.Operation == "stages_save" {
+				executable, _ := os.Executable()
+				dir := filepath.Dir(executable)
+				updates := os.Getenv("OPENKFO_UPDATES_DIR")
+				if updates == "" {
+					updates = filepath.Join(dir, "updates")
+				}
+				var hash string
+				hash, err = releases.ActiveConfigHash(filepath.Join(dir, "config.json"), updates)
+				if err == nil {
+					result, err = store.AdminStages(request, hash)
+				}
+			} else {
+				result, err = store.Admin(request)
+			}
 		}
 	}
 	if err != nil {

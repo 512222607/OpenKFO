@@ -1,0 +1,11 @@
+{
+  "time": 1788713657.0875998,
+  "kind": "game-frame",
+  "direction": "response",
+  "port": 10035,
+  "message_id": 3330,
+  "key_index": 0,
+  "payload_len": 4,
+  "payload_hex": "e9030000",
+  "hex": "eeaa80881800000020584e617e31466431308e1a0f3b95ef00134d617e316664"
+}

@@ -1,0 +1,86 @@
+{
+  "status": "fulfilled",
+  "value": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"addr\":\"0x9CE710\",\"code\":\"int __thiscall sub_9CE680(void *this, int a2, int a3, int a4)\\n{\\n  int result; // eax\\n  int v5; // eax\\n  int v6; // eax\\n  int v7; // eax\\n  char v8; // [esp-4h] [ebp-38h]\\n  int v9; // [esp+0h] [ebp-34h]\\n  int v10; // [esp+4h] [ebp-30h]\\n  int v11; // [esp+8h] [ebp-2Ch]\\n  _BYTE v13[8]; // [esp+10h] [ebp-24h] BYREF\\n  int v14; // [esp+18h] [ebp-1Ch] BYREF\\n  _BYTE v15[8]; // [esp+1Ch] [ebp-18h] BYREF\\n  int v16; // [esp+24h] [ebp-10h]\\n  int v17; // [esp+28h] [ebp-Ch]\\n  int v18; // [esp+2Ch] [ebp-8h]\\n  int v19; // [esp+30h] [ebp-4h]\\n\\n  if ( a2 != 0 && (_BYTE)(result = (unsigned __int8)sub_44C440(a1: a2)) != 0 )\\n    return result;\\n  result = sub_A2CB90();\\n  if ( result == 0 )\\n    return result;\\n  v5 = sub_4FFD70(a1: this);\\n  v18 = *(_DWORD *)sub_414F30(a1: v5);\\n  v11 = sub_4B4640(a1: this);\\n  v19 = (*(int (__fastcall **)(int))(*(_DWORD *)v11 + 36))(a1: v11);\\n  result = sub_9CBF60(a1: a2, a2: v19, a3: v18);\\n  if ( result == 0 )\\n    return result;\\n  v16 = 0;\\n  if ( sub_443DB0(a1: dword_17C8710) != 0 )\\n  {\\n    if ( a4 != 0 )\\n    {\\n      v10 = sub_443DB0(a1: dword_17C8710);\\n      v6 = sub_A24280(a1: a3);\\n      v16 = (*(int (__thiscall **)(int, int, int))(*(_DWORD *)v10 + 108))(a1: v10, a2: v6, a3: 1);\\n    }\\n    else\\n    {\\n      v9 = sub_443DB0(a1: dword_17C8710);\\n      v16 = (*(int (__thiscall **)(int, int, _DWORD))(*(_DWORD *)v9 + 108))(a1: v9, a2: a3, a3: 0);\\n    }\\n  }\\n  v8 = sub_4435C0(a1: dword_17C8708);\\n  sub_443C20();\\n  result = sub_A543A0(a1: v8);\\n  v17 = result;\\n  if ( result != 0 )\\n  {\\n    v14 = v16;\\n    sub_412BA0(a1: v15, a2: &v14);\\n    v7 = sub_639E30(a1: v13);\\n    if ( (_BYTE)(result = sub_50A700(a1: v7)) != 0 )\\n      return result;\\n  }\\n  if ( v16 != 0 )\\n    return ((int (__thiscall *)(int, int))loc_9E9630)(a1: a2, a2: v16);\\n  return result;\\n}\",\"refs\":[{\"addr\":\"0x44c440\",\"name\":\"sub_44C440\"},{\"addr\":\"0xa2cb90\",\"name\":\"sub_A2CB90\"},{\"addr\":\"0x4ffd70\",\"name\":\"sub_4FFD70\"},{\"addr\":\"0x414f30\",\"name\":\"sub_414F30\"},{\"addr\":\"0x4b4640\",\"name\":\"sub_4B4640\"},{\"addr\":\"0x9cbf60\",\"name\":\"sub_9CBF60\"},{\"addr\":\"0x443db0\",\"name\":\"sub_443DB0\"},{\"addr\":\"0x17c8710\",\"name\":\"dword_17C8710\"},{\"addr\":\"0xa24280\",\"name\":\"sub_A24280\"},{\"addr\":\"0x4435c0\",\"name\":\"sub_4435C0\"},{\"addr\":\"0x17c8708\",\"name\":\"dword_17C8708\"},{\"addr\":\"0x443c20\",\"name\":\"sub_443C20\"},{\"addr\":\"0xa543a0\",\"name\":\"sub_A543A0\"},{\"addr\":\"0x412ba0\",\"name\":\"sub_412BA0\"},{\"addr\":\"0x639e30\",\"name\":\"sub_639E30\"},{\"addr\":\"0x50a700\",\"name\":\"sub_50A700\"},{\"addr\":\"0x9e9630\",\"name\":\"loc_9E9630\"}]}"
+      }
+    ],
+    "structuredContent": {
+      "addr": "0x9CE710",
+      "code": "int __thiscall sub_9CE680(void *this, int a2, int a3, int a4)\n{\n  int result; // eax\n  int v5; // eax\n  int v6; // eax\n  int v7; // eax\n  char v8; // [esp-4h] [ebp-38h]\n  int v9; // [esp+0h] [ebp-34h]\n  int v10; // [esp+4h] [ebp-30h]\n  int v11; // [esp+8h] [ebp-2Ch]\n  _BYTE v13[8]; // [esp+10h] [ebp-24h] BYREF\n  int v14; // [esp+18h] [ebp-1Ch] BYREF\n  _BYTE v15[8]; // [esp+1Ch] [ebp-18h] BYREF\n  int v16; // [esp+24h] [ebp-10h]\n  int v17; // [esp+28h] [ebp-Ch]\n  int v18; // [esp+2Ch] [ebp-8h]\n  int v19; // [esp+30h] [ebp-4h]\n\n  if ( a2 != 0 && (_BYTE)(result = (unsigned __int8)sub_44C440(a1: a2)) != 0 )\n    return result;\n  result = sub_A2CB90();\n  if ( result == 0 )\n    return result;\n  v5 = sub_4FFD70(a1: this);\n  v18 = *(_DWORD *)sub_414F30(a1: v5);\n  v11 = sub_4B4640(a1: this);\n  v19 = (*(int (__fastcall **)(int))(*(_DWORD *)v11 + 36))(a1: v11);\n  result = sub_9CBF60(a1: a2, a2: v19, a3: v18);\n  if ( result == 0 )\n    return result;\n  v16 = 0;\n  if ( sub_443DB0(a1: dword_17C8710) != 0 )\n  {\n    if ( a4 != 0 )\n    {\n      v10 = sub_443DB0(a1: dword_17C8710);\n      v6 = sub_A24280(a1: a3);\n      v16 = (*(int (__thiscall **)(int, int, int))(*(_DWORD *)v10 + 108))(a1: v10, a2: v6, a3: 1);\n    }\n    else\n    {\n      v9 = sub_443DB0(a1: dword_17C8710);\n      v16 = (*(int (__thiscall **)(int, int, _DWORD))(*(_DWORD *)v9 + 108))(a1: v9, a2: a3, a3: 0);\n    }\n  }\n  v8 = sub_4435C0(a1: dword_17C8708);\n  sub_443C20();\n  result = sub_A543A0(a1: v8);\n  v17 = result;\n  if ( result != 0 )\n  {\n    v14 = v16;\n    sub_412BA0(a1: v15, a2: &v14);\n    v7 = sub_639E30(a1: v13);\n    if ( (_BYTE)(result = sub_50A700(a1: v7)) != 0 )\n      return result;\n  }\n  if ( v16 != 0 )\n    return ((int (__thiscall *)(int, int))loc_9E9630)(a1: a2, a2: v16);\n  return result;\n}",
+      "refs": [
+        {
+          "addr": "0x44c440",
+          "name": "sub_44C440"
+        },
+        {
+          "addr": "0xa2cb90",
+          "name": "sub_A2CB90"
+        },
+        {
+          "addr": "0x4ffd70",
+          "name": "sub_4FFD70"
+        },
+        {
+          "addr": "0x414f30",
+          "name": "sub_414F30"
+        },
+        {
+          "addr": "0x4b4640",
+          "name": "sub_4B4640"
+        },
+        {
+          "addr": "0x9cbf60",
+          "name": "sub_9CBF60"
+        },
+        {
+          "addr": "0x443db0",
+          "name": "sub_443DB0"
+        },
+        {
+          "addr": "0x17c8710",
+          "name": "dword_17C8710"
+        },
+        {
+          "addr": "0xa24280",
+          "name": "sub_A24280"
+        },
+        {
+          "addr": "0x4435c0",
+          "name": "sub_4435C0"
+        },
+        {
+          "addr": "0x17c8708",
+          "name": "dword_17C8708"
+        },
+        {
+          "addr": "0x443c20",
+          "name": "sub_443C20"
+        },
+        {
+          "addr": "0xa543a0",
+          "name": "sub_A543A0"
+        },
+        {
+          "addr": "0x412ba0",
+          "name": "sub_412BA0"
+        },
+        {
+          "addr": "0x639e30",
+          "name": "sub_639E30"
+        },
+        {
+          "addr": "0x50a700",
+          "name": "sub_50A700"
+        },
+        {
+          "addr": "0x9e9630",
+          "name": "loc_9E9630"
+        }
+      ]
+    },
+    "isError": false
+  }
+}

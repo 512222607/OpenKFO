@@ -1,0 +1,75 @@
+{
+  "addr": "0x81b080",
+  "code": "void __stdcall sub_81B080(_DWORD *a1, int a2)\n{\n  int v2; // eax\n  __int64 v3; // rax\n  int v4; // eax\n  int v5; // eax\n  int v6; // eax\n  int v7; // eax\n  int v8; // eax\n  int v9; // [esp-8h] [ebp-30h]\n  int v10; // [esp-4h] [ebp-2Ch]\n  int v11; // [esp+4h] [ebp-24h]\n  int v12; // [esp+8h] [ebp-20h]\n  _BYTE v13[4]; // [esp+10h] [ebp-18h] BYREF\n  _DWORD *v14; // [esp+14h] [ebp-14h]\n  int v15; // [esp+18h] [ebp-10h]\n  unsigned int v16; // [esp+1Ch] [ebp-Ch]\n  int v17; // [esp+24h] [ebp-4h]\n\n  if ( a1 != nullptr && a2 == 8 ) /*0x81b0b2*/\n  {\n    v14 = a1; /*0x81b0bc*/\n    sub_80C920(a1: *a1, a2: a1[1]); /*0x81b0cf*/\n    v15 = sub_808C70(a1: *v14, a2: v14[1]); /*0x81b0e9*/\n    if ( v15 != 0 ) /*0x81b0f0*/\n    {\n      sub_3F5F90(a1: v13); /*0x81b0f9*/\n      v17 = 0; /*0x81b0fe*/\n      sub_43E0F0(a1: v15); /*0x81b108*/\n      sub_401C60(a1: v13, a2: &aInvalidSelfInA_62[12]); /*0x81b119*/\n      if ( dword_17C8710 != 0 && sub_443DB0(a1: dword_17C8710) != 0 ) /*0x81b137*/\n      {\n        v12 = sub_443DB0(a1: dword_17C8710); /*0x81b144*/\n        v2 = sub_443F50(a1: (int)v13); /*0x81b14f*/\n        (*(void (__thiscall **)(int, int, int))(*(_DWORD *)v12 + 184))(a1: v12, a2: v2, a3: -3355597); /*0x81b163*/\n        v11 = sub_443DB0(a1: dword_17C8710); /*0x81b170*/\n        v3 = sub_3F1000(a1: v15); /*0x81b176*/\n        (*(void (__thiscall **)(int, _DWORD, _DWORD))(*(_DWORD *)v11 + 208))(a1: v11, a2: v3, a3: HIDWORD(v3)); /*0x81b18b*/\n      }\n      v17 = -1; /*0x81b18d*/\n      sub_3F6050(a1: v13); /*0x81b197*/\n    }\n    else if ( dword_17C8710 != 0 && sub_443DB0(a1: dword_17C8710) != 0 ) /*0x81b1b4*/\n    {\n      v4 = sub_443DB0(a1: dword_17C8710); /*0x81b1bc*/\n      if ( sub_4A4F50(a1: v4) != 0 ) /*0x81b1ca*/\n      {\n        v5 = sub_443DB0(a1: dword_17C8710); /*0x81b1d2*/\n        v6 = sub_4A4F50(a1: v5); /*0x81b1d9*/\n        v7 = sub_538AD0(a1: v6); /*0x81b1e0*/\n        sub_884F40(a1: v7); /*0x81b1e7*/\n      }\n    }\n    v8 = sub_3F30C0(); /*0x81b1ec*/\n    if ( sub_3F31A0(a1: v8) != 2 ) /*0x81b1fb*/\n    {\n      v10 = v14[1]; /*0x81b203*/\n      v9 = *v14; /*0x81b206*/\n      sub_3F30C0(); /*0x81b207*/\n      sub_921CA0(a1: v9, a2: v10); /*0x81b20e*/\n    }\n  }\n  __writefsdword(0, v16); /*0x81b216*/\n}",
+  "refs": [
+    {
+      "addr": "0x80c920",
+      "name": "sub_80C920"
+    },
+    {
+      "addr": "0x808c70",
+      "name": "sub_808C70"
+    },
+    {
+      "addr": "0x3f5f90",
+      "name": "sub_3F5F90"
+    },
+    {
+      "addr": "0x43e0f0",
+      "name": "sub_43E0F0"
+    },
+    {
+      "addr": "0x401c60",
+      "name": "sub_401C60"
+    },
+    {
+      "addr": "0xbcac04",
+      "name": "aInvalidSelfInA_62",
+      "string": "invalid 'self' in accessing variable 'dwKnockout'"
+    },
+    {
+      "addr": "0x443db0",
+      "name": "sub_443DB0"
+    },
+    {
+      "addr": "0x17c8710",
+      "name": "dword_17C8710"
+    },
+    {
+      "addr": "0x443f50",
+      "name": "sub_443F50"
+    },
+    {
+      "addr": "0x3f1000",
+      "name": "sub_3F1000"
+    },
+    {
+      "addr": "0x3f6050",
+      "name": "sub_3F6050"
+    },
+    {
+      "addr": "0x4a4f50",
+      "name": "sub_4A4F50"
+    },
+    {
+      "addr": "0x538ad0",
+      "name": "sub_538AD0"
+    },
+    {
+      "addr": "0x884f40",
+      "name": "sub_884F40"
+    },
+    {
+      "addr": "0x3f30c0",
+      "name": "sub_3F30C0"
+    },
+    {
+      "addr": "0x921ca0",
+      "name": "sub_921CA0"
+    },
+    {
+      "addr": "0x3f31a0",
+      "name": "sub_3F31A0"
+    }
+  ]
+}

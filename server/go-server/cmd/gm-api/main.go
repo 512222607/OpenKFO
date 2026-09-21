@@ -6,10 +6,12 @@ import (
 	"kungfu.local/server/internal/adminhttp"
 	"kungfu.local/server/internal/desktop"
 	"kungfu.local/server/internal/persistence"
+	"kungfu.local/server/internal/releases"
 	"log"
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -40,7 +42,23 @@ func main() {
 	defer store.DB.Close()
 	admin := desktop.New(*root)
 	admin.Remote = func(req persistence.AdminRequest) (json.RawMessage, error) {
-		result, err := store.Admin(req)
+		var result any
+		var err error
+		if req.Operation == "stages_get" || req.Operation == "stages_save" {
+			executable, _ := os.Executable()
+			dir := filepath.Dir(executable)
+			updates := os.Getenv("OPENKFO_UPDATES_DIR")
+			if updates == "" {
+				updates = filepath.Join(dir, "updates")
+			}
+			var hash string
+			hash, err = releases.ActiveConfigHash(filepath.Join(dir, "config.json"), updates)
+			if err == nil {
+				result, err = store.AdminStages(req, hash)
+			}
+		} else {
+			result, err = store.Admin(req)
+		}
 		if err != nil {
 			return nil, err
 		}

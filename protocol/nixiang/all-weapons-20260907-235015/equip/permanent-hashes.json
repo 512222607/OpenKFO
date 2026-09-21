@@ -1,0 +1,18 @@
+[
+  {
+    "file": "permanent-0x8163a0.json",
+    "sha256": "d4a6efd5e2d1fd87a9a1467c814615c7cd5e91b0335993fa95660ad3dd517f92"
+  },
+  {
+    "file": "permanent-0x9bc4e0.json",
+    "sha256": "1db555fc7aeb594b9f198b8c2c32fc64093ce09d842ad5badd3c32ca0e829a69"
+  },
+  {
+    "file": "permanent-0x9bd7c0.json",
+    "sha256": "7a56b9177ec5c3efedb336314f783492dae28b8bce86339d354daced21a2c0f8"
+  },
+  {
+    "file": "permanent-0x9bf2f0.json",
+    "sha256": "ce418f8194a4855bf8189bc95b3dc1a0fccca224c8b42af4b88ac40aac55d84e"
+  }
+]

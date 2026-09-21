@@ -40,6 +40,7 @@ type Member struct {
 	BattleEvents         map[battleEventKey]battleSequence
 }
 type Room struct {
+	PeerProbes           map[[2]uint64]peerProbeObservation
 	BattleStartedAt      time.Time
 	StageElapsedSeconds  uint32
 	StageWaves           *stageWaves

@@ -1,0 +1,46 @@
+{
+  "addr": "0x80b0e0",
+  "code": "int __fastcall sub_80B0E0(int a1)\n{\n  void *v1; // eax\n  int v3; // [esp-4h] [ebp-28h]\n  _QWORD *v4; // [esp+Ch] [ebp-18h]\n  _BYTE v6[8]; // [esp+14h] [ebp-10h] BYREF\n  _BYTE v7[8]; // [esp+1Ch] [ebp-8h] BYREF\n\n  sub_5404A0(a1: v7); /*0x80b0f7*/\n  while ( 1 ) /*0x80b113*/\n  {\n    v1 = sub_44ABB0(this: (int *)(a1 + 152), a2: v6); /*0x80b113*/\n    if ( !sub_49B8F0(a1: (int)v1) ) /*0x80b126*/\n      break; /*0x80b126*/\n    v4 = (_QWORD *)sub_559150(a1: v7); /*0x80b13d*/\n    if ( *v4 != sub_3F2AA0(a1: dword_17C86FC) ) /*0x80b14e*/\n    {\n      v3 = *(_DWORD *)(sub_559150(a1: v7) + 75); /*0x80b166*/\n      sub_7C0B90(); /*0x80b167*/\n      sub_7C0970(a1: v3); /*0x80b16e*/\n    }\n    sub_53BFA0(a1: v7); /*0x80b101*/\n  }\n  return sub_53BA60(a1: a1 + 152); /*0x80b183*/\n}",
+  "refs": [
+    {
+      "addr": "0x5404a0",
+      "name": "sub_5404A0"
+    },
+    {
+      "addr": "0x44abb0",
+      "name": "sub_44ABB0"
+    },
+    {
+      "addr": "0x49b8f0",
+      "name": "sub_49B8F0"
+    },
+    {
+      "addr": "0x559150",
+      "name": "sub_559150"
+    },
+    {
+      "addr": "0x7c0b90",
+      "name": "sub_7C0B90"
+    },
+    {
+      "addr": "0x7c0970",
+      "name": "sub_7C0970"
+    },
+    {
+      "addr": "0x3f2aa0",
+      "name": "sub_3F2AA0"
+    },
+    {
+      "addr": "0x17c86fc",
+      "name": "dword_17C86FC"
+    },
+    {
+      "addr": "0x53bfa0",
+      "name": "sub_53BFA0"
+    },
+    {
+      "addr": "0x53ba60",
+      "name": "sub_53BA60"
+    }
+  ]
+}

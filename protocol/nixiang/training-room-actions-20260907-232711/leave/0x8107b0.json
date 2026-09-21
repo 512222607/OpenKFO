@@ -1,0 +1,93 @@
+{
+  "addr": "0x8107b0",
+  "code": "void __stdcall sub_8107B0(__int64 *a1, int a2)\n{\n  int v2; // eax\n  int v3; // eax\n  int v4; // eax\n  int v5; // eax\n  int v6; // eax\n  int v7; // [esp+4h] [ebp-6Ch]\n  int v8; // [esp+8h] [ebp-68h]\n  int v9; // [esp+Ch] [ebp-64h]\n  int v10; // [esp+10h] [ebp-60h]\n  int v11; // [esp+14h] [ebp-5Ch]\n  _BYTE v12[28]; // [esp+20h] [ebp-50h] BYREF\n  _BYTE v13[28]; // [esp+3Ch] [ebp-34h] BYREF\n  _BYTE v14[4]; // [esp+58h] [ebp-18h] BYREF\n  __int64 *v15; // [esp+5Ch] [ebp-14h]\n  int v16; // [esp+60h] [ebp-10h]\n  unsigned int v17; // [esp+64h] [ebp-Ch]\n  int v18; // [esp+6Ch] [ebp-4h]\n\n  if ( a1 != nullptr && a2 == 8 ) /*0x8107e2*/\n  {\n    v15 = a1; /*0x8107ec*/\n    v2 = sub_808C00(a1: *a1); /*0x8107ff*/\n    v16 = sub_808450(a1: v2); /*0x810810*/\n    if ( v16 != 0 ) /*0x810817*/\n    {\n      sub_3F5F90(a1: v14); /*0x810820*/\n      v18 = 0; /*0x810825*/\n      if ( sub_539240(a1: v16) <= 1 ) /*0x810837*/\n      {\n        v5 = sub_43E0F0(a1: v16); /*0x810899*/\n        sub_3F6410(a1: v5); /*0x8108a0*/\n        sub_401C60(a1: v14, a2: &aEffectplay[4]); /*0x8108af*/\n      }\n      else\n      {\n        v3 = sub_539240(a1: v16); /*0x81083c*/\n        v11 = sub_A242E0(a1: (int)v13, a2: v3); /*0x810857*/\n        LOBYTE(v18) = 1; /*0x81085a*/\n        sub_3F5750(a1: v11); /*0x810861*/\n        v4 = sub_43E0F0(a1: v16); /*0x81086a*/\n        sub_3F6410(a1: v4); /*0x810871*/\n        sub_401C60(a1: v14, a2: &aSetpickingweap[16]); /*0x810880*/\n        LOBYTE(v18) = 0; /*0x810888*/\n        sub_3F56D0(a1: v13); /*0x81088f*/\n      }\n      sub_3F5650(a1: &aBattlemodeDoac[5]); /*0x8108bf*/\n      LOBYTE(v18) = 2; /*0x8108c4*/\n      sub_40B7D0(); /*0x8108df*/\n      sub_A821B0(a1: 0, a2: 0, a3: v12, a4: v14, a5: 4, a6: 0, a7: -4521984, a8: 0); /*0x8108e6*/\n      LOBYTE(v18) = 0; /*0x8108eb*/\n      sub_3F56D0(a1: v12); /*0x8108f2*/\n      v10 = sub_80B800(this: (_DWORD *)dword_17C8708); /*0x810902*/\n      v6 = sub_807BC0(a1: v16); /*0x81090f*/\n      (*(void (__thiscall **)(int, _DWORD, int))(*(_DWORD *)v10 + 448))(a1: v10, a2: 0, a3: v6); /*0x810925*/\n      v9 = sub_80B800(this: (_DWORD *)dword_17C8708); /*0x810932*/\n      (*(void (__thiscall **)(int, int, int))(*(_DWORD *)v9 + 480))(a1: v9, a2: v16, a3: 8); /*0x810949*/\n      v18 = -1; /*0x81094b*/\n      sub_3F6050(a1: v14); /*0x810955*/\n    }\n    sub_80C7B0(a1: *(_DWORD *)v15, a2: *((_DWORD *)v15 + 1), a3: 1); /*0x81096c*/\n    v8 = sub_80B800(this: (_DWORD *)dword_17C8708); /*0x81097c*/\n    (*(void (__thiscall **)(int, _DWORD, _DWORD))(*(_DWORD *)v8 + 464))( /*0x810997*/\n      a1: v8,\n      a2: *(_DWORD *)v15,\n      a3: *((_DWORD *)v15 + 1));\n    v7 = sub_80B800(this: (_DWORD *)dword_17C8708); /*0x8109a4*/\n    (*(void (__thiscall **)(int, _DWORD))(*(_DWORD *)v7 + 460))(a1: v7, a2: 0); /*0x8109b7*/\n  }\n  __writefsdword(0, v17); /*0x8109bc*/\n}",
+  "refs": [
+    {
+      "addr": "0x808c00",
+      "name": "sub_808C00"
+    },
+    {
+      "addr": "0x808450",
+      "name": "sub_808450"
+    },
+    {
+      "addr": "0x3f5f90",
+      "name": "sub_3F5F90"
+    },
+    {
+      "addr": "0x43e0f0",
+      "name": "sub_43E0F0"
+    },
+    {
+      "addr": "0x3f6410",
+      "name": "sub_3F6410"
+    },
+    {
+      "addr": "0x401c60",
+      "name": "sub_401C60"
+    },
+    {
+      "addr": "0xbcb4f4",
+      "name": "aEffectplay",
+      "string": "EffectPlay"
+    },
+    {
+      "addr": "0x539240",
+      "name": "sub_539240"
+    },
+    {
+      "addr": "0xa242e0",
+      "name": "sub_A242E0"
+    },
+    {
+      "addr": "0x3f5750",
+      "name": "sub_3F5750"
+    },
+    {
+      "addr": "0xbcb4cc",
+      "name": "aSetpickingweap",
+      "string": "SetPickingWeapon"
+    },
+    {
+      "addr": "0x3f56d0",
+      "name": "sub_3F56D0"
+    },
+    {
+      "addr": "0x3f5650",
+      "name": "sub_3F5650"
+    },
+    {
+      "addr": "0xb96694",
+      "name": "aBattlemodeDoac",
+      "string": "BattleMode:DoAction"
+    },
+    {
+      "addr": "0x40b7d0",
+      "name": "sub_40B7D0"
+    },
+    {
+      "addr": "0xa821b0",
+      "name": "sub_A821B0"
+    },
+    {
+      "addr": "0x80b800",
+      "name": "sub_80B800"
+    },
+    {
+      "addr": "0x17c8708",
+      "name": "dword_17C8708"
+    },
+    {
+      "addr": "0x807bc0",
+      "name": "sub_807BC0"
+    },
+    {
+      "addr": "0x3f6050",
+      "name": "sub_3F6050"
+    },
+    {
+      "addr": "0x80c7b0",
+      "name": "sub_80C7B0"
+    }
+  ]
+}

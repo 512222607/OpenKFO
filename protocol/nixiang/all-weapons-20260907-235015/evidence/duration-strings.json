@@ -1,0 +1,5 @@
+{
+  "result": "None",
+  "stdout": "[{\"VA\": \"0xb9dc0c\", \"raw\": \"0xb8dc0c\", \"gbk\": \"%d天\"}, {\"VA\": \"0xb9dc2c\", \"raw\": \"0xb8dc2c\", \"gbk\": \"*%d小时\"}, {\"VA\": \"0xb9dc34\", \"raw\": \"0xb8dc34\", \"gbk\": \"<1小时\"}, {\"VA\": \"0xb9dc44\", \"raw\": \"0xb8dc44\", \"gbk\": \"%d个\"}, {\"VA\": \"0xbadc04\", \"raw\": \"0xb9dc04\", \"gbk\": \"OnDelUstate_\"}, {\"VA\": \"0xbadc14\", \"raw\": \"0xb9dc14\", \"gbk\": \"OnUstateTimer_\"}, {\"VA\": \"0xbadc1c\", \"raw\": \"0xb9dc1c\", \"gbk\": \"Timer_\"}, {\"VA\": \"0xbadc24\", \"raw\": \"0xb9dc24\", \"gbk\": \"OnUstateHitEvent_\"}, {\"VA\": \"0xbadc3c\", \"raw\": \"0xb9dc3c\", \"gbk\": \"tateBeHitEvent_\"}]\n",
+  "stderr": ""
+}

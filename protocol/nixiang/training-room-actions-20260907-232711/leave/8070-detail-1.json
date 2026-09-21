@@ -1,0 +1,10 @@
+{
+  "addr": "0x9754e0",
+  "code": "int __fastcall sub_9754E0(_DWORD *a1)\n{\n  int result; // eax\n\n  a1[34] = dword_17C8690; /*0x9754f0*/\n  result = dword_17C8690; /*0x9754f9*/\n  a1[32] = dword_17C8690; /*0x9754fe*/\n  a1[68] = dword_17C8690; /*0x97550d*/\n  return result; /*0x975513*/\n}",
+  "refs": [
+    {
+      "addr": "0x17c8690",
+      "name": "dword_17C8690"
+    }
+  ]
+}

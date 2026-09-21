@@ -1,0 +1,54 @@
+{
+  "addr": "0x92b720",
+  "code": "int __fastcall sub_92B710(int a1)\n{\n  int v1; // eax\n  unsigned int v4; // [esp+8h] [ebp-Ch]\n\n  v1 = sub_928A10(); /*0x92b736*/\n  sub_A3BEF0(a1: v1); /*0x92b73f*/\n  sub_4C6F50(a1: a1 + 16); /*0x92b751*/\n  *(_DWORD *)a1 = &unk_BADD44; /*0x92b75d*/\n  *(_DWORD *)(a1 + 16) = &unk_BADE6C; /*0x92b766*/\n  *(_DWORD *)(a1 + 20) = 0; /*0x92b770*/\n  *(_DWORD *)(a1 + 24) = 0; /*0x92b77a*/\n  *(_BYTE *)(a1 + 28) = 0; /*0x92b784*/\n  sub_420720(a1: a1 + 32); /*0x92b78e*/\n  sub_420720(a1: a1 + 64); /*0x92b79d*/\n  sub_631F00(a1: a1 + 96); /*0x92b7ac*/\n  *(_DWORD *)(a1 + 128) = 0; /*0x92b7b8*/\n  sub_455550(a1: a1 + 132); /*0x92b7cb*/\n  sub_43A450(a1: a1 + 156); /*0x92b7dd*/\n  sub_4C4AB0(a1: a1 + 184); /*0x92b7ef*/\n  *(_DWORD *)(a1 + 216) = 0; /*0x92b7fb*/\n  sub_4C4AB0(a1: a1 + 220); /*0x92b80e*/\n  sub_4069F0(a1: a1 + 268); /*0x92b820*/\n  sub_40C7E0(a1: a1 + 300); /*0x92b832*/\n  sub_455550(a1: a1 + 328); /*0x92b844*/\n  *(_DWORD *)(a1 + 252) = 999; /*0x92b84c*/\n  *(_DWORD *)(a1 + 256) = 0; /*0x92b859*/\n  *(_DWORD *)(a1 + 260) = 0; /*0x92b866*/\n  *(_DWORD *)(a1 + 264) = 0; /*0x92b873*/\n  *(_DWORD *)(a1 + 324) = 30; /*0x92b880*/\n  __writefsdword(0, v4); /*0x92b897*/\n  return a1; /*0x92b89f*/\n}",
+  "refs": [
+    {
+      "addr": "0x928a10",
+      "name": "sub_928A10"
+    },
+    {
+      "addr": "0xa3bef0",
+      "name": "sub_A3BEF0"
+    },
+    {
+      "addr": "0x4c6f50",
+      "name": "sub_4C6F50"
+    },
+    {
+      "addr": "0xbadd44",
+      "name": "unk_BADD44"
+    },
+    {
+      "addr": "0xbade6c",
+      "name": "unk_BADE6C"
+    },
+    {
+      "addr": "0x420720",
+      "name": "sub_420720"
+    },
+    {
+      "addr": "0x631f00",
+      "name": "sub_631F00"
+    },
+    {
+      "addr": "0x455550",
+      "name": "sub_455550"
+    },
+    {
+      "addr": "0x43a450",
+      "name": "sub_43A450"
+    },
+    {
+      "addr": "0x4c4ab0",
+      "name": "sub_4C4AB0"
+    },
+    {
+      "addr": "0x4069f0",
+      "name": "sub_4069F0"
+    },
+    {
+      "addr": "0x40c7e0",
+      "name": "sub_40C7E0"
+    }
+  ]
+}

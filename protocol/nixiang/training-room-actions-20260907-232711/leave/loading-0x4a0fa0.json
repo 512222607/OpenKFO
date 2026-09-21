@@ -1,0 +1,4 @@
+{
+  "addr": "0x4a0fa0",
+  "code": "_DWORD *__thiscall sub_4A0FA0(_DWORD *this, int a2)\n{\n  *(this + 30) = a2; /*0x4a0fad*/\n  return this; /*0x4a0fb0*/\n}"
+}

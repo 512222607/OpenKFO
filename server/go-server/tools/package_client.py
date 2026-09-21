@@ -10,6 +10,9 @@ ONLINE = ROOT / "runtime-local/go-online"
 OUTPUT = ROOT.parent / "功夫小子-线上测试客户端.zip"
 
 config = json.loads((ONLINE / "bridge.json").read_text(encoding="utf-8"))
+network = json.loads((ROOT / "config/network.json").read_text(encoding="utf-8-sig"))
+if config["url"] != network["game_endpoint"]:
+    raise SystemExit("Run tools/Sync-NetworkConfig.ps1 -Apply before packaging")
 config.update(client_directory="client", server_certificate="origin.crt",
               login_certificate="loopback-cert.pem", login_key="loopback-key.pem")
 blocked_directories = {"temp", "SD_Log", "Sky_Log", "SP_Log"}
@@ -22,10 +25,10 @@ def included(path):
     return not (".before-" in name or ".backup" in name or name.endswith((".log", ".dmp", ".sgz", ".bak", ".rep"))
                 or name.startswith("kk-roleprop-ready") or name in {"thumbs.db", "cache.dat", "sd oa_log.txt", "sdoa_log.txt"})
 
-readme = """功夫小子 · Go 线上测试
+readme = f"""功夫小子 · Go 线上测试
 
 完整解压本 ZIP，双击“功夫小子线上登录器.exe”。不要单独移动 EXE。
-服务器：jrnygtxy.top。联网后在原游戏窗口填写测试账号和密码。
+服务器：{config['url']}。联网后在原游戏窗口填写测试账号和密码。
 每台电脑只打开一个客户端；两位玩家使用不同账号。
 两人选择相同对战模式，一人建房，另一人加入并准备，房主开始。
 

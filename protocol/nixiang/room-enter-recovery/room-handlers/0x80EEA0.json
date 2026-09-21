@@ -1,0 +1,42 @@
+{
+  "addr": "0x80EEA0",
+  "code": "void __thiscall sub_80EEA0(void *this, int a2, int a3)\n{\n  int v4; // [esp+4h] [ebp-4E0h]\n  _BYTE v5[1236]; // [esp+Ch] [ebp-4D8h] BYREF\n  int v6; // [esp+4E0h] [ebp-4h]\n\n  if ( a2 != 0 ) /*0x80eeb3*/\n  {\n    dword_17C86D4 = *(unsigned __int8 *)(a2 + 144); /*0x80eed0*/\n    v6 = a2 + 149; /*0x80eee8*/\n    sub_551D00(a1: v5); /*0x80eef1*/\n    sub_A2ECC0( /*0x80ef22*/\n      a1: v5,\n      a2: v6,\n      a3: *(unsigned __int8 *)(a2 + 64),\n      a4: *(unsigned __int8 *)(a2 + 54),\n      a5: *(unsigned __int8 *)(a2 + 56));\n    if ( *(_BYTE *)(a2 + 76) != 0 ) /*0x80ef36*/\n    {\n      sub_80BE60(a1: *(_DWORD *)a2, a2: *(_DWORD *)(a2 + 4), a3: a2, a4: v5, a5: 1, a6: 1); /*0x80ef5d*/\n    }\n    else\n    {\n      v4 = sub_80CF10(a1: *(_DWORD *)a2, a2: *(_DWORD *)(a2 + 4), a3: a2, a4: v5, a5: 1); /*0x80ef8f*/\n      sub_53AB30(a1: *(_DWORD *)(a2 + 136)); /*0x80efa8*/\n      sub_53AB50(a1: *(_DWORD *)(a2 + 145)); /*0x80efc0*/\n      sub_5018E0(a1: dword_17C86D4 != 0); /*0x80efd9*/\n      if ( v4 != 0 ) /*0x80efe5*/\n      {\n        sub_809D70(a1: v4, a2: 1); /*0x80eff6*/\n        (*(void (__thiscall **)(void *, int))(*(_DWORD *)this + 20))(a1: this, a2: v4); /*0x80f013*/\n      }\n    }\n  }\n}",
+  "refs": [
+    {
+      "addr": "0x17c86d4",
+      "name": "dword_17C86D4"
+    },
+    {
+      "addr": "0x551d00",
+      "name": "sub_551D00"
+    },
+    {
+      "addr": "0xa2ecc0",
+      "name": "sub_A2ECC0"
+    },
+    {
+      "addr": "0x80be60",
+      "name": "sub_80BE60"
+    },
+    {
+      "addr": "0x80cf10",
+      "name": "sub_80CF10"
+    },
+    {
+      "addr": "0x53ab30",
+      "name": "sub_53AB30"
+    },
+    {
+      "addr": "0x53ab50",
+      "name": "sub_53AB50"
+    },
+    {
+      "addr": "0x5018e0",
+      "name": "sub_5018E0"
+    },
+    {
+      "addr": "0x809d70",
+      "name": "sub_809D70"
+    }
+  ]
+}

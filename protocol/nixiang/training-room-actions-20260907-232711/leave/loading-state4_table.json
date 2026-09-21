@@ -1,0 +1,5 @@
+{
+  "result": "None",
+  "stdout": "[\n  {\n    \"entry\": \"0x12ed9c8\",\n    \"opcode\": 8070,\n    \"handler_raw\": \"0x81c4e0\"\n  }\n]\n[\n  {\n    \"vtable_va\": \"0xbadd44\",\n    \"slot_36_va\": \"0x93c870\",\n    \"slot_36_raw\": \"0x92c870\"\n  }\n]\n",
+  "stderr": ""
+}

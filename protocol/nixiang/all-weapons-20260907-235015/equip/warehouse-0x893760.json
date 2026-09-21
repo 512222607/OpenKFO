@@ -1,0 +1,4 @@
+{
+  "addr": "0x893760",
+  "code": "_DWORD *__stdcall sub_893760(int a1, _DWORD *a2)\n{\n  a2[2] = *(_DWORD *)a1; /*0x89376f*/\n  *a2 = *(unsigned __int8 *)(a1 + 4); /*0x89377c*/\n  a2[4] = *(unsigned __int16 *)(a1 + 17); /*0x893788*/\n  a2[1] = *(_DWORD *)(a1 + 9); /*0x893794*/\n  a2[7] = *(_DWORD *)(a1 + 19); /*0x8937a0*/\n  a2[8] = *(_DWORD *)(a1 + 13); /*0x8937ac*/\n  a2[5] = *(unsigned __int16 *)(a1 + 23); /*0x8937b9*/\n  a2[6] = *(_DWORD *)(a1 + 25); /*0x8937c5*/\n  a2[3] = *(_DWORD *)(a1 + 5); /*0x8937d1*/\n  a2[30] = *(_DWORD *)(a1 + 38); /*0x8937dd*/\n  return a2; /*0x8937e0*/\n}"
+}

@@ -1,0 +1,4 @@
+{
+  "addr": "0x422440",
+  "code": "int __thiscall sub_422440(void *this)\n{\n  return (int)this + 785; /*0x42244f*/\n}"
+}

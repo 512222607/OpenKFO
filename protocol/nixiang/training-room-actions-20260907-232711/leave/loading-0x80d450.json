@@ -1,0 +1,78 @@
+{
+  "addr": "0x80d450",
+  "code": "int sub_80D450()\n{\n  int v0; // eax\n  int v1; // eax\n  int v2; // eax\n  _DWORD *v3; // eax\n  int v4; // eax\n  int v5; // eax\n  int result; // eax\n  int v7; // [esp-8h] [ebp-64h]\n  int v8; // [esp-4h] [ebp-60h]\n  _BYTE v9[28]; // [esp+8h] [ebp-54h] BYREF\n  int v10; // [esp+24h] [ebp-38h]\n  unsigned int i; // [esp+28h] [ebp-34h] BYREF\n  _BYTE v12[28]; // [esp+2Ch] [ebp-30h] BYREF\n  int v13; // [esp+4Ch] [ebp-10h]\n  unsigned int v14; // [esp+50h] [ebp-Ch]\n  int v15; // [esp+58h] [ebp-4h]\n\n  v0 = sub_9EDEA0(); /*0x80d47b*/\n  v13 = sub_9ED640(a1: v0); /*0x80d487*/\n  v1 = sub_9EDEA0(); /*0x80d48a*/\n  v2 = sub_9ED630(a1: v1); /*0x80d491*/\n  sub_3F5690(a1: v2); /*0x80d49a*/\n  v15 = 0; /*0x80d49f*/\n  for ( i = 0; i < 8; ++i ) /*0x80d4a6*/\n  {\n    v3 = (_DWORD *)sub_4A6920(a1: &i); /*0x80d4db*/\n    v10 = sub_A87B0E(a1: *v3, a2: 0, a3: &unk_12F6AE8, a4: &unk_12F6B00, a5: 0); /*0x80d4ed*/\n    if ( v10 != 0 && (*(unsigned __int8 (__fastcall **)(int))(*(_DWORD *)v10 + 4))(a1: v10) != 0 ) /*0x80d50c*/\n    {\n      v8 = *(unsigned __int16 *)(sub_9BD390(a1: dword_17C86FC) + 120); /*0x80d51d*/\n      v4 = sub_40B750(a1: v10); /*0x80d521*/\n      v7 = *(_DWORD *)(sub_443CB0(a1: v4) + 4); /*0x80d530*/\n      sub_9EDEA0(); /*0x80d535*/\n      sub_9ED740(a1: v9, a2: v7, a3: v8); /*0x80d53c*/\n      LOBYTE(v15) = 1; /*0x80d541*/\n      if ( (unsigned __int8)sub_40AFB0(a1: v9) != 0 ) /*0x80d552*/\n        v5 = sub_3F5750(a1: v12); /*0x80d56a*/\n      else\n        v5 = sub_3F5750(a1: v9); /*0x80d557*/\n      sub_9F15A0(a1: v5); /*0x80d560*/\n      sub_9EF460(a1: v10); /*0x80d57b*/\n      LOBYTE(v15) = 0; /*0x80d580*/\n      sub_3F56D0(a1: v9); /*0x80d587*/\n    }\n  }\n  v15 = -1; /*0x80d591*/\n  result = sub_3F56D0(a1: v12); /*0x80d59b*/\n  __writefsdword(0, v14); /*0x80d5a3*/\n  return result; /*0x80d5ab*/\n}",
+  "refs": [
+    {
+      "addr": "0x9edea0",
+      "name": "sub_9EDEA0"
+    },
+    {
+      "addr": "0x9ed640",
+      "name": "sub_9ED640"
+    },
+    {
+      "addr": "0x9ed630",
+      "name": "sub_9ED630"
+    },
+    {
+      "addr": "0x3f5690",
+      "name": "sub_3F5690"
+    },
+    {
+      "addr": "0x4a6920",
+      "name": "sub_4A6920"
+    },
+    {
+      "addr": "0xa87b0e",
+      "name": "sub_A87B0E"
+    },
+    {
+      "addr": "0x12f6ae8",
+      "name": "unk_12F6AE8"
+    },
+    {
+      "addr": "0x12f6b00",
+      "name": "unk_12F6B00"
+    },
+    {
+      "addr": "0x9bd390",
+      "name": "sub_9BD390"
+    },
+    {
+      "addr": "0x17c86fc",
+      "name": "dword_17C86FC"
+    },
+    {
+      "addr": "0x40b750",
+      "name": "sub_40B750"
+    },
+    {
+      "addr": "0x443cb0",
+      "name": "sub_443CB0"
+    },
+    {
+      "addr": "0x9ed740",
+      "name": "sub_9ED740"
+    },
+    {
+      "addr": "0x3f5750",
+      "name": "sub_3F5750"
+    },
+    {
+      "addr": "0x40afb0",
+      "name": "sub_40AFB0"
+    },
+    {
+      "addr": "0x9f15a0",
+      "name": "sub_9F15A0"
+    },
+    {
+      "addr": "0x9ef460",
+      "name": "sub_9EF460"
+    },
+    {
+      "addr": "0x3f56d0",
+      "name": "sub_3F56D0"
+    }
+  ]
+}

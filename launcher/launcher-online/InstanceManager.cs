@@ -15,7 +15,12 @@ namespace KungFuLauncher;
 internal sealed class InstanceManager
 {
     internal const int MaximumInstances = 8;
-    private const string OriginalImageHash = "98c43be72ac7600b368d4e185d75205376f79e938ea42e4b16ce8f8c4bae827b";
+    private static readonly HashSet<string> SupportedImageHashes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "98c43be72ac7600b368d4e185d75205376f79e938ea42e4b16ce8f8c4bae827b"
+    };
+    internal static string ImageName(string directory) => "gfld.dat";
+    private static bool HasImage(string directory) => File.Exists(Path.Combine(directory, ImageName(directory)));
     private const int MutexOffset = 0x7ce610;
     private readonly string root;
     private readonly JsonObject baseline;
@@ -41,10 +46,10 @@ internal sealed class InstanceManager
         {
             baseline = JsonNode.Parse(File.ReadAllText(config))!.AsObject();
             SourceDirectory = Resolve(baseline["client_directory"]!.GetValue<string>());
-            if (!File.Exists(Path.Combine(SourceDirectory, "gfld.dat")))
+            if (!HasImage(SourceDirectory))
             {
                 var candidates = new[] { root, Path.Combine(root, "功夫小子"), Path.Combine(root, "client") }
-                    .Where(path => File.Exists(Path.Combine(path, "gfld.dat"))).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                    .Where(path => HasImage(path) || Directory.Exists(Path.Combine(path, "Data"))).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
                 if (candidates.Length > 1) throw new IOException("找到多个游戏目录，请只保留一个与登录器配套的游戏目录，或在配置中明确指定。");
                 if (candidates.Length == 1) SourceDirectory = candidates[0];
             }
@@ -138,15 +143,38 @@ internal sealed class InstanceManager
         return process.ExitCode == 0;
     }
 
-    internal string UsageInstructions => $"1. 完整解压游戏文件夹，不要在压缩包内直接运行。\n2. 双击游戏文件夹中的登录器，填写账号密码，点击“启动选中窗口”。\n3. 可创建桌面快捷方式，但不要单独移动登录器 EXE。\n\n客户端更新已集成在登录器中，启动游戏前自动检查。无需安装或复制登录器 DLL。\n\n游戏目录：{SourceDirectory}\n登录器配置目录：{root}";
+    internal string UsageInstructions => $"1. 将启动器.exe 放进完整游戏目录，与 Data 文件夹同级（自动释放老登客户端 gfld.dat）。\n2. 双击启动器，连接配置、证书和所需组件会自动准备，无需手动复制 DLL。\n3. 选择窗口、填写账号密码，点击“启动游戏”。可创建桌面快捷方式。\n\n不要在压缩包内直接运行。游戏启动前会检查客户端更新；已有自定义连接配置会保留。\n\n游戏目录：{SourceDirectory}\n启动器配置目录：{root}";
+
+    internal void PrepareClientImage()
+    {
+        if (!Directory.Exists(Path.Combine(SourceDirectory, "Data")))
+            throw new IOException("请将启动器放到完整游戏目录，与 Data 文件夹同级。启动器内置 gfld.dat，但不包含完整游戏资源。");
+        string target = Path.Combine(SourceDirectory, "gfld.dat");
+        if (File.Exists(target))
+        {
+            if (!SupportedImageHashes.Contains(FileHash(target)))
+                throw new IOException("现有 gfld.dat 不是受支持的老登客户端，未覆盖原文件。请备份并移走该文件后重试。");
+            return;
+        }
+        byte[] bytes = ReadResource("gfld.dat");
+        if (!SupportedImageHashes.Contains(Hash(bytes))) throw new IOException("内置 gfld.dat 校验失败，请重新下载启动器。");
+        string temporary = target + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            File.WriteAllBytes(temporary, bytes);
+            try { File.Move(temporary, target); }
+            catch (IOException) when (File.Exists(target) && SupportedImageHashes.Contains(FileHash(target))) { }
+        }
+        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+    }
 
     internal void ValidateInstallation()
     {
         var missing = new List<string>();
-        foreach (string name in new[] { "gfld.dat", "server.ini", "Data/config.xml", "Data/config.spf2" })
+        foreach (string name in new[] { ImageName(SourceDirectory), "server.ini", "Data/config.xml", "Data/config.spf2" })
             if (!File.Exists(Path.Combine(SourceDirectory, name))) missing.Add(name);
         if (missing.Count != 0)
-            throw new IOException($"游戏文件不完整，或登录器配置的游戏目录不正确。\n\n游戏目录：{SourceDirectory}\n缺少：{string.Join("、", missing)}\n\n请重新完整解压游戏包。登录器应和 gfld.dat、Data 文件夹放在一起；本地调试版请联系管理员检查游戏目录配置。无需手动复制 DLL。");
+            throw new IOException($"游戏文件不完整，或登录器配置的游戏目录不正确。\n\n游戏目录：{SourceDirectory}\n缺少：{string.Join("、", missing)}\n\n请重新完整解压游戏包。登录器应和 gfld.dat（老登客户端）、Data 文件夹放在一起；本地调试版请联系管理员检查游戏目录配置。无需手动复制 DLL。");
         foreach (string key in new[] { "server_certificate", "login_certificate", "login_key" })
         {
             string? path = baseline[key] is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
@@ -193,38 +221,26 @@ internal sealed class InstanceManager
         if (!WindowCredentials.ValidKey(key)) throw new IOException("服务器账号保存密钥配置无效。");
         CredentialsKey = key!;
     }
-    internal void UpdateGameTitle(int number, string account)
+    internal const string GameWindowTitle = "KK - 神兵天下 [1.13.0.594]";
+    internal void UpdateGameTitle(int number)
     {
-        if (string.IsNullOrWhiteSpace(account)) return;
         using var game = FindGame(number);
         if (game is null) return;
         game.Refresh();
         var window = game.MainWindowHandle;
         if (window == IntPtr.Zero) return;
-        var key = (game.Id, game.StartTime.ToFileTimeUtc());
-        if (!gameTitles.TryGetValue(key, out var state))
-        {
-            var title = new StringBuilder(256); GetWindowTextW(window, title, title.Capacity);
-            state = (title.ToString(), false);
-        }
-        bool loginExists = false, loginVisible = false, browserVisible = false;
+        // Native login locates its parent by the original caption. Wait until
+        // its child exists before changing the displayed title.
+        bool loginExists = false;
         EnumChildWindows(window, (child, _) => {
             var name = new StringBuilder(64); GetClassNameW(child, name, name.Capacity);
-            if (name.ToString() == "LoginChildWndClass") { loginExists = true; loginVisible |= IsWindowVisible(child); }
-            if (name.ToString() == "Internet Explorer_Server") browserVisible |= IsWindowVisible(child);
+            if (name.ToString() == "LoginChildWndClass") loginExists = true;
             return true;
         }, IntPtr.Zero);
-        // Native login initialization depends on its original parent caption.
-        // Never rename during startup, login, or recreation of the login view.
-        bool seen = state.SeenLogin || loginVisible;
-        bool showAccount = CanShowAccountTitle(seen, loginExists, loginVisible, browserVisible);
-        string desired = showAccount ? "功夫小子 - " + account : state.Original;
+        if (!loginExists) return;
         var current = new StringBuilder(256); GetWindowTextW(window, current, current.Capacity);
-        if (current.ToString() != desired) SetWindowTextW(window, desired);
-        gameTitles[key] = (state.Original, loginExists && seen);
+        if (current.ToString() != GameWindowTitle) SetWindowTextW(window, GameWindowTitle);
     }
-    private readonly Dictionary<(int PID, long Created), (string Original, bool SeenLogin)> gameTitles = new();
-    internal static bool CanShowAccountTitle(bool seenLogin, bool loginExists, bool loginVisible, bool browserVisible) => seenLogin && loginExists && !loginVisible && !browserVisible;
     private delegate bool ChildWindowCallback(IntPtr window, IntPtr parameter);
     [DllImport("user32.dll")] private static extern bool EnumChildWindows(IntPtr window, ChildWindowCallback callback, IntPtr parameter);
     [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr window);
@@ -237,7 +253,7 @@ internal sealed class InstanceManager
 
     internal Process? FindGame(int number)
     {
-        string expected = Path.Combine(ClientDirectory(number), "gfld.dat");
+        string expected = Path.Combine(ClientDirectory(number), ImageName(ClientDirectory(number)));
         if (SharedClient)
         {
             Process? process = null;
@@ -256,7 +272,7 @@ internal sealed class InstanceManager
             bool retained = false;
             try
             {
-                if (!process.ProcessName.StartsWith("gfld", StringComparison.OrdinalIgnoreCase)) continue;
+                if (!process.ProcessName.Equals("gfld.dat", StringComparison.OrdinalIgnoreCase)) continue;
                 if (string.Equals(process.MainModule?.FileName, expected, StringComparison.OrdinalIgnoreCase))
                 {
                     retained = true;
@@ -283,6 +299,8 @@ internal sealed class InstanceManager
         if (number < 1 || number > WindowCount) throw new ArgumentOutOfRangeException(nameof(number));
         if (SharedClient) CheckSharedBridgeDirectory();
         await RestoreLoginCertificateAsync(progress);
+        PrepareClientImage();
+        PrepareConnectionFiles(SourceDirectory, SharedClient ? 1 : number);
         ValidateInstallation();
         // Serialize update and preparation across launcher windows.
         string stateDirectory = Path.Combine(root, "launcher-components");
@@ -377,13 +395,14 @@ internal sealed class InstanceManager
         progress.Report(filled ? $"窗口 {number} 已填写保存的账号密码，请在游戏里点击登录。" : $"窗口 {number} 未找到可填写的登录界面；若已登录，无需重复操作。");
     }
 
+    private static byte[] ReadResource(string name)
+    {
+        using var resource = Assembly.GetExecutingAssembly().GetManifestResourceStream(name) ?? throw new IOException("缺少登录组件：" + name);
+        using var buffer = new MemoryStream(); resource.CopyTo(buffer); return buffer.ToArray();
+    }
+
     private void StartLoginSkin(int number, Process game)
     {
-        byte[] ReadResource(string name)
-        {
-            using var resource = Assembly.GetExecutingAssembly().GetManifestResourceStream(name) ?? throw new IOException("缺少登录界面组件。");
-            using var buffer = new MemoryStream(); resource.CopyTo(buffer); return buffer.ToArray();
-        }
         byte[] skin = ReadResource("LoginSkin.dll"), host = ReadResource("LoginSkinHost.exe");
         // Versioned files let existing native windows keep their loaded DLL
         // while a new launcher ships an updated design.
@@ -401,7 +420,7 @@ internal sealed class InstanceManager
         if (!File.Exists(hostPath) || FileHash(hostPath) != Hash(host)) File.WriteAllBytes(hostPath, host);
         var start = new ProcessStartInfo(hostPath) { WorkingDirectory = directory, UseShellExecute = false, CreateNoWindow = true };
         start.ArgumentList.Add(game.Id.ToString());
-        start.ArgumentList.Add(Path.Combine(ClientDirectory(number), "gfld.dat"));
+        start.ArgumentList.Add(Path.Combine(ClientDirectory(number), ImageName(ClientDirectory(number))));
         start.ArgumentList.Add(skinPath);
         using var helper = Process.Start(start) ?? throw new IOException("无法启动登录界面组件。");
     }
@@ -425,14 +444,15 @@ internal sealed class InstanceManager
             }
             Directory.Move(staging, directory);
         }
-        string image = Path.Combine(directory, "gfld.dat");
+        string image = Path.Combine(directory, ImageName(directory));
         byte[] imageBytes = File.ReadAllBytes(image);
         if (imageBytes.Length < MutexOffset + 10) throw new IOException("游戏文件不完整。");
         // Restore the known mutex bytes for whole-file verification before changing this instance's name.
         string currentMutex = Encoding.ASCII.GetString(imageBytes, MutexOffset, 9);
         if (currentMutex != "KungfuKid" && currentMutex != "KungfuKi2" && currentMutex != $"Kungfu{number:000}") throw new IOException("不支持的游戏版本，未修改客户端。");
         Encoding.ASCII.GetBytes("KungfuKid\0").CopyTo(imageBytes, MutexOffset);
-        if (!Hash(imageBytes).Equals(OriginalImageHash, StringComparison.OrdinalIgnoreCase)) throw new IOException("游戏文件校验不一致，未修改客户端。");
+        if (!SupportedImageHashes.Contains(Hash(imageBytes))) throw new IOException("游戏文件校验不一致，未修改客户端。");
+        PrepareNativeLogin(directory);
         if (number > 1 && !SharedClient)
         {
             Encoding.ASCII.GetBytes(number == 2 ? "KungfuKi2\0" : $"Kungfu{number:000}\0").CopyTo(imageBytes, MutexOffset);
@@ -449,11 +469,11 @@ internal sealed class InstanceManager
         string nativeCertificate = Path.Combine(directory, "zz.crt");
         if (!File.Exists(nativeCertificate) || !File.ReadAllBytes(nativeCertificate).AsSpan().SequenceEqual(loginCertificate))
             File.WriteAllBytes(nativeCertificate, loginCertificate);
-        ReplacePort(Path.Combine(directory, "server.ini"), @"(?m)^port=\d+", "port=" + LoginPort(portWindow));
-        ReplacePort(Path.Combine(directory, "Data", "config.xml"), "Port=\"[0-9]+\"", "Port=\"" + SDKPort(portWindow) + "\"");
+        PrepareConnectionFiles(directory, portWindow);
         Directory.CreateDirectory(InstanceDirectory(number));
         var config = (JsonObject)baseline.DeepClone();
         config["client_directory"] = directory;
+        config["client_executable"] = Path.GetFileName(image);
         config["client_sha256"] = Hash(imageBytes);
         config["login_port"] = LoginPort(portWindow); config["sdk_port"] = SDKPort(portWindow); config["game_port"] = GamePort(portWindow);
         if (SharedClient) { Directory.CreateDirectory(SharedDirectory); config["control_directory"] = SharedDirectory; }
@@ -464,17 +484,99 @@ internal sealed class InstanceManager
         using var buffer = new MemoryStream(); resource.CopyTo(buffer);
         string helper = Path.Combine(SharedClient ? SharedDirectory : InstanceDirectory(number), "OnlineBridge.exe");
         byte[] helperBytes = buffer.ToArray();
-        if (!File.Exists(helper) || FileHash(helper) != Hash(helperBytes)) File.WriteAllBytes(helper, helperBytes);
+        InstallBridge(helper, helperBytes);
         return path;
     }
 
-    private static void ReplacePort(string path, string pattern, string value)
+    internal static void InstallBridge(string helper, byte[] bytes)
     {
-        string content = Encoding.Latin1.GetString(File.ReadAllBytes(path));
-        if (!System.Text.RegularExpressions.Regex.IsMatch(content, pattern)) throw new IOException("缺少客户端端口配置：" + path);
-        string updated = System.Text.RegularExpressions.Regex.Replace(content, pattern, value);
-        if (updated != content) File.WriteAllBytes(path, Encoding.Latin1.GetBytes(updated));
+        if (File.Exists(helper) && FileHash(helper) == Hash(bytes)) return;
+        foreach (var process in Process.GetProcessesByName("OnlineBridge"))
+        {
+            using (process)
+            {
+                string? running;
+                try { running = process.MainModule?.FileName; }
+                catch (InvalidOperationException) { continue; }
+                catch (System.ComponentModel.Win32Exception error) { throw new IOException("无法检查网络组件状态，请关闭游戏和旧启动器后重试。", error); }
+                if (string.Equals(running, helper, StringComparison.OrdinalIgnoreCase))
+                    throw new IOException("网络组件有新版本，但旧版本仍在运行。请退出所有游戏窗口，等待约 30 秒后重试。当前游戏连接不会被强制断开。");
+            }
+        }
+        string temporary = helper + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            File.WriteAllBytes(temporary, bytes);
+            File.Move(temporary, helper, true);
+        }
+        catch (IOException error) { throw new IOException("网络组件正在退出或被占用，请稍后重试。原组件未被截断。", error); }
+        finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
+
+    internal static void PrepareNativeLogin(string directory)
+    {
+        foreach (string name in new[] { "libcrypto-1_1.dll", "libssl-1_1.dll", "SDError.dll" })
+        {
+            byte[] bytes = ReadResource(name);
+            string target = Path.Combine(directory, name);
+            if (File.Exists(target) && FileHash(target) == Hash(bytes)) continue;
+            if (File.Exists(target))
+            {
+                string backup = Path.Combine(directory, "launcher-components", "native-login-backups", FileHash(target), name);
+                Directory.CreateDirectory(Path.GetDirectoryName(backup)!);
+                if (!File.Exists(backup)) File.Copy(target, backup);
+            }
+            string temporary = target + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                File.WriteAllBytes(temporary, bytes);
+                File.Move(temporary, target, true);
+            }
+            catch (IOException error)
+            {
+                throw new IOException($"无法更新登录组件 {name}。请退出该目录的所有游戏窗口后重试。原文件已保留或备份。", error);
+            }
+            finally { if (File.Exists(temporary)) File.Delete(temporary); }
+        }
+    }
+
+    internal static void PrepareConnectionFiles(string directory, int window)
+    {
+        string xml = Encoding.Latin1.GetString(ReadResource("client-config.xml"));
+        xml = System.Text.RegularExpressions.Regex.Replace(xml, "Port=\"[0-9]+\"", "Port=\"" + SDKPort(window) + "\"");
+        var files = new Dictionary<string, byte[]>
+        {
+            ["Data/config.xml"] = Encoding.Latin1.GetBytes(xml),
+            ["server.ini"] = Encoding.ASCII.GetBytes("[server]\r\nip=127.0.0.1\r\nport=" + LoginPort(window) + "\r\n")
+        };
+        // The embedded server list contains one entry. Original clients may
+        // retain Index=2, which resolves to an empty IP and port zero.
+        string settings = Path.Combine(directory, "Settings.xml");
+        if (File.Exists(settings))
+        {
+            string original = File.ReadAllText(settings, Encoding.Latin1);
+            var selection = new System.Text.RegularExpressions.Regex(@"(<LoginServer\b[^>]*\bIndex\s*=\s*"")[^""]*("")");
+            if (!selection.IsMatch(original)) throw new IOException("Settings.xml 缺少选区设置，未修改其他玩家设置。");
+            string updated = selection.Replace(original, match => match.Groups[1].Value + "0" + match.Groups[2].Value);
+            files["Settings.xml"] = Encoding.Latin1.GetBytes(updated);
+        }
+        foreach (var file in files)
+        {
+            string target = Path.Combine(directory, file.Key);
+            if (File.Exists(target) && FileHash(target) == Hash(file.Value)) continue;
+            if (File.Exists(target))
+            {
+                string backup = Path.Combine(directory, "launcher-components", "connection-backups", FileHash(target), file.Key);
+                Directory.CreateDirectory(Path.GetDirectoryName(backup)!);
+                if (!File.Exists(backup)) File.Copy(target, backup);
+            }
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            string temporary = target + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try { File.WriteAllBytes(temporary, file.Value); File.Move(temporary, target, true); }
+            finally { if (File.Exists(temporary)) File.Delete(temporary); }
+        }
+    }
+
     internal static string Hash(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
     internal static string FileHash(string path) { using var stream = File.OpenRead(path); return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant(); }
     private static void CheckAvailablePorts(int number)

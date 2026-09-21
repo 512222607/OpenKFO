@@ -1,0 +1,14 @@
+{
+  "addr": "0x92c870",
+  "code": "int __fastcall sub_92C870(int a1)\n{\n  sub_92C790(a1); /*0x92c87a*/\n  return sub_9719E0(a1); /*0x92c887*/\n}",
+  "refs": [
+    {
+      "addr": "0x92c790",
+      "name": "sub_92C790"
+    },
+    {
+      "addr": "0x9719e0",
+      "name": "sub_9719E0"
+    }
+  ]
+}

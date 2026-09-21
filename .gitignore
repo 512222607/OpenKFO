@@ -81,3 +81,9 @@ ephemeral/
 *.7z
 *.spf*
 *.dat
+
+# Machine-specific deployment endpoints and private settings
+/config/network.json
+**/settings.private.json
+# Local protocol debugging screenshots (source and analysis remain tracked)
+/protocol/nixiang/**/*.png

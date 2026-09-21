@@ -1,0 +1,37 @@
+{
+  "survey": {
+    "metadata": {
+      "path": "C:\\Users\\24032\\Desktop\\code\\kungfu-mock-server\\research\\2026-09-06\\spc32\\work\\game-runtime.bin.i64",
+      "module": "game-runtime.bin",
+      "arch": "32",
+      "base_address": "0x0",
+      "image_size": "0x1e19000",
+      "md5": "207f71059e2580b8c0e60344f7a53d05",
+      "sha256": "707450b209937b2d3e94a68ffe8f9841821ff048fd1cc0d8017d1fdddf493c3b"
+    },
+    "statistics": {
+      "total_functions": 31308,
+      "named_functions": 45,
+      "library_functions": 0,
+      "unnamed_functions": 31263,
+      "total_strings": 14808,
+      "total_segments": 1
+    },
+    "segments": [
+      {
+        "name": "seg000",
+        "start": "0x0",
+        "end": "0x1e19000",
+        "size": "0x1e19000",
+        "permissions": "---"
+      }
+    ],
+    "entrypoints": [],
+    "_note": "Binary has 31308 functions; xref analysis was limited to the first 10000 for performance."
+  },
+  "imports": {
+    "data": [],
+    "next_offset": null
+  },
+  "note": "E-imports: Offline raw runtime image (single seg000, base 0); IDB imports query returns []. No IAT repair attempted. Existing read-only static message dispatch investigation can use code and embedded data, not claim a complete import reconstruction."
+}

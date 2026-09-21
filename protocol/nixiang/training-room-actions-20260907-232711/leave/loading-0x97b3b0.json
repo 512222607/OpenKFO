@@ -1,0 +1,38 @@
+{
+  "addr": "0x97b3b0",
+  "code": "int __thiscall sub_97B3B0(_DWORD *this, int a2)\n{\n  int result; // eax\n  int v3; // [esp+0h] [ebp-Ch]\n  int v5; // [esp+8h] [ebp-4h]\n\n  result = (int)this; /*0x97b3b9*/\n  *(this + 35) = a2; /*0x97b3bf*/\n  if ( a2 == 0 ) /*0x97b3c9*/\n    return result; /*0x97b447*/\n  sub_4A0FA0(this, a2: 4); /*0x97b3d0*/\n  if ( dword_17C86EC != 0 ) /*0x97b3dc*/\n  {\n    v3 = sub_538980(a1: dword_17C86EC); /*0x97b3e9*/\n    (*(void (__stdcall **)(int, int))(*(_DWORD *)v3 + 40))(a1: v3, a2: 2); /*0x97b3fa*/\n  }\n  result = sub_809120(a1: dword_17C8708); /*0x97b402*/\n  v5 = result; /*0x97b407*/\n  if ( result != 0 ) /*0x97b40e*/\n    result = sub_9E94B0(a1: result); /*0x97b413*/\n  if ( v5 == 0 ) /*0x97b41c*/\n    return result; /*0x97b447*/\n  result = (int)this; /*0x97b41e*/\n  if ( *(this + 168) == 0 ) /*0x97b428*/\n    return result; /*0x97b447*/\n  result = sub_411840(a1: *(this + 168)); /*0x97b433*/\n  if ( (_BYTE)result != 0 ) /*0x97b43d*/\n    return sub_976370(a1: this); /*0x97b442*/\n  return result; /*0x97b447*/\n}",
+  "refs": [
+    {
+      "addr": "0x4a0fa0",
+      "name": "sub_4A0FA0"
+    },
+    {
+      "addr": "0x538980",
+      "name": "sub_538980"
+    },
+    {
+      "addr": "0x17c86ec",
+      "name": "dword_17C86EC"
+    },
+    {
+      "addr": "0x809120",
+      "name": "sub_809120"
+    },
+    {
+      "addr": "0x17c8708",
+      "name": "dword_17C8708"
+    },
+    {
+      "addr": "0x9e94b0",
+      "name": "sub_9E94B0"
+    },
+    {
+      "addr": "0x411840",
+      "name": "sub_411840"
+    },
+    {
+      "addr": "0x976370",
+      "name": "sub_976370"
+    }
+  ]
+}

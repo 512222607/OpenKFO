@@ -1,0 +1,38 @@
+{
+  "addr": "0x81adc0",
+  "code": "int __stdcall sub_81ADC0(_DWORD *a1, int a2)\n{\n  __int64 v2; // rax\n  __int64 v3; // rax\n  int v4; // eax\n  __int64 v5; // kr00_8\n  int v7; // [esp-4h] [ebp-30h]\n  int v8; // [esp+1Ch] [ebp-10h]\n  int v9; // [esp+20h] [ebp-Ch]\n  int v10; // [esp+28h] [ebp-4h]\n\n  LODWORD(v2) = sub_808C70(a1: *a1, a2: a1[1]); /*0x81ade1*/\n  v10 = v2; /*0x81ade6*/\n  if ( (_DWORD)v2 == 0 ) /*0x81aded*/\n    return v2; /*0x81ae92*/\n  v3 = sub_3F2AA0(a1: dword_17C86FC); /*0x81ae00*/\n  v4 = sub_808C70(a1: v3, a2: HIDWORD(v3)); /*0x81ae0d*/\n  v9 = sub_807BC0(a1: v4); /*0x81ae1e*/\n  v5 = sub_3F1000(a1: v10); /*0x81ae2b*/\n  v2 = sub_3F2AA0(a1: dword_17C86FC); /*0x81ae33*/\n  if ( v5 == v2 ) /*0x81ae4a*/\n    return v2; /*0x81ae92*/\n  v8 = sub_807BC0(a1: v10); /*0x81ae65*/\n  if ( v8 > v9 ) /*0x81ae6e*/\n    LOBYTE(v8) = v8 - 1; /*0x81ae76*/\n  v7 = sub_43E0F0(a1: v10); /*0x81ae81*/\n  sub_4A1310(); /*0x81ae86*/\n  LODWORD(v2) = sub_94A4A0(a1: v8, a2: v7); /*0x81ae8d*/\n  return v2; /*0x81ae92*/\n}",
+  "refs": [
+    {
+      "addr": "0x808c70",
+      "name": "sub_808C70"
+    },
+    {
+      "addr": "0x3f2aa0",
+      "name": "sub_3F2AA0"
+    },
+    {
+      "addr": "0x17c86fc",
+      "name": "dword_17C86FC"
+    },
+    {
+      "addr": "0x807bc0",
+      "name": "sub_807BC0"
+    },
+    {
+      "addr": "0x3f1000",
+      "name": "sub_3F1000"
+    },
+    {
+      "addr": "0x43e0f0",
+      "name": "sub_43E0F0"
+    },
+    {
+      "addr": "0x4a1310",
+      "name": "sub_4A1310"
+    },
+    {
+      "addr": "0x94a4a0",
+      "name": "sub_94A4A0"
+    }
+  ]
+}

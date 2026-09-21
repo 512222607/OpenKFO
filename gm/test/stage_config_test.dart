@@ -304,4 +304,33 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('读取客户端地图条件'), findsNothing);
   });
+  testWidgets('target resource mismatch is visible and cannot be saved', (
+    tester,
+  ) async {
+    var saved = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StageConfigPage(
+          environment: '线上服务器',
+          api: (r) async {
+            if (r['operation'] == 'stages_save') saved = true;
+            return {
+              'revision': 1,
+              'disabled_maps': <int>[],
+              'client_hash': 'a'.padRight(64, 'a'),
+              'server_client_hash': 'b'.padRight(64, 'b'),
+              'requirements': [
+                {'map_id': 1201, 'name': '训练山', 'title_level': 1},
+              ],
+            };
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('版本不一致：当前关卡可能无法进入'), findsOneWidget);
+    await tester.tap(find.text('保存关卡开关'));
+    await tester.pumpAndSettle();
+    expect(saved, isFalse);
+  });
 }

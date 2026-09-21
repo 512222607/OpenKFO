@@ -1,0 +1,26 @@
+{
+  "addr": "0x815350",
+  "code": "int __stdcall sub_815350(int a1, int a2)\n{\n  int result; // eax\n  int v3; // eax\n\n  sub_980070(); /*0x81535b*/\n  sub_97FDE0(a1: 6); /*0x815362*/\n  result = sub_539420(a1: dword_17C870C); /*0x81536d*/\n  if ( result == 0 ) /*0x815374*/\n    return result; /*0x815391*/\n  v3 = sub_91E3C0(a1: dword_17C870C); /*0x81537c*/\n  return (*(int (__thiscall **)(int, int))(*(_DWORD *)v3 + 12))(a1: v3, a2: v3); /*0x81538f*/\n}",
+  "refs": [
+    {
+      "addr": "0x980070",
+      "name": "sub_980070"
+    },
+    {
+      "addr": "0x97fde0",
+      "name": "sub_97FDE0"
+    },
+    {
+      "addr": "0x539420",
+      "name": "sub_539420"
+    },
+    {
+      "addr": "0x17c870c",
+      "name": "dword_17C870C"
+    },
+    {
+      "addr": "0x91e3c0",
+      "name": "sub_91E3C0"
+    }
+  ]
+}

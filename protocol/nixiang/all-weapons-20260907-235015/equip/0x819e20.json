@@ -1,0 +1,10 @@
+{
+  "addr": "0x819e20",
+  "code": "void __stdcall sub_819E20(int a1, int a2)\n{\n  int v2; // [esp+0h] [ebp-10h]\n\n  if ( a1 != 0 ) /*0x819e2d*/\n  {\n    v2 = sub_40BD60(); /*0x819e45*/\n    (*(void (__thiscall **)(int, int, int))(*(_DWORD *)v2 + 452))(a1: v2, a2: a1, a3: a1 + 4); /*0x819e5e*/\n  }\n}",
+  "refs": [
+    {
+      "addr": "0x40bd60",
+      "name": "sub_40BD60"
+    }
+  ]
+}

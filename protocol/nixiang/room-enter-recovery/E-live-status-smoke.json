@@ -1,0 +1,18 @@
+{
+  "timestamp": "2026-09-07T23:00:38.690151",
+  "port": 10035,
+  "kind": "isolated-smoke-session-not-real-client",
+  "responses": [
+    {
+      "message_id": 3550,
+      "length": 12,
+      "payload_hex": "ed0704040004040404040404"
+    },
+    {
+      "message_id": 2270,
+      "length": 8,
+      "payload_hex": "0000000000000000"
+    }
+  ],
+  "result": "PASS: opaque 3550 accepted and next request answered on same connection"
+}

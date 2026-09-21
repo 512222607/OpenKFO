@@ -1,0 +1,58 @@
+{
+  "addr": "0x81d920",
+  "code": "int __stdcall sub_81D920(int a1, int a2)\n{\n  int v2; // eax\n  int result; // eax\n  int v4; // [esp+4h] [ebp-30h]\n  _BYTE v5[28]; // [esp+Ch] [ebp-28h] BYREF\n  unsigned int v6; // [esp+28h] [ebp-Ch]\n  int v7; // [esp+30h] [ebp-4h]\n\n  dword_17C86D0 = 0; /*0x81d948*/\n  if ( dword_17C86CC != 0 ) /*0x81d959*/\n  {\n    v2 = sub_80B800(this: (_DWORD *)dword_17C8708); /*0x81d961*/\n    sub_7EB210(a1: v2); /*0x81d968*/\n    sub_A2CA00(a1: 21428, a2: 0); /*0x81d974*/\n  }\n  if ( dword_17C8710 != 0 && (unsigned int)sub_483D50(a1: dword_17C8710) >= 3 ) /*0x81d993*/\n  {\n    result = sub_81CF60(); /*0x81d995*/\n  }\n  else\n  {\n    sub_3F5650(a1: 12364840); /*0x81d9a4*/\n    v7 = 0; /*0x81d9a9*/\n    v4 = sub_3F3820(); /*0x81d9b5*/\n    (*(void (__thiscall **)(int, _BYTE *, _DWORD, char *, _DWORD))(*(_DWORD *)v4 + 448))( /*0x81d9d3*/\n      a1: v4,\n      a2: v5,\n      a3: 0,\n      a4: (char *)&loc_82CF5F + 1,\n      a5: 0);\n    v7 = -1; /*0x81d9d5*/\n    result = sub_3F56D0(a1: v5); /*0x81d9df*/\n  }\n  __writefsdword(0, v6); /*0x81d9e7*/\n  return result; /*0x81d9ef*/\n}",
+  "refs": [
+    {
+      "addr": "0x17c86d0",
+      "name": "dword_17C86D0"
+    },
+    {
+      "addr": "0x80b800",
+      "name": "sub_80B800"
+    },
+    {
+      "addr": "0x17c8708",
+      "name": "dword_17C8708"
+    },
+    {
+      "addr": "0x7eb210",
+      "name": "sub_7EB210"
+    },
+    {
+      "addr": "0xa2ca00",
+      "name": "sub_A2CA00"
+    },
+    {
+      "addr": "0x17c86cc",
+      "name": "dword_17C86CC"
+    },
+    {
+      "addr": "0x81cf60",
+      "name": "sub_81CF60"
+    },
+    {
+      "addr": "0x3f5650",
+      "name": "sub_3F5650"
+    },
+    {
+      "addr": "0x3f3820",
+      "name": "sub_3F3820"
+    },
+    {
+      "addr": "0x82cf5f",
+      "name": "loc_82CF5F"
+    },
+    {
+      "addr": "0x3f56d0",
+      "name": "sub_3F56D0"
+    },
+    {
+      "addr": "0x17c8710",
+      "name": "dword_17C8710"
+    },
+    {
+      "addr": "0x483d50",
+      "name": "sub_483D50"
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text.Json;
 
 namespace KungFuLauncher;
@@ -15,7 +15,7 @@ internal sealed class LauncherForm : Form
     private readonly Label serverDetail = new() { Text = "健康检查尚未完成", AutoSize = true, ForeColor = Color.DimGray };
     private readonly Label activity = new() { Text = "选择一个窗口启动；每个游戏窗口请登录不同账号。", AutoSize = false, Dock = DockStyle.Fill };
     private readonly ListView windows = new() { View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false, Dock = DockStyle.Fill, BorderStyle = BorderStyle.None };
-    private readonly Button launch = MakeButton("启动选中窗口", true);
+    private readonly Button launch = MakeButton("启动游戏", true);
     private readonly Button another = MakeButton("再开一个窗口", false);
     private readonly CheckBox hidePassword = new() { Text = "隐藏密码", AutoSize = true };
     private readonly Button refresh = MakeButton("刷新服务器状态", false);
@@ -37,24 +37,25 @@ internal sealed class LauncherForm : Form
         localServer = new LocalServerController(instances.RootDirectory, instances.Endpoint);
         AutoScaleDimensions = new SizeF(96, 96);
         AutoScaleMode = AutoScaleMode.Dpi;
-        Text = $"功夫小子 · {instances.EnvironmentName}登录器";
+        Text = "启动器";
         Font = new Font("Microsoft YaHei UI", 10);
-        ClientSize = new Size(900, 850);
-        MinimumSize = new Size(915, 885);
+        ClientSize = new Size(960, 740);
+        MinimumSize = new Size(900, 740);
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = Color.FromArgb(242, 245, 250);
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(28), ColumnCount = 1, RowCount = 7 };
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, localServer.Supported ? 195 : 145));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(24), ColumnCount = 1, RowCount = 5 };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, localServer.Supported ? 166 : 112));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 63));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 62));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
         Controls.Add(layout);
-        var heading = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false };
-        heading.Controls.Add(new Label { Text = "功夫小子", AutoSize = true, Font = new Font("Microsoft YaHei UI", 24, FontStyle.Bold), ForeColor = Color.FromArgb(25, 40, 65) });
-        heading.Controls.Add(new Label { Text = instances.EnvironmentDescription, AutoSize = true, ForeColor = Color.DimGray });
+        var heading = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty };
+        heading.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        heading.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        heading.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        heading.Controls.Add(new Label { Text = instances.EnvironmentDescription, AutoSize = true, Anchor = AnchorStyles.Left, ForeColor = Color.DimGray }, 0, 0);
         var updates = new LinkLabel { Text = "客户端更新说明", AutoSize = true };
         updates.LinkClicked += (_, _) =>
         {
@@ -67,7 +68,8 @@ internal sealed class LauncherForm : Form
             dialog.Controls.Add(new TextBox { Text = text, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Dock = DockStyle.Fill });
             dialog.ShowDialog(this);
         };
-        heading.Controls.Add(updates);
+        updates.Anchor = AnchorStyles.Right;
+        heading.Controls.Add(updates, 1, 0);
         layout.Controls.Add(heading, 0, 0);
         var status = new TableLayoutPanel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(14), Margin = new Padding(0, 5, 0, 8), ColumnCount = 2 };
         status.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); status.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 185));
@@ -80,8 +82,19 @@ internal sealed class LauncherForm : Form
         if(localServer.Supported){serverActions.Controls.Add(startServer);serverActions.Controls.Add(stopServer);details.Controls.Add(new Label{Text="停止服务器会断开所有本地玩家。",AutoSize=true,ForeColor=Color.DimGray});}
         status.Controls.Add(details, 0, 0); status.Controls.Add(serverActions, 1, 0);
         layout.Controls.Add(status, 0, 1);
-        layout.Controls.Add(new Label { Text = "游戏窗口", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, Font = new Font(Font, FontStyle.Bold) }, 0, 2);
-        windows.Columns.Add("窗口", 300); windows.Columns.Add("状态", 440);
+        var body = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty };
+        body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42));
+        body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 58));
+        body.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.Controls.Add(body, 0, 2);
+        var windowPanel = new TableLayoutPanel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(14), ColumnCount = 1, RowCount = 2, Margin = new Padding(0, 0, 12, 0) };
+        windowPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        windowPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        windowPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        windowPanel.Controls.Add(new Label { Text = "游戏窗口", AutoSize = true, Font = new Font(Font, FontStyle.Bold) }, 0, 0);
+        body.Controls.Add(windowPanel, 0, 0);
+        windows.Columns.Add("窗口 / 账号", 220); windows.Columns.Add("状态", 90);
+        windows.SizeChanged += (_, _) => { if (windows.ClientSize.Width > 120) { windows.Columns[1].Width = 90; windows.Columns[0].Width = windows.ClientSize.Width - 94; } };
         for (int number = 1; number <= instances.WindowCount; number++)
         {
             var item = new ListViewItem("窗口 " + number) { Tag = number };
@@ -90,14 +103,29 @@ internal sealed class LauncherForm : Form
         }
         windows.Items[0].Selected = true;
         windows.DoubleClick += async (_, _) => await LaunchSelected();
-        layout.Controls.Add(windows, 0, 3);
-        var credentials = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(0, 8, 0, 0) };
-        var inputs = new FlowLayoutPanel { AutoSize = true, WrapContents = true, MaximumSize = new Size(800, 0) };
+        windowPanel.Controls.Add(windows, 0, 1);
+        var credentials = new TableLayoutPanel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(18), ColumnCount = 1, RowCount = 8, AutoScroll = true, Margin = Padding.Empty };
+        credentials.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        foreach (int height in new[] { 32, 46, 24, 42, 24, 42, 44, 54 }) credentials.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
+        credentials.RowStyles[1].SizeType = SizeType.AutoSize;
+        credentials.RowStyles[7].SizeType = SizeType.AutoSize;
+        credentialTitle.Font = new Font(Font, FontStyle.Bold);
+        credentials.Controls.Add(credentialTitle, 0, 0);
+        credentials.Controls.Add(new Label { Text = "账号不存在时自动注册。\n已有账号请输入正确密码。", AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(3, 0, 3, 12), ForeColor = Color.DimGray }, 0, 1);
+        credentials.Controls.Add(new Label { Text = "账号", AutoSize = true }, 0, 2);
+        account.Dock = DockStyle.Top; account.PlaceholderText = "输入账号";
+        credentials.Controls.Add(account, 0, 3);
+        credentials.Controls.Add(new Label { Text = "密码", AutoSize = true }, 0, 4);
+        password.Dock = DockStyle.Top; password.PlaceholderText = "输入密码";
+        credentials.Controls.Add(password, 0, 5);
         var save = MakeButton("保存账号密码", false);
-        inputs.Controls.AddRange(new Control[] { new Label { Text = "账号", AutoSize = true }, account, new Label { Text = "密码", AutoSize = true }, password, hidePassword, save });
+        var credentialActions = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = Padding.Empty };
+        hidePassword.Margin = new Padding(0, 9, 20, 0);
+        credentialActions.Controls.AddRange(new Control[] { hidePassword, save });
+        credentials.Controls.Add(credentialActions, 0, 6);
         hidePassword.CheckedChanged += (_, _) => password.UseSystemPasswordChar = hidePassword.Checked;
-        credentials.Controls.AddRange(new Control[] { credentialTitle, new Label { Text = "登录即注册账号（账号不存在时自动注册）；已有账号需输入正确密码。", AutoSize = true, ForeColor = Color.DimGray }, inputs, new Label { Text = "按窗口分别记住；切换窗口、启动或关闭登录器时自动保存。清空两项可移除记录。", AutoSize = true, ForeColor = Color.DimGray } });
-        layout.Controls.Add(credentials, 0, 4);
+        credentials.Controls.Add(new Label { Text = "账号按窗口分别记住，启动或切换窗口时自动保存。\n清空账号和密码后保存，可移除本窗口记录。", AutoSize = true, Dock = DockStyle.Fill, ForeColor = Color.DimGray, Font = new Font(Font.FontFamily, 9) }, 0, 7);
+        body.Controls.Add(credentials, 1, 0);
         save.Click += (_, _) => { if (SaveCredentials()) activity.Text = $"窗口 {credentialWindow} 的账号密码已保存在本地。"; };
         windows.SelectedIndexChanged += (_, _) =>
         {
@@ -112,15 +140,15 @@ internal sealed class LauncherForm : Form
         var logs = MakeButton("查看窗口日志", false);
         var help = MakeButton("使用说明", false);
         help.Width = 88;
-        help.Click += (_, _) => MessageBox.Show(this, instances.UsageInstructions, "登录器使用说明", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        help.Click += (_, _) => MessageBox.Show(this, instances.UsageInstructions, "启动器使用说明", MessageBoxButtons.OK, MessageBoxIcon.Information);
         actions.Controls.AddRange(new Control[] { launch, another, focus, logs, help });
         another.Visible = false;
-        layout.Controls.Add(actions, 0, 5);
+        layout.Controls.Add(actions, 0, 3);
         var footer = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2 };
         footer.RowStyles.Add(new RowStyle(SizeType.Percent, 55)); footer.RowStyles.Add(new RowStyle(SizeType.Percent, 45));
         activity.ForeColor = Color.FromArgb(45, 70, 105); footer.Controls.Add(activity, 0, 0);
-        footer.Controls.Add(new Label { Text = "关闭登录器不会关闭游戏。响应耗时是服务器健康检查耗时，不是对战延迟。", AutoSize = true, ForeColor = Color.DimGray, Font = new Font(Font.FontFamily, 9) }, 0, 1);
-        layout.Controls.Add(footer, 0, 6);
+        footer.Controls.Add(new Label { Text = "关闭启动器不会关闭游戏。服务器检测耗时不等于对战延迟。", Dock = DockStyle.Fill, ForeColor = Color.DimGray, Font = new Font(Font.FontFamily, 9) }, 0, 1);
+        layout.Controls.Add(footer, 0, 4);
         launch.Click += async (_, _) => await LaunchSelected();
         another.Click += async (_, _) =>
         {
@@ -200,7 +228,7 @@ internal sealed class LauncherForm : Form
         {
             int number = (int)item.Tag!;
             bool running = instances.IsRunning(number);
-            try { string name = instances.LoadCredentials(number).Account; item.Text = "窗口 " + number + (name.Length == 0 ? "" : " - " + name); if (running) instances.UpdateGameTitle(number, name); }
+            try { string name = instances.LoadCredentials(number).Account; item.Text = "窗口 " + number + (name.Length == 0 ? "" : " - " + name); if (running) instances.UpdateGameTitle(number); }
             catch (Exception error) { activity.Text = "读取窗口账号失败：" + error.Message; }
             item.SubItems[1].Text = running ? "游戏已运行" : "未启动";
             item.ForeColor = running ? Color.FromArgb(20, 125, 75) : Color.FromArgb(55, 65, 80);

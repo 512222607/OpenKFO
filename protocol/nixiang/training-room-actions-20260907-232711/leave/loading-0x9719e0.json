@@ -1,0 +1,4 @@
+{
+  "addr": "0x9719e0",
+  "code": "int __fastcall sub_9719E0(int a1)\n{\n  int result; // eax\n\n  result = a1; /*0x9719e7*/\n  if ( *(_DWORD *)(a1 + 4) != 0 ) /*0x9719ee*/\n    return (*(int (__fastcall **)(_DWORD))(**(_DWORD **)(a1 + 4) + 264))(a1: *(_DWORD *)(a1 + 4)); /*0x971a04*/\n  return result; /*0x971a06*/\n}"
+}

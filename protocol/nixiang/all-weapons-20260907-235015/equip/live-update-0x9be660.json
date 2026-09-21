@@ -1,0 +1,22 @@
+{
+  "addr": "0x9be660",
+  "code": "void *__thiscall sub_9BE660(int *this, int a2, _BYTE *a3)\n{\n  void *result; // eax\n  int i; // [esp+Ch] [ebp-4h]\n\n  for ( i = 0; ; ++i ) /*0x9be66b*/\n  {\n    result = (void *)sub_5471D0(a1: this + 946); /*0x9be686*/\n    if ( i >= (int)result ) /*0x9be68e*/\n      break; /*0x9be68e*/\n    if ( a2 == *(_DWORD *)sub_549130(a1: i) ) /*0x9be6a7*/\n    {\n      result = (void *)sub_549130(a1: i); /*0x9be6b9*/\n      qmemcpy(result, a3, 0x44u); /*0x9be6c5*/\n      if ( a3[4] != 50 ) /*0x9be6d1*/\n        return result; /*0x9be6ef*/\n      result = (void *)sub_9BE5A0(a1: this); /*0x9be6d6*/\n      if ( result == nullptr ) /*0x9be6dd*/\n        return result; /*0x9be6ef*/\n      sub_9BE5A0(a1: this); /*0x9be6e8*/\n      return (void *)sub_84E2B0(a1: a3, a2: 1); /*0x9be6ef*/\n    }\n  }\n  return result; /*0x9be6fb*/\n}",
+  "refs": [
+    {
+      "addr": "0x5471d0",
+      "name": "sub_5471D0"
+    },
+    {
+      "addr": "0x549130",
+      "name": "sub_549130"
+    },
+    {
+      "addr": "0x9be5a0",
+      "name": "sub_9BE5A0"
+    },
+    {
+      "addr": "0x84e2b0",
+      "name": "sub_84E2B0"
+    }
+  ]
+}

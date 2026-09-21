@@ -1,0 +1,22 @@
+[
+  {
+    "file": "warehouse-0x44e200.json",
+    "sha256": "1988b3bf82c02955b27fffb8fdc28ddff8ea5a91e783c829ecfa46566058fca3"
+  },
+  {
+    "file": "warehouse-0x893760.json",
+    "sha256": "d3b7ff544bbfd99ff3cb4e56fa3fb43a1072c014d1f46ca39c4846a5d3538d4d"
+  },
+  {
+    "file": "warehouse-0x89ade0.json",
+    "sha256": "af52ce5dc2c7354c1a53eab3daab51c2c17583c1277ec509d7003ea10692898d"
+  },
+  {
+    "file": "warehouse-0x9be710.json",
+    "sha256": "e0478e89400cd4744574707f318e1b6654e0cc58c902c36460b5cb19edc85181"
+  },
+  {
+    "file": "warehouse-0xa0ec20.json",
+    "sha256": "aa2cca9be9d36022c89935286644d04b16142b020b0e61e05d0540be034ae8d9"
+  }
+]

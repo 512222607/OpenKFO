@@ -1,0 +1,26 @@
+{
+  "addr": "0x92c790",
+  "code": "void __fastcall sub_92C790(int a1)\n{\n  _DWORD *v1; // eax\n  _DWORD *v2; // eax\n  int v3; // eax\n  unsigned int i; // [esp+10h] [ebp-4h]\n\n  for ( i = 0; i < 6 && sub_5261A0(a1: a1 + 132) > i; ++i ) /*0x92c799*/\n  {\n    v1 = (_DWORD *)sub_5637C0(a1: i); /*0x92c7d9*/\n    if ( sub_808C70(a1: *v1, a2: v1[1]) != 0 ) /*0x92c7f7*/\n    {\n      v2 = (_DWORD *)sub_5637C0(a1: i); /*0x92c80a*/\n      sub_9D9D10(a1: v2[3], a2: v2[4], a3: v2[5], a4: 1, a5: 0); /*0x92c82a*/\n      v3 = sub_5637C0(a1: i); /*0x92c848*/\n      sub_9E2DC0(a1: *(_DWORD *)(v3 + 8), a2: 0, a3: 0, a4: 0.0, a5: 0); /*0x92c854*/\n    }\n  }\n}",
+  "refs": [
+    {
+      "addr": "0x5637c0",
+      "name": "sub_5637C0"
+    },
+    {
+      "addr": "0x9d9d10",
+      "name": "sub_9D9D10"
+    },
+    {
+      "addr": "0x9e2dc0",
+      "name": "sub_9E2DC0"
+    },
+    {
+      "addr": "0x808c70",
+      "name": "sub_808C70"
+    },
+    {
+      "addr": "0x5261a0",
+      "name": "sub_5261A0"
+    }
+  ]
+}

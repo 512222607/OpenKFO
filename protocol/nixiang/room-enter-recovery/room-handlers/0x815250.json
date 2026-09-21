@@ -1,0 +1,31 @@
+{
+  "addr": "0x815250",
+  "code": "void __stdcall sub_815250(int a1, int a2)\n{\n  int v2; // eax\n  int v3; // [esp+8h] [ebp-34h]\n  _BYTE v4[28]; // [esp+10h] [ebp-2Ch] BYREF\n  int v5; // [esp+2Ch] [ebp-10h]\n  unsigned int v6; // [esp+30h] [ebp-Ch]\n  int v7; // [esp+38h] [ebp-4h]\n\n  if ( a1 != 0 && a2 == 259 ) /*0x815285*/\n  {\n    v5 = a1; /*0x81528f*/\n    if ( *(_BYTE *)(a1 + 4) == 1 ) /*0x81529c*/\n    {\n      sub_4D77F0(); /*0x8152a2*/\n      sub_5394D0(a1: v5); /*0x8152a9*/\n      v3 = sub_4D77F0(); /*0x8152b3*/\n      (*(void (__fastcall **)(int))(*(_DWORD *)v3 + 264))(a1: v3); /*0x8152c4*/\n    }\n    else\n    {\n      sub_3F5650(a1: aEuatUstate); /*0x8152d0*/\n      v7 = 0; /*0x8152d5*/\n      v2 = sub_3F3820(); /*0x8152dc*/\n      (*(void (__thiscall **)(int, _BYTE *, _DWORD, _DWORD, _DWORD))(*(_DWORD *)v2 + 448))( /*0x8152fc*/\n        a1: v2,\n        a2: v4,\n        a3: 0,\n        a4: 0,\n        a5: 0);\n      v7 = -1; /*0x8152fe*/\n      sub_3F56D0(a1: v4); /*0x815308*/\n    }\n  }\n  __writefsdword(0, v6); /*0x815310*/\n}",
+  "refs": [
+    {
+      "addr": "0x4d77f0",
+      "name": "sub_4D77F0"
+    },
+    {
+      "addr": "0x5394d0",
+      "name": "sub_5394D0"
+    },
+    {
+      "addr": "0x3f5650",
+      "name": "sub_3F5650"
+    },
+    {
+      "addr": "0xbcb0c4",
+      "name": "aEuatUstate",
+      "string": "EUAT_Ustate"
+    },
+    {
+      "addr": "0x3f3820",
+      "name": "sub_3F3820"
+    },
+    {
+      "addr": "0x3f56d0",
+      "name": "sub_3F56D0"
+    }
+  ]
+}

@@ -37,6 +37,7 @@ type Config struct {
 	GamePort          int    `json:"game_port"`
 	URL               string `json:"url"`
 	ClientDirectory   string `json:"client_directory"`
+	ClientExecutable  string `json:"client_executable"`
 	ClientSHA256      string `json:"client_sha256"`
 	ConfigHash        string `json:"config_hash"`
 	ServerCertificate string `json:"server_certificate"`
@@ -55,21 +56,22 @@ type Bridge struct {
 	relogin      chan *remoteSession
 }
 type remoteSession struct {
-	account     string
-	uid         uint64
-	traces      map[uint32]*packetTrace
-	identity    Identity
-	connection  net.Conn
-	reader      *bufio.Reader
-	encoder     *json.Encoder
-	writeMutex  sync.Mutex
-	mutex       sync.Mutex
-	channels    map[uint32]net.Conn
-	udpPorts    map[int]bool
-	nextChannel uint32
-	done        chan struct{}
-	loggedOut   chan struct{}
-	closeOnce   sync.Once
+	udpTransport *clientDatagramPeer
+	account      string
+	uid          uint64
+	traces       map[uint32]*packetTrace
+	identity     Identity
+	connection   net.Conn
+	reader       *bufio.Reader
+	encoder      *json.Encoder
+	writeMutex   sync.Mutex
+	mutex        sync.Mutex
+	channels     map[uint32]net.Conn
+	udpPorts     map[int]bool
+	nextChannel  uint32
+	done         chan struct{}
+	loggedOut    chan struct{}
+	closeOnce    sync.Once
 }
 
 func (session *remoteSession) send(frame tunnel.Frame) error {
@@ -81,6 +83,9 @@ func (session *remoteSession) send(frame tunnel.Frame) error {
 func (session *remoteSession) close() {
 	session.closeOnce.Do(func() {
 		close(session.done)
+		if session.udpTransport != nil {
+			session.udpTransport.conn.Close()
+		}
 		session.connection.Close()
 		session.mutex.Lock()
 		defer session.mutex.Unlock()
@@ -127,8 +132,22 @@ func LoadConfig(path string) (Config, error) {
 	return config, nil
 }
 
+func (config Config) ImagePath() (string, error) {
+	name := config.ClientExecutable
+	if name == "" {
+		name = "gfld.dat"
+	}
+	if name != "gfld.dat" {
+		return "", fmt.Errorf("unsupported client executable: %s", name)
+	}
+	return filepath.Join(config.ClientDirectory, name), nil
+}
+
 func Run(ctx context.Context, config Config, launch bool) error {
-	image := filepath.Join(config.ClientDirectory, "gfld.dat")
+	image, err := config.ImagePath()
+	if err != nil {
+		return err
+	}
 	for path, expected := range map[string]string{image: config.ClientSHA256, filepath.Join(config.ClientDirectory, "Data", "config.spf2"): config.ConfigHash} {
 		file, err := os.Open(path)
 		if err != nil {
@@ -318,6 +337,9 @@ func (bridge *Bridge) connect(account, password string, identity Identity) (*rem
 	session.uid = response.UID
 	session.loggedOut = make(chan struct{})
 	connection.SetDeadline(time.Time{})
+	if endpoint.Scheme == "tls" && response.UDP != nil {
+		bridge.startDatagrams(session, endpoint.Hostname(), response.UDP)
+	}
 	return session, nil
 }
 
@@ -599,6 +621,9 @@ func (bridge *Bridge) datagrams() {
 		session.mutex.Lock()
 		session.udpPorts[peer.Port] = true
 		session.mutex.Unlock()
+		if session.udpTransport != nil && count >= 24 && protocol.ReadUint16(buffer[:count], 2) == 1008 && session.udpTransport.send(uint16(peer.Port), buffer[:count]) {
+			continue
+		}
 		if session.send(tunnel.Frame{Op: "udp", Port: uint16(peer.Port), Data: buffer[:count]}) != nil {
 			session.close()
 		}

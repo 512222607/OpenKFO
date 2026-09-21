@@ -1,0 +1,5 @@
+{
+  "result": "None",
+  "stdout": "[\n  {\n    \"opcode\": 4160,\n    \"ea\": \"0x97d6f0\",\n    \"func\": \"0x97c9c0\",\n    \"insn\": \"push    1040h\"\n  }\n]\n",
+  "stderr": ""
+}

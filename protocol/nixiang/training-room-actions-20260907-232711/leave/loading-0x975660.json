@@ -1,0 +1,38 @@
+{
+  "addr": "0x975660",
+  "code": "int sub_975660()\n{\n  int result; // eax\n  __int16 v1; // [esp+4h] [ebp-10h] BYREF\n  __int64 v2; // [esp+6h] [ebp-Eh]\n  int v3; // [esp+Eh] [ebp-6h]\n\n  v1 = sub_4A1050(a1: dword_17C8708); /*0x975674*/\n  v2 = sub_3F2AA0(a1: dword_17C86FC); /*0x975683*/\n  result = dword_17BA718; /*0x975689*/\n  v3 = dword_17BA718; /*0x97568e*/\n  if ( dword_17C8714 != 0 && dword_17C8710 != 0 ) /*0x9756a1*/\n    return sub_A2C950(a1: 8040, a2: 0, a3: (int)&v1, a4: 14); /*0x9756b0*/\n  return result; /*0x9756b8*/\n}",
+  "refs": [
+    {
+      "addr": "0x4a1050",
+      "name": "sub_4A1050"
+    },
+    {
+      "addr": "0x17c8708",
+      "name": "dword_17C8708"
+    },
+    {
+      "addr": "0x3f2aa0",
+      "name": "sub_3F2AA0"
+    },
+    {
+      "addr": "0x17c86fc",
+      "name": "dword_17C86FC"
+    },
+    {
+      "addr": "0x17ba718",
+      "name": "dword_17BA718"
+    },
+    {
+      "addr": "0xa2c950",
+      "name": "sub_A2C950"
+    },
+    {
+      "addr": "0x17c8714",
+      "name": "dword_17C8714"
+    },
+    {
+      "addr": "0x17c8710",
+      "name": "dword_17C8710"
+    }
+  ]
+}

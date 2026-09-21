@@ -3,9 +3,11 @@ package main
 
 import (
 	"bufio"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
+	"kungfu.local/server/internal/persistence"
 	"kungfu.local/server/internal/releases"
 	"net/http"
 	"os"
@@ -63,6 +65,22 @@ func run() error {
 			return err
 		}
 	}
+	var stageTx *sql.Tx
+	var stageStore *persistence.Store
+	if m.Kind == "client" {
+		store, tx, e := prepareStages(dir, m, raw)
+		if e != nil {
+			return e
+		}
+		stageTx = tx
+		stageStore = store
+		if store != nil {
+			defer store.DB.Close()
+		}
+		if stageTx != nil {
+			defer stageTx.Rollback()
+		}
+	}
 	pkg := filepath.Join(dir, m.Package)
 	if err = os.WriteFile(pkg+".next", raw, 0644); err != nil {
 		return err
@@ -105,7 +123,26 @@ func run() error {
 			}
 			return fmt.Errorf("server health check failed")
 		}
-		if err = restart(); err != nil {
+		err = restart()
+		if err == nil && stageTx != nil {
+			err = stageTx.Commit()
+			if err != nil {
+				// A lost COMMIT acknowledgement is not proof of rollback.
+				// Re-read before restoring an old manifest over committed rules.
+				state, checkErr := stageStore.StageAccess()
+				if checkErr != nil {
+					stopErr := exec.Command("systemctl", "stop", "kungfu-go").Run()
+					return fmt.Errorf("database commit outcome unknown; release retained for inspection; service stop: %v", stopErr)
+				}
+				if state.ClientHash == m.ConfigHash {
+					err = nil
+				}
+			}
+		}
+		if err != nil {
+			if stageTx != nil {
+				stageTx.Rollback()
+			}
 			var rollback error
 			if len(old) > 0 {
 				rollback = os.WriteFile(path+".next", old, 0644)

@@ -1,0 +1,20 @@
+{
+  "grant": {
+    "added_weapons": 0,
+    "total_weapons": 274,
+    "total_items": 280
+  },
+  "count_field_offset": 23,
+  "count": 1,
+  "role_rows_unchanged": true,
+  "backup": "C:\\Users\\24032\\Desktop\\code\\kungfu-mock-server\\research\\2026-09-07\\all-weapons-20260907-235015\\before-count-fix-20260907-235649",
+  "temporary_heartbeat_rule_restored": true,
+  "live_snapshot_sent": {
+    "time": 1788796609.7566679,
+    "kind": "game-frame",
+    "direction": "response",
+    "message_id": 1120,
+    "payload_len": 19040
+  },
+  "inventory_sha256": "29a1449bf78fc27e44e7dbe315c358a804b424982cb957171b3d1c12e05f9aab"
+}

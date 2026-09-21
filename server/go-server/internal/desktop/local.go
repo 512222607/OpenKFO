@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"kungfu.local/server/internal/persistence"
+	"kungfu.local/server/internal/releases"
 )
 
 func (admin *Admin) local(request persistence.AdminRequest) (json.RawMessage, error) {
@@ -47,7 +48,16 @@ func (admin *Admin) local(request persistence.AdminRequest) (json.RawMessage, er
 		return nil, fmt.Errorf("本地测试库连接失败，请先启动本地后台；不会改用线上数据库")
 	}
 	defer store.DB.Close()
-	result, err := store.Admin(request)
+	var result any
+	if request.Operation == "stages_get" || request.Operation == "stages_save" {
+		var hash string
+		hash, err = releases.ActiveConfigHash(filepath.Join(filepath.Dir(path), "config.json"), "")
+		if err == nil {
+			result, err = store.AdminStages(request, hash)
+		}
+	} else {
+		result, err = store.Admin(request)
+	}
 	if err != nil {
 		return nil, err
 	}

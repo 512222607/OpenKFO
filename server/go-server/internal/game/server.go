@@ -27,6 +27,9 @@ type loginLimit struct {
 	Since    time.Time
 }
 type Server struct {
+	udp         *net.UDPConn
+	udpMutex    sync.Mutex
+	udpPeers    map[[16]byte]*serverDatagramPeer
 	Hub         *Hub
 	Certificate tls.Certificate
 	connections chan struct{}
@@ -204,7 +207,9 @@ func (server *Server) serveConnection(connection *tls.Conn) {
 		return
 	}
 	defer server.Hub.Detach(session)
-	if err = encoder.Encode(tunnel.Frame{Op: "auth", UID: session.UID}); err != nil {
+	grant, peer := server.registerDatagramPeer(session)
+	defer server.unregisterDatagramPeer(peer)
+	if err = encoder.Encode(tunnel.Frame{Op: "auth", UID: session.UID, UDP: grant}); err != nil {
 		return
 	}
 	session.tracePacket("S->C", 0, "tunnel:auth-ok", 0, nil, false)
@@ -233,6 +238,9 @@ func (server *Server) serveConnection(connection *tls.Conn) {
 				return
 			case frame := <-session.Output:
 				session.queuedBytes.Add(-int64(len(frame.Data) + 128))
+				if peer != nil && frame.Op == "udp" && frame.PeerReceipt == "" && peer.send(frame) {
+					continue
+				}
 				connection.SetWriteDeadline(time.Now().Add(10 * time.Second))
 				if encoder.Encode(frame) != nil {
 					return

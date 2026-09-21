@@ -1,0 +1,14 @@
+{
+  "addr": "0x81a9b0",
+  "code": "int __stdcall sub_81A9B0(int a1, int a2)\n{\n  return sub_977E40(this: (_WORD *)dword_17C8710, a2: 0); /*0x81a9c4*/\n}",
+  "refs": [
+    {
+      "addr": "0x977e40",
+      "name": "sub_977E40"
+    },
+    {
+      "addr": "0x17c8710",
+      "name": "dword_17C8710"
+    }
+  ]
+}

@@ -29,7 +29,7 @@ func main() {
 		log.Fatal(err)
 	}
 	defer logFile.Close()
-	log.SetOutput(logFile)
+	log.SetOutput(bridge.PrivateLogWriter{Writer: logFile})
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
 	config, err := bridge.LoadConfig(*configPath)
 	if err == nil && config.SharedClient {
@@ -38,7 +38,11 @@ func main() {
 	if err == nil {
 		if *launch && !config.SharedClient {
 			var active bool
-			active, err = bridge.ActivateExistingClient(filepath.Join(config.ClientDirectory, "gfld.dat"))
+			var image string
+			image, err = config.ImagePath()
+			if err == nil {
+				active, err = bridge.ActivateExistingClient(image)
+			}
 			if err == nil && active {
 				log.Print("existing client activated; duplicate launch skipped")
 				return
@@ -64,7 +68,7 @@ func main() {
 	}
 	if err != nil {
 		log.Printf("launcher stopped: %v", err)
-		message, _ := syscall.UTF16PtrFromString("启动失败：" + err.Error() + "\n请查看 online-client.log。")
+		message, _ := syscall.UTF16PtrFromString("启动失败：" + bridge.RedactLog(err.Error()) + "\n请查看 online-client.log。")
 		title, _ := syscall.UTF16PtrFromString("功夫小子 · 线上测试")
 		syscall.NewLazyDLL("user32.dll").NewProc("MessageBoxW").Call(0, uintptr(unsafe.Pointer(message)), uintptr(unsafe.Pointer(title)), 0x10)
 		os.Exit(1)

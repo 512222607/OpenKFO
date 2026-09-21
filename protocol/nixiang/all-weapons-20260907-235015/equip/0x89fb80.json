@@ -1,0 +1,59 @@
+{
+  "addr": "0x89fb80",
+  "code": "int __fastcall sub_89FB80(int *a1)\n{\n  _DWORD *v1; // eax\n  int v2; // eax\n  int v3; // eax\n  int result; // eax\n  int v5; // [esp+4h] [ebp-54h]\n  _BYTE v7[28]; // [esp+Ch] [ebp-4Ch] BYREF\n  char *v8; // [esp+28h] [ebp-30h]\n  int v9; // [esp+2Ch] [ebp-2Ch]\n  int v10; // [esp+30h] [ebp-28h]\n  int v11; // [esp+34h] [ebp-24h]\n  int v12; // [esp+38h] [ebp-20h]\n  int v13; // [esp+3Ch] [ebp-1Ch]\n  int v14; // [esp+40h] [ebp-18h]\n  int v15; // [esp+44h] [ebp-14h]\n  _BYTE v16[4]; // [esp+48h] [ebp-10h] BYREF\n  unsigned int v17; // [esp+4Ch] [ebp-Ch]\n  int v18; // [esp+54h] [ebp-4h]\n\n  a1[402] = a1[397] + 24 * (a1[404] - 1); /*0x89fbc3*/\n  v1 = (_DWORD *)sub_4F6880(a1: a1[402]); /*0x89fbdc*/\n  a1[396] = sub_8939F0(a1: *v1); /*0x89fbef*/\n  if ( *(_DWORD *)(sub_4F6880(a1: a1[402]) + 32) == 0 || *(_DWORD *)(sub_4F6880(a1: a1[402]) + 28) != 0 ) /*0x89fc33*/\n  {\n    result = sub_899700(this: a1, a2: a1[402]); /*0x89fd4f*/\n  }\n  else\n  {\n    sub_3F5F90(a1: v16); /*0x89fc3c*/\n    v18 = 0; /*0x89fc41*/\n    v2 = sub_4F6880(a1: a1[402]); /*0x89fc5b*/\n    sub_3F5750(a1: v2 + 64); /*0x89fc65*/\n    sub_401C60(a1: v16, a2: &aButtonReplayLP[8]); /*0x89fc74*/\n    v12 = 0; /*0x89fc7c*/\n    v13 = 0; /*0x89fc83*/\n    v14 = 0; /*0x89fc8a*/\n    v15 = -1; /*0x89fc91*/\n    v8 = (char *)&loc_8AFA8E + 2; /*0x89fc98*/\n    v9 = 0; /*0x89fc9f*/\n    v10 = 0; /*0x89fca6*/\n    v11 = 0; /*0x89fcad*/\n    v3 = sub_3F6410(a1: (int)v16); /*0x89fcb7*/\n    sub_3F5650(a1: v3); /*0x89fcc0*/\n    LOBYTE(v18) = 1; /*0x89fcc5*/\n    v5 = sub_3F3820(); /*0x89fcce*/\n    (*(void (__thiscall **)(int, _BYTE *, int, int *, char *, _DWORD, _DWORD, _DWORD, _DWORD, _DWORD, _DWORD, int, _DWORD))(*(_DWORD *)v5 + 440))( /*0x89fd23*/\n      a1: v5,\n      a2: v7,\n      a3: 1,\n      a4: a1,\n      a5: (char *)&loc_8AFA8E + 2,\n      a6: 0,\n      a7: 0,\n      a8: 0,\n      a9: 0,\n      a10: 0,\n      a11: 0,\n      a12: -1,\n      a13: 0);\n    LOBYTE(v18) = 0; /*0x89fd25*/\n    sub_3F56D0(a1: v7); /*0x89fd2c*/\n    v18 = -1; /*0x89fd31*/\n    result = sub_3F6050(a1: v16); /*0x89fd3b*/\n  }\n  __writefsdword(0, v17); /*0x89fd57*/\n  return result; /*0x89fd5f*/\n}",
+  "refs": [
+    {
+      "addr": "0x4f6880",
+      "name": "sub_4F6880"
+    },
+    {
+      "addr": "0x8939f0",
+      "name": "sub_8939F0"
+    },
+    {
+      "addr": "0x899700",
+      "name": "sub_899700"
+    },
+    {
+      "addr": "0x3f5f90",
+      "name": "sub_3F5F90"
+    },
+    {
+      "addr": "0x3f5750",
+      "name": "sub_3F5750"
+    },
+    {
+      "addr": "0x401c60",
+      "name": "sub_401C60"
+    },
+    {
+      "addr": "0xbbd484",
+      "name": "aButtonReplayLP",
+      "string": "Button\\Replay_L.png"
+    },
+    {
+      "addr": "0x8afa8e",
+      "name": "loc_8AFA8E"
+    },
+    {
+      "addr": "0x3f6410",
+      "name": "sub_3F6410"
+    },
+    {
+      "addr": "0x3f5650",
+      "name": "sub_3F5650"
+    },
+    {
+      "addr": "0x3f3820",
+      "name": "sub_3F3820"
+    },
+    {
+      "addr": "0x3f56d0",
+      "name": "sub_3F56D0"
+    },
+    {
+      "addr": "0x3f6050",
+      "name": "sub_3F6050"
+    }
+  ]
+}

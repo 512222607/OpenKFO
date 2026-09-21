@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="gb2312" ?>
+<GameClient>
+	<Updater>
+		<UpdateInfo Url=""></UpdateInfo>
+		<LaunchExe Name=""></LaunchExe>
+	</Updater>
+	<PrePaidURL URL=""></PrePaidURL>
+	<RegisterURL URL= ""   />
+	<OperationURL opcode="" />
+	<!--  	服务器相关配置    -->
+	<LoginServer ID="10" Name="一区" Ip="127.0.0.1" Port="18000" loadigw="1" AreaID="1"></LoginServer>
+</GameClient>

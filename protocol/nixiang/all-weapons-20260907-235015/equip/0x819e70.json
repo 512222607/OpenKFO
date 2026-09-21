@@ -1,0 +1,10 @@
+{
+  "addr": "0x819e70",
+  "code": "void __stdcall sub_819E70(int a1, int a2)\n{\n  int v2; // eax\n\n  if ( a1 != 0 ) /*0x819e7d*/\n  {\n    v2 = sub_40BD60(); /*0x819e8a*/\n    (*(void (__thiscall **)(int, int))(*(_DWORD *)v2 + 448))(a1: v2, a2: a1 + 16); /*0x819ea4*/\n  }\n}",
+  "refs": [
+    {
+      "addr": "0x40bd60",
+      "name": "sub_40BD60"
+    }
+  ]
+}

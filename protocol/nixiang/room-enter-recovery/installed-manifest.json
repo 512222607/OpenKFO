@@ -1,0 +1,32 @@
+[
+  {
+    "path": "room_protocol.py",
+    "size": 4979,
+    "sha256": "fb215cdf2e77636f7d6b934ddf449f07790609cfef773d3d21c30341c2c6a7d9"
+  },
+  {
+    "path": "role_protocol.py",
+    "size": 9654,
+    "sha256": "ea7c295882b1371b8fe891c856015d5a0b4dc7ba473d1efaaa32e94fcc290cbf"
+  },
+  {
+    "path": "test_room_protocol.py",
+    "size": 8243,
+    "sha256": "f85892e74c5b9d1dec004489156b874660ba8ab88b8e11054a81cc4315918612"
+  },
+  {
+    "path": "test_game_protocol.py",
+    "size": 5983,
+    "sha256": "294d7d7935b2861826389bc158b4ab115a87fa6a26027ee43a7ea2319611366b"
+  },
+  {
+    "path": "room-create-captured.json",
+    "size": 281,
+    "sha256": "2614fc009d2594c7a97986e3393f59ce6b6f60209d117106d97888374c3ef4ce"
+  },
+  {
+    "path": "lab-control.json",
+    "size": 3869,
+    "sha256": "cd3bd8bcae64ea299316c2b75777131d967ca5e2e5930d30ce147c649fd9973f"
+  }
+]

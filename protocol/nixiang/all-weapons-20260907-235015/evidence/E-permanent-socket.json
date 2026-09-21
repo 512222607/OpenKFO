@@ -1,0 +1,31 @@
+{
+  "pid": 22320,
+  "test_count": 82,
+  "target": "127.0.0.1:10035",
+  "uid": 1001,
+  "items": 280,
+  "weapons": 274,
+  "all_permanent": true,
+  "client_display": "365+",
+  "slot_zero_acknowledged": true,
+  "unsupported_slot_rejected_without_disconnect": true,
+  "original_role_unchanged": true,
+  "inventory_unchanged_by_smoke": true,
+  "equipped_instance_preserved": 102,
+  "read_chunks_max97bytes": 407,
+  "frames": [
+    {
+      "id": 1020,
+      "length": 37
+    },
+    {
+      "id": 1120,
+      "length": 19040
+    },
+    {
+      "id": 1130,
+      "length": 360
+    }
+  ],
+  "database_sha256": "203d496a580eba36ab4b177ddcf141b69e0aa11297d38e933d98752dd69745f0"
+}

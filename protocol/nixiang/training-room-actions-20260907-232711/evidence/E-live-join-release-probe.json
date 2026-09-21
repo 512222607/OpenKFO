@@ -1,0 +1,17 @@
+{
+  "mechanism": "one temporary heartbeat fallback for current loaded isolated session",
+  "events": [
+    {
+      "time": 1788794572.9937155,
+      "kind": "game-frame",
+      "direction": "response",
+      "port": 10035,
+      "message_id": 8070,
+      "key_index": 0,
+      "payload_len": 12,
+      "payload_hex": "010000000000000000000000",
+      "hex": "eeaaa8882000000000cc4e617e31066431308ee00f3b95ef0113cde00f3b95ef00134d617e316664"
+    }
+  ],
+  "control_restored": true
+}

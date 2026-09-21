@@ -1,0 +1,31 @@
+{
+  "target": "127.0.0.1:10035",
+  "uid": 1001,
+  "kind": "synthetic TCP verification",
+  "frames": [
+    {
+      "id": 1020,
+      "length": 37
+    },
+    {
+      "id": 1120,
+      "length": 19040
+    },
+    {
+      "id": 1130,
+      "length": 360
+    }
+  ],
+  "items": 280,
+  "weapons": 274,
+  "distinct_weapon_ids": 274,
+  "read_chunks_max97bytes": 202,
+  "all_weapon_counts_at_offset23_are_one": true,
+  "role_main_record_matches": true,
+  "inventory_matches_database": true,
+  "database_unchanged_by_smoke": true,
+  "database_sha256": "0a6d158d03c716f89848efbe896c7f8d7e9246b94364d5710483de5d0e7ec28c",
+  "equipped_weapon_instances": [
+    7
+  ]
+}

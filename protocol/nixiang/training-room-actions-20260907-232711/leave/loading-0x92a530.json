@@ -1,0 +1,103 @@
+{
+  "addr": "0x92a530",
+  "code": "int __thiscall sub_92A530(_DWORD *this, int a2)\n{\n  int v2; // eax\n  int v3; // eax\n  int result; // eax\n  float v5; // [esp+0h] [ebp-190h]\n  int v6; // [esp+8h] [ebp-188h]\n  _BYTE v8[28]; // [esp+14h] [ebp-17Ch] BYREF\n  _BYTE v9[4]; // [esp+30h] [ebp-160h] BYREF\n  _BYTE v10[48]; // [esp+34h] [ebp-15Ch] BYREF\n  _BYTE v11[24]; // [esp+64h] [ebp-12Ch] BYREF\n  _BYTE v12[256]; // [esp+7Ch] [ebp-114h] BYREF\n  int v13; // [esp+180h] [ebp-10h]\n  unsigned int v14; // [esp+184h] [ebp-Ch]\n  int v15; // [esp+18Ch] [ebp-4h]\n\n  if ( sub_809120(a1: dword_17C8708) != 0 ) /*0x92a56e*/\n  {\n    v2 = sub_809120(a1: dword_17C8708); /*0x92a57a*/\n    if ( sub_43B3F0(a1: v2) != 0 && *(this + 5) != 0 ) /*0x92a598*/\n    {\n      sub_5634A0(a1: v11); /*0x92a5a4*/\n      v15 = 0; /*0x92a5a9*/\n      v5 = (float)a2; /*0x92a5b4*/\n      v6 = sub_62A850(a1: v5); /*0x92a5ce*/\n      LOBYTE(v15) = 1; /*0x92a5d4*/\n      sub_43E540(a1: v6); /*0x92a5e5*/\n      LOBYTE(v15) = 0; /*0x92a5ea*/\n      sub_62A9A0(a1: v10); /*0x92a5f4*/\n      sub_6299B0(a1: &unk_BADD04, a2: v11, a3: 0); /*0x92a610*/\n      v15 = -1; /*0x92a615*/\n      sub_43E4E0(a1: v11); /*0x92a622*/\n    }\n  }\n  sub_653BEB(a1: v12, a2: 256, a3: &unk_BADD18, a2); /*0x92a63c*/\n  sub_3F5FD0(a1: v12); /*0x92a651*/\n  v15 = 2; /*0x92a656*/\n  sub_3F5650(a1: &aBattlemodeDoac[5]); /*0x92a668*/\n  LOBYTE(v15) = 3; /*0x92a66d*/\n  sub_40B7D0(); /*0x92a68e*/\n  sub_A821B0(a1: 0, a2: 0, a3: v8, a4: v9, a5: 4, a6: 0, a7: -65536, a8: 0); /*0x92a695*/\n  LOBYTE(v15) = 2; /*0x92a69a*/\n  sub_3F56D0(a1: v8); /*0x92a6a4*/\n  v15 = -1; /*0x92a6a9*/\n  sub_3F6050(a1: v9); /*0x92a6b6*/\n  v3 = sub_4A4F50(a1: (int)this); /*0x92a6cd*/\n  result = sub_A87B0E(a1: v3, a2: 0, a3: &unk_12F8934, a4: &unk_12F9120, a5: 0); /*0x92a6d5*/\n  v13 = result; /*0x92a6dd*/\n  if ( result != 0 ) /*0x92a6e4*/\n    result = sub_9286F0(a1: a2); /*0x92a6ed*/\n  __writefsdword(0, v14); /*0x92a6f5*/\n  return result; /*0x92a6fd*/\n}",
+  "refs": [
+    {
+      "addr": "0x809120",
+      "name": "sub_809120"
+    },
+    {
+      "addr": "0x17c8708",
+      "name": "dword_17C8708"
+    },
+    {
+      "addr": "0x5634a0",
+      "name": "sub_5634A0"
+    },
+    {
+      "addr": "0x62a850",
+      "name": "sub_62A850"
+    },
+    {
+      "addr": "0x43e540",
+      "name": "sub_43E540"
+    },
+    {
+      "addr": "0x62a9a0",
+      "name": "sub_62A9A0"
+    },
+    {
+      "addr": "0x6299b0",
+      "name": "sub_6299B0"
+    },
+    {
+      "addr": "0xbadd04",
+      "name": "unk_BADD04"
+    },
+    {
+      "addr": "0x43e4e0",
+      "name": "sub_43E4E0"
+    },
+    {
+      "addr": "0x43b3f0",
+      "name": "sub_43B3F0"
+    },
+    {
+      "addr": "0x653beb",
+      "name": "sub_653BEB"
+    },
+    {
+      "addr": "0xbadd18",
+      "name": "unk_BADD18"
+    },
+    {
+      "addr": "0x3f5fd0",
+      "name": "sub_3F5FD0"
+    },
+    {
+      "addr": "0x3f5650",
+      "name": "sub_3F5650"
+    },
+    {
+      "addr": "0xb96694",
+      "name": "aBattlemodeDoac",
+      "string": "BattleMode:DoAction"
+    },
+    {
+      "addr": "0x40b7d0",
+      "name": "sub_40B7D0"
+    },
+    {
+      "addr": "0xa821b0",
+      "name": "sub_A821B0"
+    },
+    {
+      "addr": "0x3f56d0",
+      "name": "sub_3F56D0"
+    },
+    {
+      "addr": "0x3f6050",
+      "name": "sub_3F6050"
+    },
+    {
+      "addr": "0x4a4f50",
+      "name": "sub_4A4F50"
+    },
+    {
+      "addr": "0xa87b0e",
+      "name": "sub_A87B0E"
+    },
+    {
+      "addr": "0x12f8934",
+      "name": "unk_12F8934"
+    },
+    {
+      "addr": "0x12f9120",
+      "name": "unk_12F9120"
+    },
+    {
+      "addr": "0x9286f0",
+      "name": "sub_9286F0"
+    }
+  ]
+}

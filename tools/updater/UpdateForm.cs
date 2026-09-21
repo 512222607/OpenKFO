@@ -18,7 +18,7 @@ internal sealed class UpdateForm : Form
         this.kind = kind; this.target = target; this.uri = uri; this.bridge = bridge;
         this.launcher = launcher; this.restartRoot = restartRoot;
         this.offlineManifest = offlineManifest;
-        Text = kind == "gm" ? "GM管理器 · 更新" : kind == "launcher" ? "功夫小子 · 登录器更新" : "功夫小子 · 客户端更新"; Width = 650; Height = 470; StartPosition = FormStartPosition.CenterScreen; Font = new Font("Microsoft YaHei UI", 10); Padding = new Padding(18);
+        Text = kind == "gm" ? "GM管理器 · 更新" : kind == "launcher" ? "启动器更新" : "客户端更新"; Width = 650; Height = 470; StartPosition = FormStartPosition.CenterScreen; Font = new Font("Microsoft YaHei UI", 10); Padding = new Padding(18);
         MinimumSize = new Size(500, 360);
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4 };
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));

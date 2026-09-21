@@ -1,0 +1,26 @@
+{
+  "addr": "0x9c0e10",
+  "code": "int __thiscall sub_9C0E10(int *this, _DWORD *a2)\n{\n  int v2; // eax\n  _WORD *v4; // ecx\n  int j; // [esp+10h] [ebp-8h]\n  int i; // [esp+14h] [ebp-4h]\n\n  for ( i = 0; i < sub_5471D0(a1: this + 946); ++i ) /*0x9c0e1b*/\n  {\n    if ( *(_DWORD *)sub_549130(a1: i) == *a2 ) /*0x9c0e5d*/\n    {\n      qmemcpy((void *)sub_549130(a1: i), a2, 0x44u); /*0x9c0e7b*/\n      v2 = sub_549130(a1: i); /*0x9c0e8a*/\n      sub_9E4220(a1: v2); /*0x9c0e99*/\n      return sub_9BDB60(a1: this + 22, a2: *(this + 14), a3: (int)(this + 946)); /*0x9c0ebe*/\n    }\n  }\n  for ( j = 0; j < sub_5471D0(a1: this + 946); ++j ) /*0x9c0ec8*/\n  {\n    if ( *(_DWORD *)(sub_549130(a1: j) + 9) == *(_DWORD *)((char *)a2 + 9) && *(_WORD *)(sub_549130(a1: j) + 17) == 0 ) /*0x9c0f22*/\n    {\n      v4 = (_WORD *)(sub_549130(a1: j) + 23); /*0x9c0f4b*/\n      *v4 -= *(_WORD *)((char *)a2 + 23); /*0x9c0f4e*/\n    }\n  }\n  return sub_4A29E0(a1: a2); /*0x9c0f68*/\n}",
+  "refs": [
+    {
+      "addr": "0x549130",
+      "name": "sub_549130"
+    },
+    {
+      "addr": "0x9e4220",
+      "name": "sub_9E4220"
+    },
+    {
+      "addr": "0x9bdb60",
+      "name": "sub_9BDB60"
+    },
+    {
+      "addr": "0x5471d0",
+      "name": "sub_5471D0"
+    },
+    {
+      "addr": "0x4a29e0",
+      "name": "sub_4A29E0"
+    }
+  ]
+}

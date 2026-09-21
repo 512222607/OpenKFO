@@ -1,0 +1,17 @@
+{
+  "backup_directory": "C:\\Users\\24032\\Desktop\\code\\kungfu-mock-server\\research\\2026-09-07\\all-weapons-20260907-235015\\before-permanent-20260908-001056",
+  "permanent_weapons": 274,
+  "original_role_unchanged": true,
+  "equipment_slots_preserved": true,
+  "client_display": "365+",
+  "permanent_ownership_without_expiry": true,
+  "display_minutes": 5256000,
+  "installed": {
+    "role_protocol.py": "ebd9cd595431a8af0faf4f2c38f70c16a88fc85c9c2d876306648778f193806f",
+    "inventory_protocol.py": "1296b2c8c49699ddd58e7566fa3044c839439113e39864eae8873a694cf07947",
+    "test_inventory_protocol.py": "6236edb0f70af65501e2fa22bf4de53a51e59abf5bdd9414c05514ab740a29d3",
+    "test_inventory_store.py": "eda32c02ad80d9d6a0221aa0eb2320bfecbe5da39fb836747cbc827d54c69743",
+    "weapon_ids.json": "fde38888aa7c7383f88c17da0e6438f2328dc9a053c9dc47538c559ef71fc978"
+  },
+  "database_sha256": "203d496a580eba36ab4b177ddcf141b69e0aa11297d38e933d98752dd69745f0"
+}

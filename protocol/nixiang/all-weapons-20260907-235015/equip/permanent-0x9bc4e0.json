@@ -1,0 +1,22 @@
+{
+  "addr": "0x9bc4e0",
+  "code": "char __stdcall sub_9BC4E0(int a1)\n{\n  unsigned int i; // eax\n  unsigned int v3; // [esp+4h] [ebp-8h]\n  int v4; // [esp+8h] [ebp-4h]\n\n  v4 = sub_44E200(a1: dword_17C86FC); /*0x9bc4f4*/\n  v3 = 0; /*0x9bc4f7*/\n  for ( i = sub_5471D0(a1: v4); v3 < i; i = sub_5471D0(a1: v4) ) /*0x9bc4fe*/\n  {\n    if ( *(_DWORD *)(sub_549130(a1: v3) + 5) == a1 ) /*0x9bc528*/\n    {\n      if ( *(_DWORD *)(sub_549130(a1: v3) + 19) != 0 ) /*0x9bc53a*/\n      {\n        if ( *(_DWORD *)(sub_549130(a1: v3) + 19) == 1 && *(_DWORD *)(sub_549130(a1: v3) + 13) / 0x3Cu >= 0x2238 ) /*0x9bc586*/\n          return 1; /*0x9bc58a*/\n      }\n      else if ( *(_DWORD *)(sub_549130(a1: v3) + 13) >= 0x2238u ) /*0x9bc54f*/\n      {\n        return 1; /*0x9bc553*/\n      }\n    }\n    ++v3; /*0x9bc506*/\n  }\n  return 0; /*0x9bc593*/\n}",
+  "refs": [
+    {
+      "addr": "0x44e200",
+      "name": "sub_44E200"
+    },
+    {
+      "addr": "0x17c86fc",
+      "name": "dword_17C86FC"
+    },
+    {
+      "addr": "0x5471d0",
+      "name": "sub_5471D0"
+    },
+    {
+      "addr": "0x549130",
+      "name": "sub_549130"
+    }
+  ]
+}

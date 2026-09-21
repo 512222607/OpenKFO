@@ -1,0 +1,22 @@
+{
+  "room_protocol.py": {
+    "sha256": "fb215cdf2e77636f7d6b934ddf449f07790609cfef773d3d21c30341c2c6a7d9",
+    "bytes": 4979
+  },
+  "test_room_protocol.py": {
+    "sha256": "f85892e74c5b9d1dec004489156b874660ba8ab88b8e11054a81cc4315918612",
+    "bytes": 8243
+  },
+  "lab_server_v4.py": {
+    "sha256": "230c77a8b3644ca927c8af765b5a08a8797d27901bfac8006aed75d9268daef7",
+    "bytes": 11282
+  },
+  "role_protocol.py": {
+    "sha256": "ea7c295882b1371b8fe891c856015d5a0b4dc7ba473d1efaaa32e94fcc290cbf",
+    "bytes": 9654
+  },
+  "lab-control.json": {
+    "sha256": "cd3bd8bcae64ea299316c2b75777131d967ca5e2e5930d30ce147c649fd9973f",
+    "bytes": 3869
+  }
+}

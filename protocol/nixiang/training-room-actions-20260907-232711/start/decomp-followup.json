@@ -1,0 +1,1409 @@
+{
+  "0x80e100": {
+    "addr": "0x80e100",
+    "code": "void __thiscall sub_80E100(void *this, _DWORD *a2, int a3)\n{\n  int v4; // [esp+14h] [ebp-4h]\n\n  if ( a2 != nullptr && a3 == 8 ) /*0x80e113*/\n  {\n    v4 = sub_808C70(a1: *a2, a2: a2[1]); /*0x80e132*/\n    if ( v4 != 0 ) /*0x80e139*/\n    {\n      if ( sub_4A1030(a1: dword_17C8708) == *(_QWORD *)a2 ) /*0x80e15a*/\n        dword_17C86D0 = 1; /*0x80e167*/\n      sub_4A1140(a1: 1); /*0x80e176*/\n      (*(void (__thiscall **)(void *, int))(*(_DWORD *)this + 24))(a1: this, a2: v4); /*0x80e18a*/\n    }\n  }\n}",
+    "refs": [
+      {
+        "addr": "0x808c70",
+        "name": "sub_808C70"
+      },
+      {
+        "addr": "0x17c86d0",
+        "name": "dword_17C86D0"
+      },
+      {
+        "addr": "0x4a1030",
+        "name": "sub_4A1030"
+      },
+      {
+        "addr": "0x17c8708",
+        "name": "dword_17C8708"
+      },
+      {
+        "addr": "0x4a1140",
+        "name": "sub_4A1140"
+      }
+    ]
+  },
+  "0x80e090": {
+    "addr": "0x80e090",
+    "code": "void __thiscall sub_80E090(void *this, _DWORD *a2, int a3)\n{\n  int v3; // eax\n\n  if ( a2 != nullptr && a3 == 8 && sub_808C70(a1: *a2, a2: a2[1]) != 0 ) /*0x80e0c9*/\n  {\n    sub_4A1140(a1: 0); /*0x80e0d0*/\n    v3 = sub_808C00(a1: *(_QWORD *)a2); /*0x80e0e5*/\n    (*(void (__thiscall **)(void *, int))(*(_DWORD *)this + 28))(a1: this, a2: v3); /*0x80e0f6*/\n  }\n}",
+    "refs": [
+      {
+        "addr": "0x4a1140",
+        "name": "sub_4A1140"
+      },
+      {
+        "addr": "0x808c00",
+        "name": "sub_808C00"
+      },
+      {
+        "addr": "0x808c70",
+        "name": "sub_808C70"
+      }
+    ]
+  },
+  "0x810d00": {
+    "addr": "0x810d00",
+    "code": "void __stdcall sub_810D00(__int64 *a1, int a2)\n{\n  int v2; // eax\n  int v3; // eax\n  int v4; // eax\n  int v5; // eax\n  int v6; // eax\n  int v7; // eax\n  int v8; // [esp+4h] [ebp-128h]\n  int v9; // [esp+8h] [ebp-124h]\n  int v10; // [esp+Ch] [ebp-120h]\n  int v11; // [esp+14h] [ebp-118h]\n  int v12; // [esp+18h] [ebp-114h]\n  _BYTE v13[28]; // [esp+2Ch] [ebp-100h] BYREF\n  _BYTE v14[28]; // [esp+48h] [ebp-E4h] BYREF\n  _BYTE v15[96]; // [esp+64h] [ebp-C8h] BYREF\n  _BYTE v16[4]; // [esp+C4h] [ebp-68h] BYREF\n  int v17; // [esp+C8h] [ebp-64h]\n  int v18; // [esp+CCh] [ebp-60h]\n  _BYTE v19[8]; // [esp+D0h] [ebp-5Ch] BYREF\n  _BYTE v20[28]; // [esp+D8h] [ebp-54h] BYREF\n  _BYTE v21[32]; // [esp+F8h] [ebp-34h] BYREF\n  int v22; // [esp+118h] [ebp-14h]\n  __int64 *v23; // [esp+11Ch] [ebp-10h]\n  unsigned int v24; // [esp+120h] [ebp-Ch]\n  int v25; // [esp+128h] [ebp-4h]\n\n  if ( a1 != nullptr ) /*0x810d35*/\n  {\n    v23 = a1; /*0x810d3f*/\n    v2 = sub_808C00(a1: *a1); /*0x810d52*/\n    v22 = sub_808450(a1: v2); /*0x810d63*/\n    if ( v22 != 0 ) /*0x810d6a*/\n    {\n      if ( *v23 == sub_3F2AA0(a1: dword_17C86FC) ) /*0x810d9f*/\n      {\n        sub_3F5620(a1: v20); /*0x810dbd*/\n        v25 = 0; /*0x810dc2*/\n        if ( *(_BYTE *)(sub_4435E0(a1: v15) + 73) != 0 ) /*0x810de1*/\n          sub_3F5710(a1: (int)&aSetdeaddelaycy[12]); /*0x810deb*/\n        else\n          sub_3F5710(a1: (int)&aDeletehpbyatta[12]); /*0x810dfa*/\n        v3 = sub_80B800(this: (_DWORD *)dword_17C8708); /*0x810e05*/\n        sub_7F4A50(a1: v3); /*0x810e0c*/\n        sub_80BFE0(a1: dword_17C8708); /*0x810e17*/\n        sub_3F5650(a1: &aBattlemodeDoac[5]); /*0x810e27*/\n        LOBYTE(v25) = 1; /*0x810e2c*/\n        sub_4D6A10(a1: v14); /*0x810e3d*/\n        LOBYTE(v25) = 0; /*0x810e42*/\n        sub_3F56D0(a1: v14); /*0x810e4c*/\n        v4 = sub_A45FB0(); /*0x810e51*/\n        v5 = sub_4BEA30(a1: v4); /*0x810e58*/\n        sub_4CBC00(a1: v5); /*0x810e61*/\n        LOBYTE(v25) = 2; /*0x810e66*/\n        if ( sub_4B4CB0(a1: v21) != 0 ) /*0x810e74*/\n        {\n          sub_5404A0(a1: v19); /*0x810e7d*/\n          v18 = *(_DWORD *)sub_4205B0(a1: (int)v19); /*0x810e8c*/\n          v17 = *(_DWORD *)sub_4205B0(a1: (int)v19); /*0x810e99*/\n          sub_80AA40(this: dword_17C8708, a2: v17, a3: v18); /*0x810eaa*/\n        }\n        v12 = sub_80B800(this: (_DWORD *)dword_17C8708); /*0x810eba*/\n        (*(void (__fastcall **)(int))(*(_DWORD *)v12 + 284))(a1: v12); /*0x810ed4*/\n        v11 = sub_91E3C0(a1: dword_17C870C); /*0x810ee1*/\n        (*(void (__fastcall **)(int))(*(_DWORD *)v11 + 12))(a1: v11); /*0x810ef8*/\n        sub_980070(); /*0x810efc*/\n        sub_97FDE0(a1: 6); /*0x810f03*/\n        v6 = sub_3F3820(); /*0x810f08*/\n        (*(void (__thiscall **)(int, _BYTE *, _DWORD, _DWORD, _DWORD))(*(_DWORD *)v6 + 448))( /*0x810f31*/\n          a1: v6,\n          a2: v20,\n          a3: 0,\n          a4: 0,\n          a5: 0);\n        LOBYTE(v25) = 0; /*0x810f33*/\n        sub_471170(); /*0x810f3a*/\n        v25 = -1; /*0x810f3f*/\n        sub_3F56D0(a1: v20); /*0x810f49*/\n      }\n      else\n      {\n        sub_3F5F90(a1: v16); /*0x810f56*/\n        v25 = 3; /*0x810f5b*/\n        sub_43E0F0(a1: v22); /*0x810f65*/\n        sub_401C60(a1: v16, a2: &aGetjumplevel[8]); /*0x810f76*/\n        sub_3F5650(a1: &aBattlemodeDoac[5]); /*0x810f89*/\n        LOBYTE(v25) = 4; /*0x810f8e*/\n        sub_40B7D0(); /*0x810fac*/\n        sub_A821B0(a1: 0, a2: 0, a3: v13, a4: v16, a5: 4, a6: 0, a7: -4521984, a8: 0); /*0x810fb3*/\n        LOBYTE(v25) = 3; /*0x810fb8*/\n        sub_3F56D0(a1: v13); /*0x810fc2*/\n        v10 = sub_80B800(this: (_DWORD *)dword_17C8708); /*0x810fd2*/\n        v7 = sub_807BC0(a1: v22); /*0x810fe2*/\n        (*(void (__thiscall **)(int, _DWORD, int))(*(_DWORD *)v10 + 448))(a1: v10, a2: 0, a3: v7); /*0x810ffe*/\n        v9 = sub_80B800(this: (_DWORD *)dword_17C8708); /*0x81100b*/\n        (*(void (__thiscall **)(int, int, int))(*(_DWORD *)v9 + 480))(a1: v9, a2: v22, a3: 8); /*0x81102b*/\n        sub_80C7B0(a1: *(_DWORD *)v23, a2: *((_DWORD *)v23 + 1), a3: 1); /*0x81103f*/\n        v8 = sub_80B800(this: (_DWORD *)dword_17C8708); /*0x81104f*/\n        (*(void (__thiscall **)(int, int))(*(_DWORD *)v8 + 460))(a1: v8, a2: 1); /*0x81106b*/\n        v25 = -1; /*0x81106d*/\n        sub_3F6050(a1: v16); /*0x811077*/\n      }\n    }\n  }\n  __writefsdword(0, v24); /*0x81107f*/\n}",
+    "refs": [
+      {
+        "addr": "0x808c00",
+        "name": "sub_808C00"
+      },
+      {
+        "addr": "0x808450",
+        "name": "sub_808450"
+      },
+      {
+        "addr": "0x3f5620",
+        "name": "sub_3F5620"
+      },
+      {
+        "addr": "0x3f5710",
+        "name": "sub_3F5710"
+      },
+      {
+        "addr": "0xbcb594",
+        "name": "aSetdeaddelaycy",
+        "string": "SetDeadDelayCycle"
+      },
+      {
+        "addr": "0xbcb5c4",
+        "name": "aDeletehpbyatta",
+        "string": "DeleteHpByAttack"
+      },
+      {
+        "addr": "0x4435e0",
+        "name": "sub_4435E0"
+      },
+      {
+        "addr": "0x80b800",
+        "name": "sub_80B800"
+      },
+      {
+        "addr": "0x17c8708",
+        "name": "dword_17C8708"
+      },
+      {
+        "addr": "0x7f4a50",
+        "name": "sub_7F4A50"
+      },
+      {
+        "addr": "0x80bfe0",
+        "name": "sub_80BFE0"
+      },
+      {
+        "addr": "0x3f5650",
+        "name": "sub_3F5650"
+      },
+      {
+        "addr": "0xb96694",
+        "name": "aBattlemodeDoac",
+        "string": "BattleMode:DoAction"
+      },
+      {
+        "addr": "0x4d6a10",
+        "name": "sub_4D6A10"
+      },
+      {
+        "addr": "0x3f56d0",
+        "name": "sub_3F56D0"
+      },
+      {
+        "addr": "0xa45fb0",
+        "name": "sub_A45FB0"
+      },
+      {
+        "addr": "0x4bea30",
+        "name": "sub_4BEA30"
+      },
+      {
+        "addr": "0x4cbc00",
+        "name": "sub_4CBC00"
+      },
+      {
+        "addr": "0x5404a0",
+        "name": "sub_5404A0"
+      },
+      {
+        "addr": "0x4205b0",
+        "name": "sub_4205B0"
+      },
+      {
+        "addr": "0x80aa40",
+        "name": "sub_80AA40"
+      },
+      {
+        "addr": "0x4b4cb0",
+        "name": "sub_4B4CB0"
+      },
+      {
+        "addr": "0x91e3c0",
+        "name": "sub_91E3C0"
+      },
+      {
+        "addr": "0x17c870c",
+        "name": "dword_17C870C"
+      },
+      {
+        "addr": "0x980070",
+        "name": "sub_980070"
+      },
+      {
+        "addr": "0x97fde0",
+        "name": "sub_97FDE0"
+      },
+      {
+        "addr": "0x3f3820",
+        "name": "sub_3F3820"
+      },
+      {
+        "addr": "0x471170",
+        "name": "sub_471170"
+      },
+      {
+        "addr": "0x3f5f90",
+        "name": "sub_3F5F90"
+      },
+      {
+        "addr": "0x43e0f0",
+        "name": "sub_43E0F0"
+      },
+      {
+        "addr": "0x401c60",
+        "name": "sub_401C60"
+      },
+      {
+        "addr": "0xbcb5f8",
+        "name": "aGetjumplevel",
+        "string": "GetJumpLevel"
+      },
+      {
+        "addr": "0x40b7d0",
+        "name": "sub_40B7D0"
+      },
+      {
+        "addr": "0xa821b0",
+        "name": "sub_A821B0"
+      },
+      {
+        "addr": "0x807bc0",
+        "name": "sub_807BC0"
+      },
+      {
+        "addr": "0x80c7b0",
+        "name": "sub_80C7B0"
+      },
+      {
+        "addr": "0x3f6050",
+        "name": "sub_3F6050"
+      },
+      {
+        "addr": "0x3f2aa0",
+        "name": "sub_3F2AA0"
+      },
+      {
+        "addr": "0x17c86fc",
+        "name": "dword_17C86FC"
+      }
+    ]
+  },
+  "0x8109d0": {
+    "addr": "0x8109d0",
+    "code": "int __stdcall sub_8109D0(int a1, int a2)\n{\n  int v3; // [esp+0h] [ebp-8h]\n\n  v3 = sub_3F3820(); /*0x8109de*/\n  return (*(int (__thiscall **)(int, void *, int, void *, _DWORD))(*(_DWORD *)v3 + 448))( /*0x8109ff*/\n           a1: v3,\n           a2: &unk_17C9D2C,\n           a3: 1,\n           a4: &loc_8076F0,\n           a5: 0);\n}",
+    "refs": [
+      {
+        "addr": "0x3f3820",
+        "name": "sub_3F3820"
+      },
+      {
+        "addr": "0x17c9d2c",
+        "name": "unk_17C9D2C"
+      },
+      {
+        "addr": "0x8076f0",
+        "name": "loc_8076F0"
+      }
+    ]
+  },
+  "0x7f0567": {
+    "addr": "0x7f0567",
+    "code": "int sub_7F02C0()\n{\n  int v0; // eax\n  int result; // eax\n  int v2; // eax\n  int v3; // eax\n  int v4; // eax\n  int v5; // [esp-4h] [ebp-22Ch]\n  int v6; // [esp-4h] [ebp-22Ch]\n  _BYTE v7[28]; // [esp+14h] [ebp-214h] BYREF\n  _BYTE v8[28]; // [esp+30h] [ebp-1F8h] BYREF\n  _BYTE v9[28]; // [esp+4Ch] [ebp-1DCh] BYREF\n  _BYTE v10[28]; // [esp+68h] [ebp-1C0h] BYREF\n  _BYTE v11[128]; // [esp+84h] [ebp-1A4h] BYREF\n  unsigned int v12; // [esp+104h] [ebp-124h]\n  unsigned int v13; // [esp+108h] [ebp-120h]\n  _BYTE v14[260]; // [esp+10Ch] [ebp-11Ch] BYREF\n  int *v15; // [esp+214h] [ebp-14h]\n  int *v16; // [esp+218h] [ebp-10h]\n  unsigned int v17; // [esp+21Ch] [ebp-Ch]\n  int v18; // [esp+224h] [ebp-4h]\n\n  sub_756690(); /*0x7f02f3*/\n  sub_756B40(a1: 0); /*0x7f02fa*/\n  v5 = *(_DWORD *)sub_443610(a1: dword_17C8708); /*0x7f030c*/\n  sub_A45020(); /*0x7f030d*/\n  v16 = (int *)sub_A44CC0(a1: v5); /*0x7f0319*/\n  if ( v16 != nullptr /*0x7f0351*/\n    && (v6 = *v16, sub_A44E90(), (v15 = (int *)sub_A44C60(a1: v6)) != nullptr)\n    && v15[1] >= (unsigned int)v16[1] )\n  {\n    if ( v16[2] != 0 ) /*0x7f035e*/\n    {\n      qword_17C8B64 = sub_3F2AA0(a1: dword_17C86FC); /*0x7f03cc*/\n      dword_17C8B6C = *v15; /*0x7f03dc*/\n      v13 = sub_9BCF20(a1: dword_17C86FC); /*0x7f03ed*/\n      v12 = sub_47E120(a1: dword_17C86FC); /*0x7f03fe*/\n      if ( v16[2] <= v13 || v16[2] <= v12 || v16[2] <= v12 + v13 ) /*0x7f043a*/\n      {\n        sub_653BEB(a1: v14, a2: 256, a3: &unk_BAEE70, v16[2]); /*0x7f04ec*/\n        sub_3F5650(a1: v14); /*0x7f0501*/\n        v18 = 2; /*0x7f0506*/\n        v4 = sub_3F3820(); /*0x7f050d*/\n        (*(void (__thiscall **)(int, _BYTE *, int, char *, void *))(*(_DWORD *)v4 + 448))( /*0x7f053f*/\n          a1: v4,\n          a2: v8,\n          a3: 1,\n          a4: (char *)&loc_7FAEEB + 5,\n          a5: &unk_7FBE70);\n        v18 = -1; /*0x7f0541*/\n        result = sub_3F56D0(a1: v8); /*0x7f054e*/\n      }\n      else\n      {\n        v2 = sub_47E120(a1: dword_17C86FC); /*0x7f0446*/\n        sub_653BEB(a1: v11, a2: 128, a3: &unk_BAEE08, v16[2], v13, v2); /*0x7f046b*/\n        sub_3F5650(a1: v11); /*0x7f0480*/\n        v18 = 1; /*0x7f0485*/\n        v3 = sub_40C540(); /*0x7f048c*/\n        (*(void (__thiscall **)(int, _BYTE *, _DWORD, _DWORD, void *))(*(_DWORD *)v3 + 448))( /*0x7f04bb*/\n          a1: v3,\n          a2: v9,\n          a3: 0,\n          a4: 0,\n          a5: &unk_7FBE70);\n        v18 = -1; /*0x7f04bd*/\n        result = sub_3F56D0(a1: v9); /*0x7f04ca*/\n      }\n    }\n    else\n    {\n      sub_3F5650(a1: &unk_BAEDD4); /*0x7f036b*/\n      v18 = 0; /*0x7f0370*/\n      v0 = sub_3F3820(); /*0x7f0377*/\n      (*(void (__thiscall **)(int, _BYTE *, _DWORD, _DWORD, _DWORD))(*(_DWORD *)v0 + 448))( /*0x7f03a3*/\n        a1: v0,\n        a2: v10,\n        a3: 0,\n        a4: 0,\n        a5: 0);\n      v18 = -1; /*0x7f03a5*/\n      result = sub_3F56D0(a1: v10); /*0x7f03b2*/\n    }\n  }\n  else\n  {\n    if ( sub_809120(a1: dword_17C8708) != 0 ) /*0x7f0562*/\n      sub_A2CA00(a1: 4030, a2: 0); /*0x7f056b*/\n    sub_3F5650(a1: dword_B96F24); /*0x7f057f*/\n    v18 = 3; /*0x7f0584*/\n    sub_7503D0(a1: v7, a2: 0); /*0x7f059a*/\n    v18 = -1; /*0x7f059f*/\n    result = sub_3F56D0(a1: v7); /*0x7f05ac*/\n  }\n  __writefsdword(0, v17); /*0x7f05b4*/\n  return result; /*0x7f05bc*/\n}",
+    "refs": [
+      {
+        "addr": "0x756690",
+        "name": "sub_756690"
+      },
+      {
+        "addr": "0x756b40",
+        "name": "sub_756B40"
+      },
+      {
+        "addr": "0x443610",
+        "name": "sub_443610"
+      },
+      {
+        "addr": "0x17c8708",
+        "name": "dword_17C8708"
+      },
+      {
+        "addr": "0xa45020",
+        "name": "sub_A45020"
+      },
+      {
+        "addr": "0xa44cc0",
+        "name": "sub_A44CC0"
+      },
+      {
+        "addr": "0x17c8b64",
+        "name": "qword_17C8B64"
+      },
+      {
+        "addr": "0x3f2aa0",
+        "name": "sub_3F2AA0"
+      },
+      {
+        "addr": "0x17c86fc",
+        "name": "dword_17C86FC"
+      },
+      {
+        "addr": "0x17c8b6c",
+        "name": "dword_17C8B6C"
+      },
+      {
+        "addr": "0x9bcf20",
+        "name": "sub_9BCF20"
+      },
+      {
+        "addr": "0x47e120",
+        "name": "sub_47E120"
+      },
+      {
+        "addr": "0x653beb",
+        "name": "sub_653BEB"
+      },
+      {
+        "addr": "0xbaee70",
+        "name": "unk_BAEE70"
+      },
+      {
+        "addr": "0x3f5650",
+        "name": "sub_3F5650"
+      },
+      {
+        "addr": "0x3f3820",
+        "name": "sub_3F3820"
+      },
+      {
+        "addr": "0x7faeeb",
+        "name": "loc_7FAEEB"
+      },
+      {
+        "addr": "0x7fbe70",
+        "name": "unk_7FBE70"
+      },
+      {
+        "addr": "0x3f56d0",
+        "name": "sub_3F56D0"
+      },
+      {
+        "addr": "0xbaee08",
+        "name": "unk_BAEE08"
+      },
+      {
+        "addr": "0x40c540",
+        "name": "sub_40C540"
+      },
+      {
+        "addr": "0xbaedd4",
+        "name": "unk_BAEDD4"
+      },
+      {
+        "addr": "0xa2ca00",
+        "name": "sub_A2CA00"
+      },
+      {
+        "addr": "0x809120",
+        "name": "sub_809120"
+      },
+      {
+        "addr": "0xb96f24",
+        "name": "dword_B96F24"
+      },
+      {
+        "addr": "0x7503d0",
+        "name": "sub_7503D0"
+      },
+      {
+        "addr": "0xa44e90",
+        "name": "sub_A44E90"
+      },
+      {
+        "addr": "0xa44c60",
+        "name": "sub_A44C60"
+      }
+    ]
+  },
+  "0x7f2f1c": {
+    "addr": "0x7f2f1c",
+    "code": "int sub_7F2B30()\n{\n  __int64 v0; // kr00_8\n  char v1; // al\n  int result; // eax\n  int v3; // eax\n  int v4; // eax\n  int v5; // eax\n  int v6; // eax\n  int v7; // [esp-4h] [ebp-270h]\n  int v8; // [esp-4h] [ebp-270h]\n  _BYTE v9[28]; // [esp+30h] [ebp-23Ch] BYREF\n  _BYTE v10[28]; // [esp+4Ch] [ebp-220h] BYREF\n  _BYTE v11[28]; // [esp+68h] [ebp-204h] BYREF\n  _BYTE v12[28]; // [esp+84h] [ebp-1E8h] BYREF\n  _BYTE v13[28]; // [esp+A0h] [ebp-1CCh] BYREF\n  _BYTE v14[4]; // [esp+BCh] [ebp-1B0h] BYREF\n  _BYTE v15[128]; // [esp+C0h] [ebp-1ACh] BYREF\n  unsigned int v16; // [esp+140h] [ebp-12Ch]\n  unsigned int v17; // [esp+144h] [ebp-128h]\n  _BYTE v18[260]; // [esp+148h] [ebp-124h] BYREF\n  int *v19; // [esp+250h] [ebp-1Ch]\n  int v20; // [esp+254h] [ebp-18h]\n  char v21; // [esp+25Bh] [ebp-11h]\n  int *v22; // [esp+25Ch] [ebp-10h]\n  int v23; // [esp+268h] [ebp-4h]\n\n  v21 = 1; /*0x7f2b63*/\n  v20 = sub_809120(a1: dword_17C8708); /*0x7f2b72*/\n  if ( v20 != 0 ) /*0x7f2b79*/\n  {\n    v0 = sub_3F1000(a1: v20); /*0x7f2b85*/\n    if ( v0 == sub_4A1030(a1: dword_17C8708) ) /*0x7f2bb6*/\n      v1 = sub_80AF80(a1: 1); /*0x7f2bcd*/\n    else\n      v1 = sub_80AF80(a1: 0); /*0x7f2be4*/\n    v21 = v1; /*0x7f2be9*/\n  }\n  if ( v21 != 0 ) /*0x7f2bf2*/\n  {\n    v7 = *(_DWORD *)sub_443610(a1: dword_17C8708); /*0x7f2c7b*/\n    sub_A45020(); /*0x7f2c7c*/\n    v22 = (int *)sub_A44CC0(a1: v7); /*0x7f2c88*/\n    if ( v22 != nullptr /*0x7f2cc0*/\n      && (v8 = *v22, sub_A44E90(), (v19 = (int *)sub_A44C60(a1: v8)) != nullptr)\n      && v19[1] >= (unsigned int)v22[1] )\n    {\n      if ( v22[2] != 0 ) /*0x7f2ccd*/\n      {\n        qword_17C8B64 = sub_3F2AA0(a1: dword_17C86FC); /*0x7f2d3b*/\n        dword_17C8B6C = *v19; /*0x7f2d4b*/\n        v17 = sub_9BCF20(a1: dword_17C86FC); /*0x7f2d5c*/\n        v16 = sub_47E120(a1: dword_17C86FC); /*0x7f2d6d*/\n        if ( v22[2] <= v17 || v22[2] <= v16 || v22[2] <= v16 + v17 ) /*0x7f2da9*/\n        {\n          sub_653BEB(a1: v18, a2: 256, a3: &unk_BAEE70, v22[2]); /*0x7f2e5b*/\n          sub_3F5650(a1: v18); /*0x7f2e70*/\n          v23 = 4; /*0x7f2e75*/\n          v6 = sub_3F3820(); /*0x7f2e7c*/\n          (*(void (__thiscall **)(int, _BYTE *, int, char *, void *))(*(_DWORD *)v6 + 448))( /*0x7f2eae*/\n            a1: v6,\n            a2: v10,\n            a3: 1,\n            a4: (char *)&loc_7FAEEB + 5,\n            a5: &unk_7FBE70);\n          v23 = -1; /*0x7f2eb0*/\n          return sub_3F56D0(a1: v10); /*0x7f2ebd*/\n        }\n        else\n        {\n          v4 = sub_47E120(a1: dword_17C86FC); /*0x7f2db5*/\n          sub_653BEB(a1: v15, a2: 128, a3: &unk_BAEE08, v22[2], v17, v4); /*0x7f2dda*/\n          sub_3F5650(a1: v15); /*0x7f2def*/\n          v23 = 3; /*0x7f2df4*/\n          v5 = sub_40C540(); /*0x7f2dfb*/\n          (*(void (__thiscall **)(int, _BYTE *, _DWORD, _DWORD, void *))(*(_DWORD *)v5 + 448))( /*0x7f2e2a*/\n            a1: v5,\n            a2: v11,\n            a3: 0,\n            a4: 0,\n            a5: &unk_7FBE70);\n          v23 = -1; /*0x7f2e2c*/\n          return sub_3F56D0(a1: v11); /*0x7f2e39*/\n        }\n      }\n      else\n      {\n        sub_3F5650(a1: &unk_BAEDD4); /*0x7f2cda*/\n        v23 = 2; /*0x7f2cdf*/\n        v3 = sub_3F3820(); /*0x7f2ce6*/\n        (*(void (__thiscall **)(int, _BYTE *, _DWORD, _DWORD, _DWORD))(*(_DWORD *)v3 + 448))( /*0x7f2d12*/\n          a1: v3,\n          a2: v12,\n          a3: 0,\n          a4: 0,\n          a5: 0);\n        v23 = -1; /*0x7f2d14*/\n        return sub_3F56D0(a1: v12); /*0x7f2d21*/\n      }\n    }\n    else\n    {\n      result = dword_17C8B60 + 1000; /*0x7f2ecc*/\n      if ( dword_17C8B60 + 1000 <= (unsigned int)dword_17C8690 ) /*0x7f2ed7*/\n      {\n        dword_17C8B5C = 0; /*0x7f2ede*/\n        if ( (unsigned int)dword_17C8690 >= 0x3E8 ) /*0x7f2efa*/\n        {\n          dword_17C8B5C = dword_17C8690; /*0x7f2f04*/\n          if ( sub_809120(a1: dword_17C8708) != 0 ) /*0x7f2f17*/\n            sub_A2CA00(a1: 4030, a2: 0); /*0x7f2f20*/\n          sub_3F5650(a1: dword_B96F24); /*0x7f2f34*/\n          v23 = 5; /*0x7f2f39*/\n          sub_7503D0(a1: v9, a2: 0); /*0x7f2f4f*/\n          v23 = -1; /*0x7f2f54*/\n          return sub_3F56D0(a1: v9); /*0x7f2f61*/\n        }\n      }\n    }\n  }\n  else\n  {\n    sub_3F5FD0(a1: 12377728); /*0x7f2bff*/\n    v23 = 1; /*0x7f2c04*/\n    sub_3F5650(a1: &aBattlemodeDoac[5]); /*0x7f2c16*/\n    sub_40B7D0(); /*0x7f2c3c*/\n    sub_A821B0(a1: 0, a2: 0, a3: v13, a4: v14, a5: 4, a6: 0, a7: -65536, a8: 0); /*0x7f2c43*/\n    LOBYTE(v23) = 0; /*0x7f2c48*/\n    sub_3F56D0(a1: v13); /*0x7f2c52*/\n    v23 = -1; /*0x7f2c57*/\n    return sub_3F6050(a1: v14); /*0x7f2c64*/\n  }\n  return result; /*0x7f2f66*/\n}",
+    "refs": [
+      {
+        "addr": "0x809120",
+        "name": "sub_809120"
+      },
+      {
+        "addr": "0x17c8708",
+        "name": "dword_17C8708"
+      },
+      {
+        "addr": "0x3f1000",
+        "name": "sub_3F1000"
+      },
+      {
+        "addr": "0x80af80",
+        "name": "sub_80AF80"
+      },
+      {
+        "addr": "0x4a1030",
+        "name": "sub_4A1030"
+      },
+      {
+        "addr": "0x443610",
+        "name": "sub_443610"
+      },
+      {
+        "addr": "0xa45020",
+        "name": "sub_A45020"
+      },
+      {
+        "addr": "0xa44cc0",
+        "name": "sub_A44CC0"
+      },
+      {
+        "addr": "0x17c8b64",
+        "name": "qword_17C8B64"
+      },
+      {
+        "addr": "0x3f2aa0",
+        "name": "sub_3F2AA0"
+      },
+      {
+        "addr": "0x17c86fc",
+        "name": "dword_17C86FC"
+      },
+      {
+        "addr": "0x17c8b6c",
+        "name": "dword_17C8B6C"
+      },
+      {
+        "addr": "0x9bcf20",
+        "name": "sub_9BCF20"
+      },
+      {
+        "addr": "0x47e120",
+        "name": "sub_47E120"
+      },
+      {
+        "addr": "0x653beb",
+        "name": "sub_653BEB"
+      },
+      {
+        "addr": "0xbaee70",
+        "name": "unk_BAEE70"
+      },
+      {
+        "addr": "0x3f5650",
+        "name": "sub_3F5650"
+      },
+      {
+        "addr": "0x3f3820",
+        "name": "sub_3F3820"
+      },
+      {
+        "addr": "0x7faeeb",
+        "name": "loc_7FAEEB"
+      },
+      {
+        "addr": "0x7fbe70",
+        "name": "unk_7FBE70"
+      },
+      {
+        "addr": "0x3f56d0",
+        "name": "sub_3F56D0"
+      },
+      {
+        "addr": "0xbaee08",
+        "name": "unk_BAEE08"
+      },
+      {
+        "addr": "0x40c540",
+        "name": "sub_40C540"
+      },
+      {
+        "addr": "0xbaedd4",
+        "name": "unk_BAEDD4"
+      },
+      {
+        "addr": "0x17c8b60",
+        "name": "dword_17C8B60"
+      },
+      {
+        "addr": "0x17c8b5c",
+        "name": "dword_17C8B5C"
+      },
+      {
+        "addr": "0x17c8690",
+        "name": "dword_17C8690"
+      },
+      {
+        "addr": "0xa2ca00",
+        "name": "sub_A2CA00"
+      },
+      {
+        "addr": "0xb96f24",
+        "name": "dword_B96F24"
+      },
+      {
+        "addr": "0x7503d0",
+        "name": "sub_7503D0"
+      },
+      {
+        "addr": "0xa44e90",
+        "name": "sub_A44E90"
+      },
+      {
+        "addr": "0xa44c60",
+        "name": "sub_A44C60"
+      },
+      {
+        "addr": "0x3f5fd0",
+        "name": "sub_3F5FD0"
+      },
+      {
+        "addr": "0xb96694",
+        "name": "aBattlemodeDoac",
+        "string": "BattleMode:DoAction"
+      },
+      {
+        "addr": "0x40b7d0",
+        "name": "sub_40B7D0"
+      },
+      {
+        "addr": "0xa821b0",
+        "name": "sub_A821B0"
+      },
+      {
+        "addr": "0x3f6050",
+        "name": "sub_3F6050"
+      }
+    ]
+  },
+  "0x815664": {
+    "addr": "0x815664",
+    "code": "int __thiscall sub_815640(void *this, int a2, int a3)\n{\n  int v3; // eax\n\n  if ( *(_BYTE *)(a2 + 65) == 8 || *(_BYTE *)(a2 + 65) == 4 ) /*0x81565f*/\n  {\n    sub_A2CA00(a1: 4030, a2: 0); /*0x815668*/\n  }\n  else\n  {\n    v3 = sub_80B800(this: (_DWORD *)dword_17C8708); /*0x815678*/\n    (*(void (__thiscall **)(int, int, void *))(*(_DWORD *)v3 + 264))(a1: v3, a2: v3, a3: this); /*0x81568e*/\n  }\n  return sub_80BBE0(this: (_DWORD *)dword_17C8708, a2: *(_DWORD *)(a2 + 2), a3: *(_DWORD *)(a2 + 6), a4: 1); /*0x8156a8*/\n}",
+    "refs": [
+      {
+        "addr": "0xa2ca00",
+        "name": "sub_A2CA00"
+      },
+      {
+        "addr": "0x80b800",
+        "name": "sub_80B800"
+      },
+      {
+        "addr": "0x17c8708",
+        "name": "dword_17C8708"
+      },
+      {
+        "addr": "0x80bbe0",
+        "name": "sub_80BBE0"
+      }
+    ]
+  },
+  "0x80e1a0": {
+    "addr": "0x80e1a0",
+    "code": "void __thiscall sub_80E1A0(void *this, int a2, int a3)\n{\n  int v3; // eax\n  __int64 v4; // kr00_8\n  unsigned int i; // [esp+1Ch] [ebp-Ch]\n  int v7; // [esp+20h] [ebp-8h]\n\n  if ( a2 != 0 && a3 == 53 && (unsigned __int16)sub_4A1050(a1: dword_17C8708) == *(_DWORD *)a2 ) /*0x80e1d5*/\n  {\n    sub_53AAE0(a1: dword_17C8690); /*0x80e1ea*/\n    sub_808910(a1: *(unsigned __int16 *)(a2 + 11)); /*0x80e1fd*/\n    if ( dword_17C8708 != 0 && sub_809120(a1: dword_17C8708) != 0 ) /*0x80e218*/\n    {\n      v3 = sub_809120(a1: dword_17C8708); /*0x80e220*/\n      if ( sub_43B3F0(a1: v3) != 0 ) /*0x80e22e*/\n        sub_A2CA00(a1: 21440, a2: 0); /*0x80e237*/\n    }\n    sub_807B10(a1: a2 + 45); /*0x80e24c*/\n    dword_17C86A0 = *(_DWORD *)(a2 + 5); /*0x80e257*/\n    for ( i = 0; i < 8; ++i ) /*0x80e264*/\n    {\n      v7 = sub_808450(a1: i); /*0x80e28b*/\n      if ( v7 != 0 ) /*0x80e292*/\n      {\n        sub_5395A0(a1: *(_DWORD *)(a2 + 4 * i + 13)); /*0x80e2a2*/\n        v4 = sub_3F1000(a1: v7); /*0x80e2b1*/\n        if ( v4 == sub_3F2AA0(a1: dword_17C86FC) ) /*0x80e2d0*/\n          sub_53AB10(a1: *(_DWORD *)(a2 + 4 * i + 13)); /*0x80e2eb*/\n      }\n    }\n    dword_17C869C = 0x3E8u / dword_12F14B0; /*0x80e302*/\n    sub_975C30(a1: dword_17C8710, a2: 0x3E8u % dword_12F14B0); /*0x80e30d*/\n    (*(void (__fastcall **)(void *))(*(_DWORD *)this + 36))(a1: this); /*0x80e31d*/\n  }\n}",
+    "refs": [
+      {
+        "addr": "0x53aae0",
+        "name": "sub_53AAE0"
+      },
+      {
+        "addr": "0x17c8690",
+        "name": "dword_17C8690"
+      },
+      {
+        "addr": "0x808910",
+        "name": "sub_808910"
+      },
+      {
+        "addr": "0x809120",
+        "name": "sub_809120"
+      },
+      {
+        "addr": "0x17c8708",
+        "name": "dword_17C8708"
+      },
+      {
+        "addr": "0xa2ca00",
+        "name": "sub_A2CA00"
+      },
+      {
+        "addr": "0x43b3f0",
+        "name": "sub_43B3F0"
+      },
+      {
+        "addr": "0x807b10",
+        "name": "sub_807B10"
+      },
+      {
+        "addr": "0x17c86a0",
+        "name": "dword_17C86A0"
+      },
+      {
+        "addr": "0x808450",
+        "name": "sub_808450"
+      },
+      {
+        "addr": "0x5395a0",
+        "name": "sub_5395A0"
+      },
+      {
+        "addr": "0x3f1000",
+        "name": "sub_3F1000"
+      },
+      {
+        "addr": "0x53ab10",
+        "name": "sub_53AB10"
+      },
+      {
+        "addr": "0x3f2aa0",
+        "name": "sub_3F2AA0"
+      },
+      {
+        "addr": "0x17c86fc",
+        "name": "dword_17C86FC"
+      },
+      {
+        "addr": "0x17c869c",
+        "name": "dword_17C869C"
+      },
+      {
+        "addr": "0x12f14b0",
+        "name": "dword_12F14B0"
+      },
+      {
+        "addr": "0x975c30",
+        "name": "sub_975C30"
+      },
+      {
+        "addr": "0x17c8710",
+        "name": "dword_17C8710"
+      },
+      {
+        "addr": "0x4a1050",
+        "name": "sub_4A1050"
+      }
+    ]
+  },
+  "0x80e6d0": {
+    "addr": "0x80e6d0",
+    "code": "void __thiscall sub_80E6D0(void *this, unsigned __int16 *a2, int a3)\n{\n  int v3; // [esp+4h] [ebp-54h]\n  int v4; // [esp+8h] [ebp-50h]\n  _BYTE v6[28]; // [esp+10h] [ebp-48h] BYREF\n  _BYTE v7[28]; // [esp+2Ch] [ebp-2Ch] BYREF\n  unsigned __int16 *v8; // [esp+48h] [ebp-10h]\n  unsigned int v9; // [esp+4Ch] [ebp-Ch]\n  int v10; // [esp+54h] [ebp-4h]\n\n  if ( a2 != nullptr && a3 == 2 ) /*0x80e702*/\n  {\n    dword_17C86D0 = 0; /*0x80e709*/\n    if ( dword_17C86CC != 0 ) /*0x80e71a*/\n      sub_A2CA00(a1: 21428, a2: 0); /*0x80e723*/\n    (*(void (__fastcall **)(void *))(*(_DWORD *)this + 40))(a1: this); /*0x80e736*/\n    sub_807CE0(a1: 0); /*0x80e740*/\n    v8 = a2; /*0x80e748*/\n    if ( *a2 >= 0x82u ) /*0x80e756*/\n    {\n      sub_3F5650(a1: &unk_B9CE20); /*0x80e7b2*/\n      v10 = 1; /*0x80e7b7*/\n      v3 = sub_3F3820(); /*0x80e7c3*/\n      (*(void (__thiscall **)(int, _BYTE *, _DWORD, _DWORD, _DWORD))(*(_DWORD *)v3 + 448))( /*0x80e7de*/\n        a1: v3,\n        a2: v6,\n        a3: 0,\n        a4: 0,\n        a5: 0);\n      v10 = -1; /*0x80e7e0*/\n      sub_3F56D0(a1: v6); /*0x80e7ea*/\n    }\n    else\n    {\n      sub_3F5650(a1: (char *)&unk_D97AA4 + 104 * *v8); /*0x80e76b*/\n      v10 = 0; /*0x80e770*/\n      v4 = sub_3F3820(); /*0x80e77c*/\n      (*(void (__thiscall **)(int, _BYTE *, _DWORD, _DWORD, _DWORD))(*(_DWORD *)v4 + 448))( /*0x80e797*/\n        a1: v4,\n        a2: v7,\n        a3: 0,\n        a4: 0,\n        a5: 0);\n      v10 = -1; /*0x80e799*/\n      sub_3F56D0(a1: v7); /*0x80e7a3*/\n    }\n    sub_980070(); /*0x80e7f1*/\n    sub_97FDE0(a1: 7); /*0x80e7f8*/\n  }\n  __writefsdword(0, v9); /*0x80e800*/\n}",
+    "refs": [
+      {
+        "addr": "0x17c86d0",
+        "name": "dword_17C86D0"
+      },
+      {
+        "addr": "0xa2ca00",
+        "name": "sub_A2CA00"
+      },
+      {
+        "addr": "0x17c86cc",
+        "name": "dword_17C86CC"
+      },
+      {
+        "addr": "0x807ce0",
+        "name": "sub_807CE0"
+      },
+      {
+        "addr": "0x3f5650",
+        "name": "sub_3F5650"
+      },
+      {
+        "addr": "0xb9ce20",
+        "name": "unk_B9CE20"
+      },
+      {
+        "addr": "0x3f3820",
+        "name": "sub_3F3820"
+      },
+      {
+        "addr": "0x3f56d0",
+        "name": "sub_3F56D0"
+      },
+      {
+        "addr": "0xd97aa4",
+        "name": "unk_D97AA4"
+      },
+      {
+        "addr": "0x980070",
+        "name": "sub_980070"
+      },
+      {
+        "addr": "0x97fde0",
+        "name": "sub_97FDE0"
+      }
+    ]
+  },
+  "0x80f7e0": {
+    "addr": "0x80f7e0",
+    "code": "signed int __stdcall sub_80F7E0(int a1, unsigned int a2)\n{\n  signed int result; // eax\n  int v3; // eax\n  char v4[68]; // [esp+Ch] [ebp-5B0h] BYREF\n  char v5[68]; // [esp+50h] [ebp-56Ch] BYREF\n  _BYTE v6[72]; // [esp+94h] [ebp-528h] BYREF\n  _DWORD v7[308]; // [esp+DCh] [ebp-4E0h] BYREF\n  signed int i; // [esp+5ACh] [ebp-10h]\n  int v9; // [esp+5B0h] [ebp-Ch]\n  int v10; // [esp+5B4h] [ebp-8h]\n  signed int v11; // [esp+5B8h] [ebp-4h]\n\n  v10 = a1; /*0x80f7f4*/\n  v11 = a2 / 0x22; /*0x80f803*/\n  v9 = 0; /*0x80f806*/\n  for ( i = 0; ; ++i ) /*0x80f80d*/\n  {\n    result = i; /*0x80f81f*/\n    if ( i >= v11 ) /*0x80f825*/\n      break; /*0x80f825*/\n    v9 = sub_808C70(a1: *(_DWORD *)v10, a2: *(_DWORD *)(v10 + 4)); /*0x80f840*/\n    if ( v9 != 0 ) /*0x80f847*/\n    {\n      v3 = sub_43E0D0(a1: v9); /*0x80f850*/\n      qmemcpy(v7, (const void *)sub_551D00(a1: v3), sizeof(v7)); /*0x80f869*/\n      v7[121] = *(_DWORD *)(v10 + 8); /*0x80f871*/\n      *(_DWORD *)((char *)&v7[123] + 1) = *(_DWORD *)(v10 + 18); /*0x80f87d*/\n      *(_WORD *)((char *)&v7[126] + 3) = *(_WORD *)(v10 + 26); /*0x80f88a*/\n      v7[138] = *(_DWORD *)(v10 + 12); /*0x80f897*/\n      *(_DWORD *)((char *)&v7[140] + 1) = *(_DWORD *)(v10 + 22); /*0x80f8a3*/\n      *(_WORD *)((char *)&v7[143] + 3) = *(_WORD *)(v10 + 30); /*0x80f8b0*/\n      sub_43E0D0(a1: v9); /*0x80f8c1*/\n      sub_539B60(a1: v7); /*0x80f8c8*/\n      if ( sub_9D7C70(a1: v9) != 0 ) /*0x80f8d7*/\n      {\n        qmemcpy(v6, (const void *)sub_9BD840(a1: v5, a2: *(_DWORD *)(v10 + 8)), 0x44u); /*0x80f903*/\n        *(_WORD *)&v6[23] = *(_WORD *)(v10 + 26); /*0x80f90c*/\n        sub_9BE660(a1: *(_DWORD *)(v10 + 8), a2: v6); /*0x80f927*/\n        qmemcpy(v6, (const void *)sub_9BD840(a1: v4, a2: *(_DWORD *)(v10 + 12)), 0x44u); /*0x80f952*/\n        *(_WORD *)&v6[23] = *(_WORD *)(v10 + 30); /*0x80f95b*/\n        sub_9BE660(a1: *(_DWORD *)(v10 + 12), a2: v6); /*0x80f976*/\n      }\n    }\n    v10 += 34; /*0x80f981*/\n  }\n  return result; /*0x80f989*/\n}",
+    "refs": [
+      {
+        "addr": "0x808c70",
+        "name": "sub_808C70"
+      },
+      {
+        "addr": "0x43e0d0",
+        "name": "sub_43E0D0"
+      },
+      {
+        "addr": "0x551d00",
+        "name": "sub_551D00"
+      },
+      {
+        "addr": "0x539b60",
+        "name": "sub_539B60"
+      },
+      {
+        "addr": "0x9bd840",
+        "name": "sub_9BD840"
+      },
+      {
+        "addr": "0x9be660",
+        "name": "sub_9BE660"
+      },
+      {
+        "addr": "0x9d7c70",
+        "name": "sub_9D7C70"
+      }
+    ]
+  },
+  "0x80fc30": {
+    "addr": "0x80fc30",
+    "code": "int __stdcall sub_80FC30(unsigned __int16 *a1, int a2)\n{\n  int v2; // eax\n  int result; // eax\n  int v4; // [esp+4h] [ebp-70h]\n  int v5; // [esp+8h] [ebp-6Ch]\n  int v6; // [esp+10h] [ebp-64h]\n  _BYTE v7[28]; // [esp+1Ch] [ebp-58h] BYREF\n  _BYTE v8[4]; // [esp+38h] [ebp-3Ch] BYREF\n  _BYTE v9[4]; // [esp+3Ch] [ebp-38h] BYREF\n  _BYTE v10[4]; // [esp+40h] [ebp-34h] BYREF\n  _BYTE v11[28]; // [esp+44h] [ebp-30h] BYREF\n  _BYTE v12[4]; // [esp+60h] [ebp-14h] BYREF\n  unsigned __int16 *v13; // [esp+64h] [ebp-10h]\n  unsigned int v14; // [esp+68h] [ebp-Ch]\n  int v15; // [esp+70h] [ebp-4h]\n\n  v13 = a1; /*0x80fc5b*/\n  if ( *a1 != 0 ) /*0x80fc66*/\n  {\n    v6 = sub_3F5FD0(a1: &aGetplayergroup[8]); /*0x80fce3*/\n    v15 = 2; /*0x80fce6*/\n    v5 = sub_3F6200(a1: (int)v8, a2: v6, a3: (int)&unk_D9B5BC + 104 * *v13); /*0x80fd13*/\n    LOBYTE(v15) = 3; /*0x80fd16*/\n    v2 = sub_3F6410(a1: v5); /*0x80fd1d*/\n    sub_3F5FD0(a1: v2); /*0x80fd26*/\n    LOBYTE(v15) = 4; /*0x80fd2b*/\n    sub_3F5650(a1: &aBattlemodeDoac[5]); /*0x80fd37*/\n    LOBYTE(v15) = 5; /*0x80fd3c*/\n    sub_40B7D0(); /*0x80fd57*/\n    sub_A821B0(a1: 0, a2: 0, a3: v7, a4: v10, a5: 4, a6: 0, a7: -4521984, a8: 0); /*0x80fd5e*/\n    LOBYTE(v15) = 4; /*0x80fd63*/\n    sub_3F56D0(a1: v7); /*0x80fd6a*/\n    LOBYTE(v15) = 3; /*0x80fd6f*/\n    sub_3F6050(a1: v10); /*0x80fd76*/\n    LOBYTE(v15) = 2; /*0x80fd7b*/\n    sub_3F6050(a1: v8); /*0x80fd82*/\n    v15 = -1; /*0x80fd87*/\n    sub_3F6050(a1: v9); /*0x80fd91*/\n  }\n  else\n  {\n    sub_3F5FD0(a1: aGetoldplayergr); /*0x80fc70*/\n    v15 = 1; /*0x80fc75*/\n    sub_3F5650(a1: &aBattlemodeDoac[5]); /*0x80fc84*/\n    sub_40B7D0(); /*0x80fca4*/\n    sub_A821B0(a1: 0, a2: 0, a3: v11, a4: v12, a5: 4, a6: 0, a7: -4521984, a8: 2); /*0x80fcab*/\n    LOBYTE(v15) = 0; /*0x80fcb0*/\n    sub_3F56D0(a1: v11); /*0x80fcb7*/\n    v15 = -1; /*0x80fcbc*/\n    sub_3F6050(a1: v12); /*0x80fcc6*/\n  }\n  v4 = sub_80B800(this: (_DWORD *)dword_17C8708); /*0x80fda1*/\n  result = (*(int (__cdecl **)(int))(*(_DWORD *)v4 + 444))(a1: 1); /*0x80fdb4*/\n  __writefsdword(0, v14); /*0x80fdb9*/\n  return result; /*0x80fdc1*/\n}",
+    "refs": [
+      {
+        "addr": "0x3f5fd0",
+        "name": "sub_3F5FD0"
+      },
+      {
+        "addr": "0xbcb64c",
+        "name": "aGetplayergroup",
+        "string": "GetPlayerGroup"
+      },
+      {
+        "addr": "0x3f6200",
+        "name": "sub_3F6200"
+      },
+      {
+        "addr": "0xd9b5bc",
+        "name": "unk_D9B5BC"
+      },
+      {
+        "addr": "0x3f6410",
+        "name": "sub_3F6410"
+      },
+      {
+        "addr": "0x3f5650",
+        "name": "sub_3F5650"
+      },
+      {
+        "addr": "0xb96694",
+        "name": "aBattlemodeDoac",
+        "string": "BattleMode:DoAction"
+      },
+      {
+        "addr": "0x40b7d0",
+        "name": "sub_40B7D0"
+      },
+      {
+        "addr": "0xa821b0",
+        "name": "sub_A821B0"
+      },
+      {
+        "addr": "0x3f56d0",
+        "name": "sub_3F56D0"
+      },
+      {
+        "addr": "0x3f6050",
+        "name": "sub_3F6050"
+      },
+      {
+        "addr": "0xbcb638",
+        "name": "aGetoldplayergr",
+        "string": "GetOldPlayerGroup"
+      },
+      {
+        "addr": "0x80b800",
+        "name": "sub_80B800"
+      },
+      {
+        "addr": "0x17c8708",
+        "name": "dword_17C8708"
+      }
+    ]
+  },
+  "0x80eea0": {
+    "addr": "0x80eea0",
+    "code": "void __thiscall sub_80EEA0(void *this, int a2, int a3)\n{\n  int v4; // [esp+4h] [ebp-4E0h]\n  _BYTE v5[1236]; // [esp+Ch] [ebp-4D8h] BYREF\n  int v6; // [esp+4E0h] [ebp-4h]\n\n  if ( a2 != 0 ) /*0x80eeb3*/\n  {\n    dword_17C86D4 = *(unsigned __int8 *)(a2 + 144); /*0x80eed0*/\n    v6 = a2 + 149; /*0x80eee8*/\n    sub_551D00(a1: v5); /*0x80eef1*/\n    sub_A2ECC0( /*0x80ef22*/\n      a1: v5,\n      a2: v6,\n      a3: *(unsigned __int8 *)(a2 + 64),\n      a4: *(unsigned __int8 *)(a2 + 54),\n      a5: *(unsigned __int8 *)(a2 + 56));\n    if ( *(_BYTE *)(a2 + 76) != 0 ) /*0x80ef36*/\n    {\n      sub_80BE60(a1: *(_DWORD *)a2, a2: *(_DWORD *)(a2 + 4), a3: a2, a4: v5, a5: 1, a6: 1); /*0x80ef5d*/\n    }\n    else\n    {\n      v4 = sub_80CF10(a1: *(_DWORD *)a2, a2: *(_DWORD *)(a2 + 4), a3: a2, a4: v5, a5: 1); /*0x80ef8f*/\n      sub_53AB30(a1: *(_DWORD *)(a2 + 136)); /*0x80efa8*/\n      sub_53AB50(a1: *(_DWORD *)(a2 + 145)); /*0x80efc0*/\n      sub_5018E0(a1: dword_17C86D4 != 0); /*0x80efd9*/\n      if ( v4 != 0 ) /*0x80efe5*/\n      {\n        sub_809D70(a1: v4, a2: 1); /*0x80eff6*/\n        (*(void (__thiscall **)(void *, int))(*(_DWORD *)this + 20))(a1: this, a2: v4); /*0x80f013*/\n      }\n    }\n  }\n}",
+    "refs": [
+      {
+        "addr": "0x17c86d4",
+        "name": "dword_17C86D4"
+      },
+      {
+        "addr": "0x551d00",
+        "name": "sub_551D00"
+      },
+      {
+        "addr": "0xa2ecc0",
+        "name": "sub_A2ECC0"
+      },
+      {
+        "addr": "0x80be60",
+        "name": "sub_80BE60"
+      },
+      {
+        "addr": "0x80cf10",
+        "name": "sub_80CF10"
+      },
+      {
+        "addr": "0x53ab30",
+        "name": "sub_53AB30"
+      },
+      {
+        "addr": "0x53ab50",
+        "name": "sub_53AB50"
+      },
+      {
+        "addr": "0x5018e0",
+        "name": "sub_5018E0"
+      },
+      {
+        "addr": "0x809d70",
+        "name": "sub_809D70"
+      }
+    ]
+  },
+  "0x80f020": {
+    "addr": "0x80f020",
+    "code": "int __thiscall sub_80F020(void *this, _DWORD *a2, int a3)\n{\n  __int64 v3; // rax\n  int result; // eax\n  _BYTE v6[4]; // [esp+14h] [ebp-4F4h] BYREF\n  _BYTE *v7; // [esp+18h] [ebp-4F0h]\n  _BYTE v8[1236]; // [esp+1Ch] [ebp-4ECh] BYREF\n  unsigned int i; // [esp+4F0h] [ebp-18h]\n  int *v10; // [esp+4F4h] [ebp-14h]\n  char *v11; // [esp+4F8h] [ebp-10h]\n  unsigned int v12; // [esp+4FCh] [ebp-Ch]\n  int v13; // [esp+504h] [ebp-4h]\n\n  v10 = a2; /*0x80f051*/\n  dword_17C86D4 = *((unsigned __int8 *)a2 + 144); /*0x80f05e*/\n  v11 = (char *)a2 + 149; /*0x80f06c*/\n  for ( i = 0; i < 0x10; ++i ) /*0x80f06f*/\n  {\n    sub_551D00(a1: v8); /*0x80f091*/\n    sub_A2ECC0( /*0x80f0b9*/\n      a1: v8,\n      a2: v11,\n      a3: *((unsigned __int8 *)v10 + 64),\n      a4: *((unsigned __int8 *)v10 + 54),\n      a5: *((unsigned __int8 *)v10 + 56));\n    if ( *((_BYTE *)v10 + 76) != 0 ) /*0x80f0ca*/\n    {\n      sub_80BE60(a1: *(_QWORD *)v10, a2: (int)v10, a3: v8, a4: 1, a5: 1); /*0x80f0eb*/\n    }\n    else\n    {\n      v3 = sub_3F2AA0(a1: dword_17C86FC); /*0x80f0fb*/\n      if ( *(_QWORD *)v10 == v3 ) /*0x80f123*/\n      {\n        v7 = (_BYTE *)sub_808C70(a1: *v10, a2: v10[1]); /*0x80f172*/\n        if ( v7 != nullptr ) /*0x80f17f*/\n        {\n          sub_53AB50(this: v7, a2: *(int *)((char *)v10 + 145)); /*0x80f195*/\n          sub_5018E0(this: v7, a2: dword_17C86D4 != 0); /*0x80f1ae*/\n          sub_3F5FD0(a1: (char *)v10 + 78); /*0x80f1c0*/\n          v13 = 0; /*0x80f1c5*/\n          sub_53AB90(this: (int)v7, a2: (int)v6); /*0x80f1d9*/\n          v13 = -1; /*0x80f1de*/\n          sub_3F6050(a1: v6); /*0x80f1eb*/\n          sub_53ABB0(this: v7, a2: v10[30]); /*0x80f1fd*/\n          sub_9E3540(this: v7, a2: (int)v8, a3: 0); /*0x80f211*/\n        }\n      }\n      else\n      {\n        sub_80CF10(a1: *v10, a2: v10[1], a3: (int)v10, a4: (int)v8, a5: 1); /*0x80f153*/\n      }\n    }\n    v10 = (int *)&v11[68 * *((unsigned __int8 *)v10 + 64)]; /*0x80f223*/\n    v11 = (char *)v10 + 149; /*0x80f22f*/\n    if ( (char *)v10 - (char *)a2 >= a3 ) /*0x80f23b*/\n      break; /*0x80f23b*/\n  }\n  result = (*(int (__fastcall **)(void *))(*(_DWORD *)this + 16))(a1: this); /*0x80f255*/\n  __writefsdword(0, v12); /*0x80f25a*/\n  return result; /*0x80f262*/\n}",
+    "refs": [
+      {
+        "addr": "0x17c86d4",
+        "name": "dword_17C86D4"
+      },
+      {
+        "addr": "0x551d00",
+        "name": "sub_551D00"
+      },
+      {
+        "addr": "0xa2ecc0",
+        "name": "sub_A2ECC0"
+      },
+      {
+        "addr": "0x80be60",
+        "name": "sub_80BE60"
+      },
+      {
+        "addr": "0x3f2aa0",
+        "name": "sub_3F2AA0"
+      },
+      {
+        "addr": "0x17c86fc",
+        "name": "dword_17C86FC"
+      },
+      {
+        "addr": "0x808c70",
+        "name": "sub_808C70"
+      },
+      {
+        "addr": "0x53ab50",
+        "name": "sub_53AB50"
+      },
+      {
+        "addr": "0x5018e0",
+        "name": "sub_5018E0"
+      },
+      {
+        "addr": "0x3f5fd0",
+        "name": "sub_3F5FD0"
+      },
+      {
+        "addr": "0x53ab90",
+        "name": "sub_53AB90"
+      },
+      {
+        "addr": "0x3f6050",
+        "name": "sub_3F6050"
+      },
+      {
+        "addr": "0x53abb0",
+        "name": "sub_53ABB0"
+      },
+      {
+        "addr": "0x9e3540",
+        "name": "sub_9E3540"
+      },
+      {
+        "addr": "0x80cf10",
+        "name": "sub_80CF10"
+      }
+    ]
+  },
+  "0x80ed00": {
+    "addr": "0x80ed00",
+    "code": "int __thiscall sub_80ED00(void *this, int a2, int a3)\n{\n  int v3; // eax\n  int v4; // eax\n  int v5; // eax\n  int v6; // eax\n  int v7; // eax\n  int result; // eax\n  _BYTE v10[28]; // [esp+8h] [ebp-58h] BYREF\n  int v11; // [esp+24h] [ebp-3Ch]\n  int v12; // [esp+28h] [ebp-38h]\n  _BYTE v13[8]; // [esp+2Ch] [ebp-34h] BYREF\n  _BYTE v14[32]; // [esp+34h] [ebp-2Ch] BYREF\n  unsigned int v15; // [esp+54h] [ebp-Ch]\n  int v16; // [esp+5Ch] [ebp-4h]\n\n  dword_17C86D0 = 0; /*0x80ed28*/\n  if ( dword_17C86CC != 0 ) /*0x80ed39*/\n  {\n    v3 = sub_80B800(this: (_DWORD *)dword_17C8708); /*0x80ed41*/\n    sub_7EB210(a1: v3); /*0x80ed48*/\n    sub_A2CA00(a1: 21428, a2: 0); /*0x80ed54*/\n  }\n  sub_80BFE0(a1: dword_17C8708); /*0x80ed62*/\n  sub_3F5650(a1: &aBattlemodeDoac[5]); /*0x80ed6f*/\n  v16 = 0; /*0x80ed74*/\n  sub_4D6A10(a1: v10); /*0x80ed85*/\n  v16 = -1; /*0x80ed8a*/\n  sub_3F56D0(a1: v10); /*0x80ed94*/\n  v4 = sub_7C0B90(); /*0x80ed99*/\n  sub_7C06A0(a1: v4); /*0x80eda0*/\n  v5 = sub_A45FB0(); /*0x80eda5*/\n  v6 = sub_4BEA30(a1: v5); /*0x80edac*/\n  sub_4CBC00(a1: v6); /*0x80edb5*/\n  v16 = 1; /*0x80edba*/\n  if ( sub_4B4CB0(a1: v14) != 0 ) /*0x80edcb*/\n  {\n    sub_5404A0(a1: v13); /*0x80edd4*/\n    v12 = *(_DWORD *)sub_4205B0(a1: (int)v13); /*0x80ede3*/\n    v11 = *(_DWORD *)sub_4205B0(a1: (int)v13); /*0x80edf0*/\n    sub_80AA40(this: dword_17C8708, a2: v11, a3: v12); /*0x80ee01*/\n  }\n  sub_980070(); /*0x80ee08*/\n  sub_97FDE0(a1: 6); /*0x80ee0f*/\n  (*(void (__thiscall **)(void *))(*(_DWORD *)this + 12))(a1: this); /*0x80ee1f*/\n  v7 = sub_3F30C0(); /*0x80ee21*/\n  sub_91EC60(a1: v7); /*0x80ee28*/\n  result = sub_471170(a1: -1); /*0x80ee37*/\n  __writefsdword(0, v15); /*0x80ee3f*/\n  return result; /*0x80ee47*/\n}",
+    "refs": [
+      {
+        "addr": "0x17c86d0",
+        "name": "dword_17C86D0"
+      },
+      {
+        "addr": "0x80b800",
+        "name": "sub_80B800"
+      },
+      {
+        "addr": "0x17c8708",
+        "name": "dword_17C8708"
+      },
+      {
+        "addr": "0x7eb210",
+        "name": "sub_7EB210"
+      },
+      {
+        "addr": "0xa2ca00",
+        "name": "sub_A2CA00"
+      },
+      {
+        "addr": "0x17c86cc",
+        "name": "dword_17C86CC"
+      },
+      {
+        "addr": "0x80bfe0",
+        "name": "sub_80BFE0"
+      },
+      {
+        "addr": "0x3f5650",
+        "name": "sub_3F5650"
+      },
+      {
+        "addr": "0xb96694",
+        "name": "aBattlemodeDoac",
+        "string": "BattleMode:DoAction"
+      },
+      {
+        "addr": "0x4d6a10",
+        "name": "sub_4D6A10"
+      },
+      {
+        "addr": "0x3f56d0",
+        "name": "sub_3F56D0"
+      },
+      {
+        "addr": "0x7c0b90",
+        "name": "sub_7C0B90"
+      },
+      {
+        "addr": "0x7c06a0",
+        "name": "sub_7C06A0"
+      },
+      {
+        "addr": "0xa45fb0",
+        "name": "sub_A45FB0"
+      },
+      {
+        "addr": "0x4bea30",
+        "name": "sub_4BEA30"
+      },
+      {
+        "addr": "0x4cbc00",
+        "name": "sub_4CBC00"
+      },
+      {
+        "addr": "0x5404a0",
+        "name": "sub_5404A0"
+      },
+      {
+        "addr": "0x4205b0",
+        "name": "sub_4205B0"
+      },
+      {
+        "addr": "0x80aa40",
+        "name": "sub_80AA40"
+      },
+      {
+        "addr": "0x4b4cb0",
+        "name": "sub_4B4CB0"
+      },
+      {
+        "addr": "0x980070",
+        "name": "sub_980070"
+      },
+      {
+        "addr": "0x97fde0",
+        "name": "sub_97FDE0"
+      },
+      {
+        "addr": "0x3f30c0",
+        "name": "sub_3F30C0"
+      },
+      {
+        "addr": "0x91ec60",
+        "name": "sub_91EC60"
+      },
+      {
+        "addr": "0x471170",
+        "name": "sub_471170"
+      }
+    ]
+  },
+  "0x8153a0": {
+    "addr": "0x8153a0",
+    "code": "void __stdcall sub_8153A0(int a1, int a2)\n{\n  __int64 v2; // rax\n  int v3; // eax\n  __int64 v4; // rax\n  int v5; // [esp+8h] [ebp-BCh]\n  int v6; // [esp+Ch] [ebp-B8h]\n  _WORD v7[8]; // [esp+14h] [ebp-B0h] BYREF\n  _WORD v8[44]; // [esp+24h] [ebp-A0h] BYREF\n  int v9; // [esp+7Ch] [ebp-48h]\n  __int64 v10; // [esp+80h] [ebp-44h] BYREF\n  int v11; // [esp+88h] [ebp-3Ch]\n  _DWORD v12[2]; // [esp+8Ch] [ebp-38h] BYREF\n  __int16 v13; // [esp+94h] [ebp-30h]\n  char v14; // [esp+96h] [ebp-2Eh]\n  char v15; // [esp+97h] [ebp-2Dh]\n  char v16; // [esp+98h] [ebp-2Ch]\n  char v17; // [esp+99h] [ebp-2Bh]\n  _BYTE v18[21]; // [esp+9Ah] [ebp-2Ah] BYREF\n  _BYTE v19[11]; // [esp+AFh] [ebp-15h] BYREF\n  __int16 v20; // [esp+BAh] [ebp-Ah]\n  int v21; // [esp+C0h] [ebp-4h]\n\n  if ( a1 != 0 && a2 == 83 ) /*0x8153c5*/\n  {\n    v21 = a1; /*0x8153cf*/\n    sub_4D6760(a1: a1 + 2); /*0x8153df*/\n    sub_539440(a1: *(_WORD *)a1); /*0x8153f1*/\n    v2 = sub_3F2AA0(a1: dword_17C86FC); /*0x8153fe*/\n    sub_80BBE0(a1: v2, a2: HIDWORD(v2), a3: 1); /*0x81540b*/\n    sub_80B370(a1: *(unsigned __int8 *)(a1 + 48)); /*0x81541e*/\n    sub_80B8E0(a1: *(_WORD *)(a1 + 49)); /*0x815431*/\n    v3 = sub_8E9500(); /*0x815436*/\n    if ( (unsigned __int8)sub_8E88D0(a1: v3) != 0 ) /*0x815447*/\n    {\n      v9 = 1; /*0x815449*/\n    }\n    else\n    {\n      v4 = sub_4A1030(a1: dword_17C8708); /*0x815458*/\n      v9 = sub_808C00(a1: v4, a2: HIDWORD(v4)); /*0x81546a*/\n    }\n    if ( *(_BYTE *)(v21 + 48) == 4 ) /*0x815477*/\n    {\n      sub_4064E0(); /*0x81547b*/\n      sub_4E35A0(a1: 0); /*0x815482*/\n    }\n    sub_80AA40(a1: *(_DWORD *)(v21 + 40), a2: *(_DWORD *)(v21 + 44)); /*0x815498*/\n    sub_807CE0(a1: 0); /*0x8154a5*/\n    qmemcpy(v8, (const void *)sub_4C9870(a1: dword_17C870C), 0x51u); /*0x8154c2*/\n    sub_656960(a1: v12, a2: 0, a3: 48); /*0x8154cd*/\n    v14 = v8[17]; /*0x8154d8*/\n    v15 = HIBYTE(v8[18]); /*0x8154de*/\n    v13 = v8[16]; /*0x8154ea*/\n    v12[0] = *(_DWORD *)&v8[19]; /*0x8154f0*/\n    v12[1] = *(_DWORD *)&v8[21]; /*0x8154f6*/\n    v16 = HIBYTE(v8[17]); /*0x8154fc*/\n    v17 = v8[18]; /*0x815502*/\n    v20 = *(_WORD *)((char *)&v8[23] + 1); /*0x815509*/\n    sub_6536A0(a1: v18, a2: v8, a3: 21); /*0x81551a*/\n    sub_6536A0(a1: v19, a2: (char *)&v8[10] + 1, a3: 11); /*0x81552f*/\n    v6 = sub_80B800(a1: dword_17C8708); /*0x815542*/\n    (*(void (__thiscall **)(int, _DWORD *))(*(_DWORD *)v6 + 456))(a1: v6, a2: v12); /*0x815560*/\n    sub_80A300(a1: *(_DWORD *)((char *)&v8[29] + 1)); /*0x81556c*/\n    v10 = sub_3F2AA0(a1: dword_17C86FC); /*0x81557c*/\n    v11 = 0; /*0x815582*/\n    sub_A2C950(a1: 3550, a2: 0, a3: (int)&v10, a4: 12); /*0x815596*/\n    if ( (unsigned __int8)sub_471080(a1: dword_17C86FC) != 0 && *(_BYTE *)(v21 + 51) != 0 && *(_BYTE *)(v21 + 56) == 0 ) /*0x8155c4*/\n    {\n      v5 = sub_91E3C0(a1: dword_17C870C); /*0x8155d1*/\n      (*(void (__fastcall **)(int))(*(_DWORD *)v5 + 12))(a1: v5); /*0x8155e8*/\n    }\n    else\n    {\n      sub_656960(a1: v7, a2: 0, a3: 14); /*0x8155f7*/\n      v7[0] = sub_4A1050(a1: dword_17C8708); /*0x81560a*/\n      sub_A2C950(a1: 3070, a2: 0, a3: (int)v7, a4: 14); /*0x815621*/\n    }\n  }\n}",
+    "refs": [
+      {
+        "addr": "0x4d6760",
+        "name": "sub_4D6760"
+      },
+      {
+        "addr": "0x539440",
+        "name": "sub_539440"
+      },
+      {
+        "addr": "0x3f2aa0",
+        "name": "sub_3F2AA0"
+      },
+      {
+        "addr": "0x17c86fc",
+        "name": "dword_17C86FC"
+      },
+      {
+        "addr": "0x80bbe0",
+        "name": "sub_80BBE0"
+      },
+      {
+        "addr": "0x80b370",
+        "name": "sub_80B370"
+      },
+      {
+        "addr": "0x80b8e0",
+        "name": "sub_80B8E0"
+      },
+      {
+        "addr": "0x8e9500",
+        "name": "sub_8E9500"
+      },
+      {
+        "addr": "0x4a1030",
+        "name": "sub_4A1030"
+      },
+      {
+        "addr": "0x17c8708",
+        "name": "dword_17C8708"
+      },
+      {
+        "addr": "0x808c00",
+        "name": "sub_808C00"
+      },
+      {
+        "addr": "0x8e88d0",
+        "name": "sub_8E88D0"
+      },
+      {
+        "addr": "0x4064e0",
+        "name": "sub_4064E0"
+      },
+      {
+        "addr": "0x4e35a0",
+        "name": "sub_4E35A0"
+      },
+      {
+        "addr": "0x80aa40",
+        "name": "sub_80AA40"
+      },
+      {
+        "addr": "0x807ce0",
+        "name": "sub_807CE0"
+      },
+      {
+        "addr": "0x4c9870",
+        "name": "sub_4C9870"
+      },
+      {
+        "addr": "0x17c870c",
+        "name": "dword_17C870C"
+      },
+      {
+        "addr": "0x656960",
+        "name": "sub_656960"
+      },
+      {
+        "addr": "0x6536a0",
+        "name": "sub_6536A0"
+      },
+      {
+        "addr": "0x80b800",
+        "name": "sub_80B800"
+      },
+      {
+        "addr": "0x80a300",
+        "name": "sub_80A300"
+      },
+      {
+        "addr": "0xa2c950",
+        "name": "sub_A2C950"
+      },
+      {
+        "addr": "0x91e3c0",
+        "name": "sub_91E3C0"
+      },
+      {
+        "addr": "0x4a1050",
+        "name": "sub_4A1050"
+      },
+      {
+        "addr": "0x471080",
+        "name": "sub_471080"
+      }
+    ]
+  },
+  "0x808910": {
+    "addr": "0x808910",
+    "code": "void __stdcall sub_808910(int a1)\n{\n  unsigned int v1; // [esp+4h] [ebp-14h] BYREF\n  unsigned int v2; // [esp+8h] [ebp-10h] BYREF\n  unsigned int v3; // [esp+Ch] [ebp-Ch] BYREF\n  unsigned int v4; // [esp+10h] [ebp-8h] BYREF\n  unsigned int i; // [esp+14h] [ebp-4h]\n\n  for ( i = 0; i < 8; ++i ) /*0x808919*/\n  {\n    v4 = i; /*0x808938*/\n    if ( *(_DWORD *)sub_4A6920(a1: &v4) != 0 && i == a1 ) /*0x808958*/\n    {\n      v3 = i; /*0x80895d*/\n      sub_4A6920(a1: &v3); /*0x80896f*/\n      sub_4439E0(a1: 1); /*0x808976*/\n    }\n    else\n    {\n      v2 = i; /*0x808980*/\n      if ( *(_DWORD *)sub_4A6920(a1: &v2) != 0 ) /*0x808998*/\n      {\n        v1 = i; /*0x80899d*/\n        sub_4A6920(a1: &v1); /*0x8089af*/\n        sub_4439E0(a1: 0); /*0x8089b6*/\n      }\n    }\n  }\n}",
+    "refs": [
+      {
+        "addr": "0x4a6920",
+        "name": "sub_4A6920"
+      },
+      {
+        "addr": "0x4439e0",
+        "name": "sub_4439E0"
+      }
+    ]
+  },
+  "0x807b10": {
+    "addr": "0x807b10",
+    "code": "int __thiscall sub_807B10(int this, _DWORD *a2)\n{\n  int v2; // edx\n\n  v2 = a2[1]; /*0x807b1c*/\n  *(_DWORD *)(this + 785) = *a2; /*0x807b22*/\n  *(_DWORD *)(this + 789) = v2; /*0x807b28*/\n  return this; /*0x807b2e*/\n}"
+  },
+  "0x5395a0": {
+    "addr": "0x5395a0",
+    "code": "_DWORD *__thiscall sub_5395A0(_DWORD *this, int a2)\n{\n  *(this + 1764) = a2; /*0x5395ad*/\n  return this; /*0x5395b3*/\n}"
+  },
+  "0x80b800": {
+    "addr": "0x80b800",
+    "code": "int __thiscall sub_80B800(_DWORD *this)\n{\n  int v1; // eax\n  _DWORD *v3; // [esp+0h] [ebp-4h]\n\n  v3 = this; /*0x80b804*/\n  if ( *(this + 232) == 0 ) /*0x80b811*/\n    sub_80B190(a1: dword_17C8694); /*0x80b81d*/\n  if ( v3[35] != 6 ) /*0x80b82c*/\n    return v3[232]; /*0x80b845*/\n  v1 = sub_40C5D0(a1: v3); /*0x80b82e*/\n  sub_807B40(a1: v1); /*0x80b837*/\n  return v3[232]; /*0x80b845*/\n}",
+    "refs": [
+      {
+        "addr": "0x80b190",
+        "name": "sub_80B190"
+      },
+      {
+        "addr": "0x17c8694",
+        "name": "dword_17C8694"
+      },
+      {
+        "addr": "0x40c5d0",
+        "name": "sub_40C5D0"
+      },
+      {
+        "addr": "0x807b40",
+        "name": "sub_807B40"
+      }
+    ]
+  },
+  "0x810a10": {
+    "addr": "0x810a10",
+    "code": "int __fastcall sub_810A10(int a1)\n{\n  int v1; // eax\n  int v2; // eax\n\n  v1 = sub_80B800(this: (_DWORD *)dword_17C8708); /*0x810a1d*/\n  sub_7EBEA0(a1: v1, a2: a1); /*0x810a24*/\n  v2 = sub_80B800(this: (_DWORD *)dword_17C8708); /*0x810a2f*/\n  return sub_7F4400(a1: v2); /*0x810a3b*/\n}",
+    "refs": [
+      {
+        "addr": "0x80b800",
+        "name": "sub_80B800"
+      },
+      {
+        "addr": "0x17c8708",
+        "name": "dword_17C8708"
+      },
+      {
+        "addr": "0x7ebea0",
+        "name": "sub_7EBEA0"
+      },
+      {
+        "addr": "0x7f4400",
+        "name": "sub_7F4400"
+      }
+    ]
+  },
+  "0x810ac0": {
+    "addr": "0x810ac0",
+    "code": "int __stdcall sub_810AC0(int a1, int a2)\n{\n  sub_80B800(this: (_DWORD *)dword_17C8708); /*0x810ad5*/\n  return sub_7F4590(a1, a2); /*0x810ae1*/\n}",
+    "refs": [
+      {
+        "addr": "0x80b800",
+        "name": "sub_80B800"
+      },
+      {
+        "addr": "0x17c8708",
+        "name": "dword_17C8708"
+      },
+      {
+        "addr": "0x7f4590",
+        "name": "sub_7F4590"
+      }
+    ]
+  },
+  "0x810ca0": {
+    "addr": "0x810ca0",
+    "code": "int sub_810CA0()\n{\n  int v0; // eax\n  int v1; // eax\n  int v3; // [esp+4h] [ebp-8h]\n\n  v0 = sub_80B800(this: (_DWORD *)dword_17C8708); /*0x810caf*/\n  sub_7F4A50(a1: v0); /*0x810cb6*/\n  v3 = sub_80B800(this: (_DWORD *)dword_17C8708); /*0x810cc6*/\n  (*(void (__fastcall **)(int))(*(_DWORD *)v3 + 284))(a1: v3); /*0x810cd7*/\n  v1 = sub_91E3C0(a1: dword_17C870C); /*0x810cdf*/\n  return (*(int (__thiscall **)(int, int))(*(_DWORD *)v1 + 12))(a1: v1, a2: v1); /*0x810cf4*/\n}",
+    "refs": [
+      {
+        "addr": "0x80b800",
+        "name": "sub_80B800"
+      },
+      {
+        "addr": "0x17c8708",
+        "name": "dword_17C8708"
+      },
+      {
+        "addr": "0x7f4a50",
+        "name": "sub_7F4A50"
+      },
+      {
+        "addr": "0x91e3c0",
+        "name": "sub_91E3C0"
+      },
+      {
+        "addr": "0x17c870c",
+        "name": "dword_17C870C"
+      }
+    ]
+  },
+  "0x810b60": {
+    "addr": "0x810b60",
+    "code": "int __stdcall sub_810B60(int a1)\n{\n  int v1; // eax\n  int v2; // eax\n  int v3; // eax\n  int result; // eax\n  int v5; // [esp+4h] [ebp-3Ch]\n  int v6; // [esp+Ch] [ebp-34h]\n  _BYTE v7[28]; // [esp+14h] [ebp-2Ch] BYREF\n  _BYTE v8[4]; // [esp+30h] [ebp-10h] BYREF\n  unsigned int v9; // [esp+34h] [ebp-Ch]\n  int v10; // [esp+3Ch] [ebp-4h]\n\n  sub_80B800(this: (_DWORD *)dword_17C8708); /*0x810b94*/\n  sub_7F4A10(a1, a2: 1); /*0x810b9b*/\n  v6 = sub_80B800(this: (_DWORD *)dword_17C8708); /*0x810bab*/\n  (*(void (__thiscall **)(int, _DWORD))(*(_DWORD *)v6 + 460))(a1: v6, a2: 0); /*0x810bbe*/\n  sub_3F5F90(a1: v8); /*0x810bc3*/\n  v10 = 0; /*0x810bc8*/\n  if ( sub_539240(a1) <= 1 ) /*0x810bda*/\n  {\n    v3 = sub_43E0F0(a1); /*0x810c3c*/\n    sub_3F6410(a1: v3); /*0x810c43*/\n    sub_401C60(a1: v8, a2: &aSetjumplevel[8]); /*0x810c52*/\n  }\n  else\n  {\n    v1 = sub_539240(a1); /*0x810bdf*/\n    v5 = sub_A242E0(a1: (int)v7, a2: v1); /*0x810bfa*/\n    LOBYTE(v10) = 1; /*0x810bfd*/\n    sub_3F5750(a1: v5); /*0x810c04*/\n    v2 = sub_43E0F0(a1); /*0x810c0d*/\n    sub_3F6410(a1: v2); /*0x810c14*/\n    sub_401C60(a1: v8, a2: &aGotothenextatt[16]); /*0x810c23*/\n    LOBYTE(v10) = 0; /*0x810c2b*/\n    sub_3F56D0(a1: v7); /*0x810c32*/\n  }\n  sub_80B800(this: (_DWORD *)dword_17C8708); /*0x810c69*/\n  sub_7CCA00(a1: v8, a2: -4521984); /*0x810c70*/\n  v10 = -1; /*0x810c75*/\n  result = sub_3F6050(a1: v8); /*0x810c7f*/\n  __writefsdword(0, v9); /*0x810c87*/\n  return result; /*0x810c8f*/\n}",
+    "refs": [
+      {
+        "addr": "0x80b800",
+        "name": "sub_80B800"
+      },
+      {
+        "addr": "0x17c8708",
+        "name": "dword_17C8708"
+      },
+      {
+        "addr": "0x7f4a10",
+        "name": "sub_7F4A10"
+      },
+      {
+        "addr": "0x3f5f90",
+        "name": "sub_3F5F90"
+      },
+      {
+        "addr": "0x43e0f0",
+        "name": "sub_43E0F0"
+      },
+      {
+        "addr": "0x3f6410",
+        "name": "sub_3F6410"
+      },
+      {
+        "addr": "0x401c60",
+        "name": "sub_401C60"
+      },
+      {
+        "addr": "0xbcb618",
+        "name": "aSetjumplevel",
+        "string": "SetJumpLevel"
+      },
+      {
+        "addr": "0x539240",
+        "name": "sub_539240"
+      },
+      {
+        "addr": "0xa242e0",
+        "name": "sub_A242E0"
+      },
+      {
+        "addr": "0x3f5750",
+        "name": "sub_3F5750"
+      },
+      {
+        "addr": "0xbcaf3c",
+        "name": "aGotothenextatt",
+        "string": "GoToTheNextAttack"
+      },
+      {
+        "addr": "0x3f56d0",
+        "name": "sub_3F56D0"
+      },
+      {
+        "addr": "0x7cca00",
+        "name": "sub_7CCA00"
+      },
+      {
+        "addr": "0x3f6050",
+        "name": "sub_3F6050"
+      }
+    ]
+  },
+  "0x7f4400": {
+    "addr": "0x7f4400",
+    "code": "int __fastcall sub_7F4400(int a1)\n{\n  int v1; // eax\n  unsigned int i; // [esp+4h] [ebp-24h]\n  _DWORD v4[8]; // [esp+8h] [ebp-20h] BYREF\n\n  sub_807C00(a1: dword_17C8708, a2: a1); /*0x7f440f*/\n  if ( sub_4435C0(a1: dword_17C8708) == 16 ) /*0x7f4422*/\n  {\n    sub_808300(a1: v4); /*0x7f442e*/\n    for ( i = 0; i < 8; ++i ) /*0x7f4433*/\n    {\n      if ( v4[i] != 0 ) /*0x7f4453*/\n        sub_546520(a1: v4[i]); /*0x7f445c*/\n    }\n  }\n  v1 = sub_4A1310(); /*0x7f4463*/\n  return sub_94A810(a1: v1); /*0x7f446f*/\n}",
+    "refs": [
+      {
+        "addr": "0x807c00",
+        "name": "sub_807C00"
+      },
+      {
+        "addr": "0x17c8708",
+        "name": "dword_17C8708"
+      },
+      {
+        "addr": "0x808300",
+        "name": "sub_808300"
+      },
+      {
+        "addr": "0x546520",
+        "name": "sub_546520"
+      },
+      {
+        "addr": "0x4435c0",
+        "name": "sub_4435C0"
+      },
+      {
+        "addr": "0x4a1310",
+        "name": "sub_4A1310"
+      },
+      {
+        "addr": "0x94a810",
+        "name": "sub_94A810"
+      }
+    ]
+  },
+  "0x7ebea0": {
+    "addr": "0x7ebea0",
+    "code": "int sub_7EBEA0()\n{\n  __int64 v0; // rax\n  int v1; // eax\n  int result; // eax\n  char v3; // [esp-8h] [ebp-1A8h]\n  int v4; // [esp-4h] [ebp-1A4h]\n  int v5; // [esp+4h] [ebp-19Ch]\n  int v6; // [esp+Ch] [ebp-194h]\n  int v7; // [esp+14h] [ebp-18Ch]\n  int v8; // [esp+1Ch] [ebp-184h]\n  _BYTE v9[28]; // [esp+28h] [ebp-178h] BYREF\n  _BYTE v10[28]; // [esp+44h] [ebp-15Ch] BYREF\n  _BYTE v11[28]; // [esp+60h] [ebp-140h] BYREF\n  _BYTE v12[28]; // [esp+7Ch] [ebp-124h] BYREF\n  _BYTE v13[28]; // [esp+98h] [ebp-108h] BYREF\n  _BYTE v14[28]; // [esp+B4h] [ebp-ECh] BYREF\n  _BYTE v15[28]; // [esp+D0h] [ebp-D0h] BYREF\n  _BYTE v16[28]; // [esp+ECh] [ebp-B4h] BYREF\n  _BYTE v17[28]; // [esp+108h] [ebp-98h] BYREF\n  _BYTE v18[28]; // [esp+124h] [ebp-7Ch] BYREF\n  _BYTE v19[4]; // [esp+140h] [ebp-60h] BYREF\n  unsigned int v20; // [esp+144h] [ebp-5Ch]\n  unsigned int i; // [esp+148h] [ebp-58h] BYREF\n  int v22; // [esp+14Ch] [ebp-54h]\n  _BYTE v23[28]; // [esp+150h] [ebp-50h] BYREF\n  int v24; // [esp+16Ch] [ebp-34h]\n  int v25; // [esp+170h] [ebp-30h]\n  _BYTE v26[28]; // [esp+174h] [ebp-2Ch] BYREF\n  unsigned int v27; // [esp+194h] [ebp-Ch]\n  int v28; // [esp+19Ch] [ebp-4h]\n\n  v25 = 0; /*0x7ebed1*/\n  sub_3F5620(a1: v23); /*0x7ebedb*/\n  v28 = 0; /*0x7ebee0*/\n  sub_3F5620(a1: v26); /*0x7ebeea*/\n  LOBYTE(v28) = 1; /*0x7ebeef*/\n  for ( i = 0; i < 8; ++i ) /*0x7ebef3*/\n  {\n    v25 = sub_808450(a1: i); /*0x7ebf1e*/\n    if ( v25 != 0 ) /*0x7ebf25*/\n    {\n      v8 = sub_A34160(a1: v18, a2: (const char *)&i); /*0x7ebf47*/\n      LOBYTE(v28) = 2; /*0x7ebf4d*/\n      v7 = sub_401D70(a1: v17, a2: dword_B96E88, a3: v8); /*0x7ebf79*/\n      LOBYTE(v28) = 3; /*0x7ebf7f*/\n      sub_3F56F0(a1: v7); /*0x7ebf8d*/\n      LOBYTE(v28) = 2; /*0x7ebf92*/\n      sub_3F56D0(a1: v17); /*0x7ebf9c*/\n      LOBYTE(v28) = 1; /*0x7ebfa1*/\n      sub_3F56D0(a1: v18); /*0x7ebfa8*/\n      v6 = sub_A34160(a1: v16, a2: (const char *)&i); /*0x7ebfcc*/\n      LOBYTE(v28) = 4; /*0x7ebfd2*/\n      v5 = sub_401D70(a1: v15, a2: off_B96DC8, a3: v6); /*0x7ebfff*/\n      LOBYTE(v28) = 5; /*0x7ec005*/\n      sub_3F56F0(a1: v5); /*0x7ec013*/\n      LOBYTE(v28) = 4; /*0x7ec018*/\n      sub_3F56D0(a1: v15); /*0x7ec022*/\n      LOBYTE(v28) = 1; /*0x7ec027*/\n      sub_3F56D0(a1: v16); /*0x7ec031*/\n      v0 = sub_3F1000(a1: v25); /*0x7ec039*/\n      v4 = HIDWORD(v0); /*0x7ec03e*/\n      v3 = v0; /*0x7ec03f*/\n      sub_4DDAD0(); /*0x7ec044*/\n      sub_A812C0(a1: v19, a2: v3, a3: v4); /*0x7ec04b*/\n      LOBYTE(v28) = 6; /*0x7ec050*/\n      v22 = sub_74FBF0(a1: v23); /*0x7ec063*/\n      v24 = sub_74FBF0(a1: v26); /*0x7ec075*/\n      v20 = sub_5464A0(a1: v25); /*0x7ec080*/\n      if ( v22 != 0 ) /*0x7ec087*/\n      {\n        if ( v20 > 0x32 ) /*0x7ec097*/\n        {\n          if ( v20 > 0x64 ) /*0x7ec0e0*/\n          {\n            if ( v20 > 0x96 ) /*0x7ec12c*/\n            {\n              if ( v20 > 0xFA ) /*0x7ec17b*/\n              {\n                sub_3F5650(a1: off_B96E9C); /*0x7ec1cc*/\n                LOBYTE(v28) = 11; /*0x7ec1d1*/\n                (*(void (__thiscall **)(int, _BYTE *))(*(_DWORD *)v22 + 40))(a1: v22, a2: v10); /*0x7ec1e7*/\n                LOBYTE(v28) = 6; /*0x7ec1e9*/\n                sub_3F56D0(a1: v10); /*0x7ec1f3*/\n              }\n              else\n              {\n                sub_3F5650(a1: dword_B96E98); /*0x7ec189*/\n                LOBYTE(v28) = 10; /*0x7ec18e*/\n                (*(void (__thiscall **)(int, _BYTE *))(*(_DWORD *)v22 + 40))(a1: v22, a2: v11); /*0x7ec1a4*/\n                LOBYTE(v28) = 6; /*0x7ec1a6*/\n                sub_3F56D0(a1: v11); /*0x7ec1b0*/\n              }\n            }\n            else\n            {\n              sub_3F5650(a1: dword_B96E94); /*0x7ec13a*/\n              LOBYTE(v28) = 9; /*0x7ec13f*/\n              (*(void (__thiscall **)(int, _BYTE *))(*(_DWORD *)v22 + 40))(a1: v22, a2: v12); /*0x7ec155*/\n              LOBYTE(v28) = 6; /*0x7ec157*/\n              sub_3F56D0(a1: v12); /*0x7ec161*/\n            }\n          }\n          else\n          {\n            sub_3F5650(a1: dword_B96E90); /*0x7ec0ee*/\n            LOBYTE(v28) = 8; /*0x7ec0f3*/\n            (*(void (__thiscall **)(int, _BYTE *))(*(_DWORD *)v22 + 40))(a1: v22, a2: v13); /*0x7ec109*/\n            LOBYTE(v28) = 6; /*0x7ec10b*/\n            sub_3F56D0(a1: v13); /*0x7ec115*/\n          }\n        }\n        else\n        {\n          sub_3F5650(a1: dword_B96E8C); /*0x7ec0a5*/\n          LOBYTE(v28) = 7; /*0x7ec0aa*/\n          (*(void (__thiscall **)(int, _BYTE *))(*(_DWORD *)v22 + 40))(a1: v22, a2: v14); /*0x7ec0c0*/\n          LOBYTE(v28) = 6; /*0x7ec0c2*/\n          sub_3F56D0(a1: v14); /*0x7ec0cc*/\n        }\n        if ( v24 != 0 ) /*0x7ec1fc*/\n        {\n          v1 = sub_3F6410(a1: (int)v19); /*0x7ec201*/\n          sub_3F5650(a1: v1); /*0x7ec20d*/\n          LOBYTE(v28) = 12; /*0x7ec212*/\n          sub_4B16B0(a1: v9); /*0x7ec220*/\n          LOBYTE(v28) = 6; /*0x7ec225*/\n          sub_3F56D0(a1: v9); /*0x7ec22f*/\n        }\n      }\n      LOBYTE(v28) = 1; /*0x7ec234*/\n      sub_3F6050(a1: v19); /*0x7ec23b*/\n    }\n  }\n  LOBYTE(v28) = 0; /*0x7ec245*/\n  sub_3F56D0(a1: v26); /*0x7ec24c*/\n  v28 = -1; /*0x7ec251*/\n  result = sub_3F56D0(a1: v23); /*0x7ec25b*/\n  __writefsdword(0, v27); /*0x7ec263*/\n  return result; /*0x7ec26b*/\n}",
+    "refs": [
+      {
+        "addr": "0x3f5620",
+        "name": "sub_3F5620"
+      },
+      {
+        "addr": "0x808450",
+        "name": "sub_808450"
+      },
+      {
+        "addr": "0xa34160",
+        "name": "sub_A34160"
+      },
+      {
+        "addr": "0x401d70",
+        "name": "sub_401D70"
+      },
+      {
+        "addr": "0xb96e88",
+        "name": "dword_B96E88"
+      },
+      {
+        "addr": "0x3f56f0",
+        "name": "sub_3F56F0"
+      },
+      {
+        "addr": "0x3f56d0",
+        "name": "sub_3F56D0"
+      },
+      {
+        "addr": "0xb96dc8",
+        "name": "off_B96DC8"
+      },
+      {
+        "addr": "0x3f1000",
+        "name": "sub_3F1000"
+      },
+      {
+        "addr": "0x4ddad0",
+        "name": "sub_4DDAD0"
+      },
+      {
+        "addr": "0xa812c0",
+        "name": "sub_A812C0"
+      },
+      {
+        "addr": "0x74fbf0",
+        "name": "sub_74FBF0"
+      },
+      {
+        "addr": "0x5464a0",
+        "name": "sub_5464A0"
+      },
+      {
+        "addr": "0x3f5650",
+        "name": "sub_3F5650"
+      },
+      {
+        "addr": "0xb96e9c",
+        "name": "off_B96E9C"
+      },
+      {
+        "addr": "0xb96e98",
+        "name": "dword_B96E98"
+      },
+      {
+        "addr": "0xb96e94",
+        "name": "dword_B96E94"
+      },
+      {
+        "addr": "0xb96e90",
+        "name": "dword_B96E90"
+      },
+      {
+        "addr": "0xb96e8c",
+        "name": "dword_B96E8C"
+      },
+      {
+        "addr": "0x3f6410",
+        "name": "sub_3F6410"
+      },
+      {
+        "addr": "0x4b16b0",
+        "name": "sub_4B16B0"
+      },
+      {
+        "addr": "0x3f6050",
+        "name": "sub_3F6050"
+      }
+    ]
+  },
+  "0x7f4590": {
+    "addr": "0x7f4590",
+    "code": "char __stdcall sub_7F4590(int a1, int a2)\n{\n  int v3; // [esp+8h] [ebp-4h]\n\n  v3 = sub_808C70(a1, a2: a1 >> 31); /*0x7f45aa*/\n  if ( v3 == 0 ) /*0x7f45b1*/\n    return 0; /*0x7f45db*/\n  sub_3F1040(a1: v3); /*0x7f45cb*/\n  sub_9CDCE0(a1: v3, a2: a2 + 5000, a3: 0); /*0x7f45d2*/\n  return 1; /*0x7f45dd*/\n}",
+    "refs": [
+      {
+        "addr": "0x808c70",
+        "name": "sub_808C70"
+      },
+      {
+        "addr": "0x3f1040",
+        "name": "sub_3F1040"
+      },
+      {
+        "addr": "0x9cdce0",
+        "name": "sub_9CDCE0"
+      }
+    ]
+  }
+}

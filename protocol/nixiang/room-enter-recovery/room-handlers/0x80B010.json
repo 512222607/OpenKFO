@@ -1,0 +1,10 @@
+{
+  "addr": "0x80B010",
+  "code": "_DWORD *__thiscall sub_80B010(int *this, const void *a2)\n{\n  qmemcpy(this + 1, a2, 0x60u); /*0x80b027*/\n  return sub_80AA40((int)this, a2: *(this + 4), a3: *(this + 5)); /*0x80b03c*/\n}",
+  "refs": [
+    {
+      "addr": "0x80aa40",
+      "name": "sub_80AA40"
+    }
+  ]
+}

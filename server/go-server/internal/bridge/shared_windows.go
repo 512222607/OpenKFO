@@ -51,6 +51,12 @@ func startSharedClient(image string) (*ownedClient, error) {
 	if err = patchClientMemory(pi.Process, loadingThreadCleanupAddress, loadingThreadCleanupOriginal, loadingThreadCleanupSafe); err != nil {
 		return nil, err
 	}
+	if err = patchClientMemory(pi.Process, itemDurationDisplayAddress, itemDurationDisplayOriginal, itemDurationDisplayFixed); err != nil {
+		return nil, err
+	}
+	if err = patchGPKCompatibility(pi.Process); err != nil {
+		return nil, err
+	}
 	identity, err := processIdentity(pi.ProcessId, image)
 	if err != nil {
 		return nil, err
@@ -69,6 +75,7 @@ func startSharedClient(image string) (*ownedClient, error) {
 	ok = true
 	log.Printf("shared_client_started pid=%d mutex=%q", identity.PID, replacement[:9])
 	log.Printf("client_loading_thread_cleanup pid=%d mode=natural_exit", identity.PID)
+	log.Printf("client_gpk_compatibility pid=%d mode=factory_and_callbacks_disabled", identity.PID)
 	return child, nil
 }
 

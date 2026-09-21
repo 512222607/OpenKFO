@@ -1,0 +1,26 @@
+{
+  "addr": "0x9be710",
+  "code": "int __thiscall sub_9BE710(int *this, _DWORD *a2)\n{\n  int result; // eax\n  unsigned int i; // [esp+Ch] [ebp-4h]\n\n  if ( *((_BYTE *)a2 + 4) == 71 ) /*0x9be725*/\n    *(this + 4) = *(unsigned __int16 *)((char *)a2 + 23); /*0x9be731*/\n  if ( *((_BYTE *)a2 + 4) == 74 ) /*0x9be73e*/\n    *(this + 5) = *(unsigned __int16 *)((char *)a2 + 23); /*0x9be74a*/\n  for ( i = 0; i < sub_5471D0(a1: this + 946); ++i ) /*0x9be74d*/\n  {\n    if ( *(_DWORD *)sub_549130(a1: i) == *a2 ) /*0x9be78b*/\n    {\n      result = sub_549130(a1: i); /*0x9be79d*/\n      qmemcpy((void *)result, a2, 0x44u); /*0x9be7a9*/\n      return result; /*0x9be7a9*/\n    }\n  }\n  sub_4A29E0(a1: a2); /*0x9be7bc*/\n  result = *((unsigned __int8 *)a2 + 4); /*0x9be7c4*/\n  if ( result != 50 ) /*0x9be7cb*/\n    return result; /*0x9be7ee*/\n  result = sub_9BE5A0(a1: this); /*0x9be7d0*/\n  if ( result == 0 ) /*0x9be7d7*/\n    return result; /*0x9be7ee*/\n  sub_9BE5A0(a1: this); /*0x9be7e2*/\n  return sub_84E2B0(a1: a2, a2: 1); /*0x9be7e9*/\n}",
+  "refs": [
+    {
+      "addr": "0x549130",
+      "name": "sub_549130"
+    },
+    {
+      "addr": "0x5471d0",
+      "name": "sub_5471D0"
+    },
+    {
+      "addr": "0x4a29e0",
+      "name": "sub_4A29E0"
+    },
+    {
+      "addr": "0x9be5a0",
+      "name": "sub_9BE5A0"
+    },
+    {
+      "addr": "0x84e2b0",
+      "name": "sub_84E2B0"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "addr": "0x9bd7c0",
+  "code": "unsigned int __thiscall sub_9BD7C0(char *this, int a2, int a3)\n{\n  unsigned int result; // eax\n  unsigned int i; // [esp+4h] [ebp-4Ch]\n  _BYTE v6[72]; // [esp+8h] [ebp-48h] BYREF\n\n  sub_656960(a1: v6, a2: 0, a3: 68); /*0x9bd7d1*/\n  for ( i = 0; ; ++i ) /*0x9bd7d9*/\n  {\n    result = sub_5471D0(a1: this + 3784); /*0x9bd7f4*/\n    if ( i >= result ) /*0x9bd7fc*/\n      break; /*0x9bd7fc*/\n    if ( *(_DWORD *)sub_549130(a1: i) == a2 ) /*0x9bd815*/\n    {\n      result = sub_549130(a1: i); /*0x9bd824*/\n      *(_DWORD *)(result + 19) = a3; /*0x9bd82c*/\n      return result; /*0x9bd82f*/\n    }\n  }\n  return result; /*0x9bd833*/\n}",
+  "refs": [
+    {
+      "addr": "0x656960",
+      "name": "sub_656960"
+    },
+    {
+      "addr": "0x5471d0",
+      "name": "sub_5471D0"
+    },
+    {
+      "addr": "0x549130",
+      "name": "sub_549130"
+    }
+  ]
+}

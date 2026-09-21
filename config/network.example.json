@@ -1,0 +1,22 @@
+{
+  "game_endpoint": "tls://game.example.com:19091",
+  "direct_endpoint": "tls://game.example.com:19091",
+  "wss_endpoint": "wss://updates.example.com/kk/tunnel",
+  "update_base_url": "https://updates.example.com/updates/",
+  "ssh_host": "server.example.com",
+  "ssh_port": 22,
+  "bridge_paths": [
+    "dist/online-launcher/bridge.json",
+    "runtime-local/go-online/bridge.json",
+    "../client/bridge.json",
+    "../功夫小子/bridge.json",
+    "dist/登录器完整包-20260920/bridge.json"
+  ],
+  "gm_updater_paths": [
+    "dist/GM管理器/updater-settings.json"
+  ],
+  "admin_paths": [
+    "runtime-local/online-admin.json"
+  ],
+  "launcher_manifest_paths": []
+}

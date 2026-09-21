@@ -1,0 +1,38 @@
+{
+  "addr": "0xa1bd60",
+  "code": "int __stdcall sub_A1BD60(_DWORD *a1, int a2)\n{\n  int v2; // eax\n  int result; // eax\n  int v4; // [esp+Ch] [ebp-9Ch]\n  char v5; // [esp+13h] [ebp-95h]\n  _DWORD v6[18]; // [esp+18h] [ebp-90h] BYREF\n  _DWORD v7[5]; // [esp+60h] [ebp-48h] BYREF\n  unsigned __int16 v8; // [esp+77h] [ebp-31h]\n\n  sub_9BD840(a1: v7, a2: *a1); /*0xa1bd8d*/\n  v6[0] = 0; /*0xa1bd92*/\n  sub_656960(a1: &v6[1], a2: 0, a3: 64); /*0xa1bda7*/\n  sub_9BE660(a1: *a1, a2: a1); /*0xa1bdc5*/\n  v5 = 0; /*0xa1bdca*/\n  if ( v7[0] != 0 ) /*0xa1bdd5*/\n  {\n    v4 = *(unsigned __int16 *)((char *)a1 + 23) - v8; /*0xa1be03*/\n    if ( v4 > 0 ) /*0xa1be10*/\n    {\n      qmemcpy(v6, a1, 0x44u); /*0xa1be23*/\n      *(_WORD *)((char *)&v6[5] + 3) = v4; /*0xa1be2c*/\n      v5 = 1; /*0xa1be30*/\n    }\n  }\n  else\n  {\n    qmemcpy(v6, a1, 0x44u); /*0xa1bde8*/\n    v5 = 1; /*0xa1bdea*/\n  }\n  if ( v5 != 0 ) /*0xa1be40*/\n  {\n    sub_7E3AC0(); /*0xa1be49*/\n    sub_7E3FD0(a1: v6); /*0xa1be50*/\n  }\n  v2 = sub_84A380(); /*0xa1be55*/\n  result = sub_7C1D30(a1: v2); /*0xa1be5c*/\n  if ( (_BYTE)result == 0 ) /*0xa1be66*/\n    return result; /*0xa1be7b*/\n  sub_84A380(); /*0xa1be6f*/\n  return sub_84B000(a1); /*0xa1be76*/\n}",
+  "refs": [
+    {
+      "addr": "0x9bd840",
+      "name": "sub_9BD840"
+    },
+    {
+      "addr": "0x656960",
+      "name": "sub_656960"
+    },
+    {
+      "addr": "0x9be660",
+      "name": "sub_9BE660"
+    },
+    {
+      "addr": "0x7e3ac0",
+      "name": "sub_7E3AC0"
+    },
+    {
+      "addr": "0x7e3fd0",
+      "name": "sub_7E3FD0"
+    },
+    {
+      "addr": "0x84a380",
+      "name": "sub_84A380"
+    },
+    {
+      "addr": "0x7c1d30",
+      "name": "sub_7C1D30"
+    },
+    {
+      "addr": "0x84b000",
+      "name": "sub_84B000"
+    }
+  ]
+}

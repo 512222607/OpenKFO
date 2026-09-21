@@ -1,0 +1,54 @@
+{
+  "addr": "0x8560c0",
+  "code": "int __fastcall sub_8560C0(int a1)\n{\n  int v1; // eax\n  int result; // eax\n  _BYTE v4[28]; // [esp+Ch] [ebp-80h] BYREF\n  unsigned int v5; // [esp+28h] [ebp-64h] BYREF\n  unsigned __int8 v6; // [esp+2Ch] [ebp-60h]\n  unsigned int v7[6]; // [esp+70h] [ebp-1Ch] BYREF\n  int v8; // [esp+88h] [ebp-4h]\n\n  if ( dword_17C86CC != 0 ) /*0x8560f2*/\n  {\n    v1 = sub_40BD60(); /*0x8560f4*/\n    sub_8939C0(a1: v1); /*0x8560fb*/\n  }\n  sub_3F5650(a1: &unk_B98A2C); /*0x856108*/\n  v8 = 0; /*0x85610d*/\n  sub_7511C0(a1: v4, a2: 0); /*0x856120*/\n  v8 = -1; /*0x856125*/\n  sub_3F56D0(a1: v4); /*0x85612f*/\n  sub_9C15C0(a1: flt_BEA0B0); /*0x856144*/\n  result = sub_853CF0(a1: &v5, a2: *(_DWORD *)(a1 + 2196)); /*0x856160*/\n  if ( v5 != 0 ) /*0x856169*/\n  {\n    v7[0] = v5; /*0x856170*/\n    v7[1] = sub_650CE0(a1: v6); /*0x856180*/\n    result = sub_A2C950(a1: 2080, a2: 0, a3: (int)v7, a4: 16); /*0x856190*/\n  }\n  __writefsdword(0, v7[4]); /*0x85619b*/\n  return result; /*0x8561a3*/\n}",
+  "refs": [
+    {
+      "addr": "0x40bd60",
+      "name": "sub_40BD60"
+    },
+    {
+      "addr": "0x8939c0",
+      "name": "sub_8939C0"
+    },
+    {
+      "addr": "0x17c86cc",
+      "name": "dword_17C86CC"
+    },
+    {
+      "addr": "0x3f5650",
+      "name": "sub_3F5650"
+    },
+    {
+      "addr": "0xb98a2c",
+      "name": "unk_B98A2C"
+    },
+    {
+      "addr": "0x7511c0",
+      "name": "sub_7511C0"
+    },
+    {
+      "addr": "0x3f56d0",
+      "name": "sub_3F56D0"
+    },
+    {
+      "addr": "0x9c15c0",
+      "name": "sub_9C15C0"
+    },
+    {
+      "addr": "0xbea0b0",
+      "name": "flt_BEA0B0"
+    },
+    {
+      "addr": "0x853cf0",
+      "name": "sub_853CF0"
+    },
+    {
+      "addr": "0x650ce0",
+      "name": "sub_650CE0"
+    },
+    {
+      "addr": "0xa2c950",
+      "name": "sub_A2C950"
+    }
+  ]
+}

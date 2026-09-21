@@ -1,0 +1,42 @@
+{
+  "addr": "0x9bf2f0",
+  "code": "char __thiscall sub_9BF2F0(void *this, _DWORD *a2, int a3)\n{\n  char result; // al\n  int v4; // [esp+4h] [ebp-CCh]\n  _BYTE v6[28]; // [esp+14h] [ebp-BCh] BYREF\n  unsigned int i; // [esp+30h] [ebp-A0h]\n  _BYTE v8[136]; // [esp+34h] [ebp-9Ch] BYREF\n  int v9; // [esp+BCh] [ebp-14h]\n  unsigned int v10; // [esp+C0h] [ebp-10h]\n  unsigned int v11; // [esp+C4h] [ebp-Ch]\n  int v12; // [esp+CCh] [ebp-4h]\n\n  v9 = sub_44E200(a1: (int)this); /*0x9bf329*/\n  v10 = 0; /*0x9bf32c*/\n  for ( i = 0; i < sub_5471D0(a1: v9); ++i ) /*0x9bf333*/\n  {\n    if ( *(_BYTE *)(sub_549130(a1: i) + 4) != 30 || *(_WORD *)(sub_549130(a1: i) + 17) != 0 ) /*0x9bf38f*/\n    {\n      if ( *(_DWORD *)(sub_549130(a1: i) + 13) != 0 || *(_BYTE *)(sub_549130(a1: i) + 4) == 30 ) /*0x9bf3e4*/\n      {\n        if ( *(_WORD *)(sub_549130(a1: i) + 23) == 0 /*0x9bf482*/\n          && *(_DWORD *)(sub_549130(a1: i) + 13) != 0\n          && *(_WORD *)(sub_549130(a1: i) + 17) == 0\n          && *(_DWORD *)(sub_549130(a1: i) + 9) == a2[2] )\n        {\n          if ( *(_DWORD *)(sub_549130(a1: i) + 19) != 0 ) /*0x9bf497*/\n          {\n            if ( *(_DWORD *)(sub_549130(a1: i) + 19) == 1 && *(_DWORD *)(sub_549130(a1: i) + 13) / 0x3Cu >= 0x2238 ) /*0x9bf4f1*/\n              ++v10; /*0x9bf4f9*/\n          }\n          else if ( *(_DWORD *)(sub_549130(a1: i) + 13) >= 0x2238u ) /*0x9bf4af*/\n          {\n            ++v10; /*0x9bf4b7*/\n          }\n        }\n      }\n      else if ( *(_DWORD *)(sub_549130(a1: i) + 5) == a2[3] ) /*0x9bf3fe*/\n      {\n        v10 = *(unsigned __int16 *)(sub_549130(a1: i) + 23); /*0x9bf413*/\n      }\n    }\n    else if ( *(_DWORD *)(sub_549130(a1: i) + 9) == a2[2] ) /*0x9bf3a9*/\n    {\n      ++v10; /*0x9bf3b1*/\n    }\n  }\n  sub_40CEA0(a1: 3, a2: 1); /*0x9bf50b*/\n  v12 = 0; /*0x9bf510*/\n  ((void (__thiscall *)(void *, _BYTE *, unsigned int, _DWORD, _DWORD))loc_9BF000)( /*0x9bf536*/\n    a1: this,\n    a2: v8,\n    a3: v10,\n    a4: a2[4],\n    a5: *(_DWORD *)((char *)a2 + 49));\n  v4 = sub_40CFD0(a1: v6); /*0x9bf559*/\n  LOBYTE(v12) = 1; /*0x9bf55f*/\n  sub_3F56F0(a1: v4); /*0x9bf56d*/\n  LOBYTE(v12) = 0; /*0x9bf572*/\n  sub_3F56D0(a1: v6); /*0x9bf57c*/\n  if ( v10 < a2[4] ) /*0x9bf58a*/\n  {\n    v12 = -1; /*0x9bf5b4*/\n    sub_40C6F0(a1: v8); /*0x9bf5c1*/\n    result = 0; /*0x9bf5c6*/\n  }\n  else\n  {\n    v12 = -1; /*0x9bf593*/\n    sub_40C6F0(a1: v8); /*0x9bf5a0*/\n    result = 1; /*0x9bf5a5*/\n  }\n  __writefsdword(0, v11); /*0x9bf5cf*/\n  return result; /*0x9bf5d7*/\n}",
+  "refs": [
+    {
+      "addr": "0x44e200",
+      "name": "sub_44E200"
+    },
+    {
+      "addr": "0x549130",
+      "name": "sub_549130"
+    },
+    {
+      "addr": "0x5471d0",
+      "name": "sub_5471D0"
+    },
+    {
+      "addr": "0x40cea0",
+      "name": "sub_40CEA0"
+    },
+    {
+      "addr": "0x9bf000",
+      "name": "loc_9BF000"
+    },
+    {
+      "addr": "0x40cfd0",
+      "name": "sub_40CFD0"
+    },
+    {
+      "addr": "0x3f56f0",
+      "name": "sub_3F56F0"
+    },
+    {
+      "addr": "0x3f56d0",
+      "name": "sub_3F56D0"
+    },
+    {
+      "addr": "0x40c6f0",
+      "name": "sub_40C6F0"
+    }
+  ]
+}

@@ -1,0 +1,519 @@
+{
+  "status": "fulfilled",
+  "value": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"addr\":\"0x9CD1B0\",\"code\":\"int __thiscall sub_9CC4C0(int this, int a2, int a3, int a4, int a5)\\n{\\n  int v6; // eax\\n  int v7; // eax\\n  long double v8; // fst7\\n  int v9; // eax\\n  __int64 v10; // rax\\n  int v11; // eax\\n  int v12; // eax\\n  int v13; // eax\\n  int v14; // eax\\n  int v15; // eax\\n  int v16; // eax\\n  int v17; // eax\\n  int v18; // eax\\n  int v19; // eax\\n  _DWORD *v20; // eax\\n  int v21; // eax\\n  _DWORD *v22; // eax\\n  int v23; // eax\\n  int v24; // eax\\n  int v25; // eax\\n  int v26; // eax\\n  __int64 v27; // rax\\n  __int64 v28; // kr00_8\\n  __int64 v29; // kr08_8\\n  int v30; // eax\\n  int v31; // eax\\n  __int64 v32; // kr10_8\\n  int v33; // eax\\n  int v34; // eax\\n  float v35; // [esp+0h] [ebp-10Ch]\\n  int v36; // [esp+8h] [ebp-104h]\\n  int v37; // [esp+10h] [ebp-FCh]\\n  int v38; // [esp+10h] [ebp-FCh]\\n  int v39; // [esp+10h] [ebp-FCh]\\n  int v40; // [esp+10h] [ebp-FCh]\\n  int v41; // [esp+14h] [ebp-F8h]\\n  char v42; // [esp+14h] [ebp-F8h]\\n  char v43; // [esp+14h] [ebp-F8h]\\n  int v44; // [esp+14h] [ebp-F8h]\\n  char v45; // [esp+14h] [ebp-F8h]\\n  char v46; // [esp+14h] [ebp-F8h]\\n  int v47; // [esp+14h] [ebp-F8h]\\n  int v48; // [esp+14h] [ebp-F8h]\\n  int v49; // [esp+20h] [ebp-ECh]\\n  _WORD *v50; // [esp+54h] [ebp-B8h]\\n  bool v51; // [esp+58h] [ebp-B4h]\\n  int v52; // [esp+5Ch] [ebp-B0h]\\n  int v53; // [esp+60h] [ebp-ACh]\\n  int v54; // [esp+64h] [ebp-A8h]\\n  int v55; // [esp+68h] [ebp-A4h]\\n  _WORD *v56; // [esp+6Ch] [ebp-A0h]\\n  int v57; // [esp+70h] [ebp-9Ch]\\n  float v58; // [esp+74h] [ebp-98h]\\n  int v60; // [esp+94h] [ebp-78h]\\n  int v61; // [esp+9Ch] [ebp-70h]\\n  int v62; // [esp+A0h] [ebp-6Ch]\\n  int v63; // [esp+A4h] [ebp-68h]\\n  unsigned int v64; // [esp+B8h] [ebp-54h]\\n  float v65; // [esp+BCh] [ebp-50h]\\n  int v66; // [esp+C0h] [ebp-4Ch]\\n  int v67; // [esp+C4h] [ebp-48h]\\n  int v68; // [esp+C8h] [ebp-44h]\\n  int v69; // [esp+D0h] [ebp-3Ch] BYREF\\n  int v70; // [esp+D4h] [ebp-38h]\\n  int v71; // [esp+D8h] [ebp-34h]\\n  int v72; // [esp+DCh] [ebp-30h]\\n  int v73; // [esp+E0h] [ebp-2Ch]\\n  int v74; // [esp+E4h] [ebp-28h] BYREF\\n  int v75; // [esp+E8h] [ebp-24h]\\n  int v76; // [esp+ECh] [ebp-20h]\\n  int v77; // [esp+F0h] [ebp-1Ch] BYREF\\n  int v78; // [esp+F4h] [ebp-18h] BYREF\\n  int v79; // [esp+F8h] [ebp-14h]\\n  int v80; // [esp+FCh] [ebp-10h]\\n  char v81; // [esp+103h] [ebp-9h]\\n  int v82; // [esp+104h] [ebp-8h]\\n  int v83; // [esp+108h] [ebp-4h] BYREF\\n\\n  v64 = sub_3F1000(a1: a2);\\n  v72 = 0;\\n  v71 = *(_DWORD *)sub_414F30(a1: *(_DWORD *)(this + 184));\\n  v68 = 1000;\\n  if ( *(_DWORD *)(this + 188) != 0 )\\n    v68 = (*(int (__fastcall **)(_DWORD))(**(_DWORD **)(this + 188) + 36))(a1: *(_DWORD *)(this + 188));\\n  v74 = a3 - v64 / 0xA;\\n  if ( a2 != 0\\n    && sub_9D9A30(a1: a2) != 0\\n    && (v71 <= 3000 || v71 >= 3016)\\n    && v71 != 4001\\n    && v71 != 1011\\n    && v71 != 1021\\n    && v71 != 1031\\n    && v71 != 1041\\n    && v71 != 1051\\n    && (v74 == 1011 || v74 == 1021 || v74 == 1031 || v74 == 1041 || v74 == 1051)\\n    && sub_436E60(a1: a2) != 0 )\\n  {\\n    sub_436E60(a1: a2);\\n    if ( sub_9B4D10(a1: 4) != 0 )\\n      return 1;\\n  }\\n  if ( a2 != 0 && sub_9D9A30(a1: a2) != 0 )\\n  {\\n    if ( v74 == 1011 && sub_436E60(a1: a2) != 0 )\\n    {\\n      sub_436E60(a1: a2);\\n      if ( sub_9B4D10(a1: 3) != 0 )\\n        return 1;\\n    }\\n    if ( (v74 <= 3000 || v74 >= 3016) && v74 != 4001 && sub_436E60(a1: a2) != 0 )\\n    {\\n      sub_436E60(a1: a2);\\n      if ( sub_9B4D10(a1: 1) != 0 )\\n        return 1;\\n    }\\n    if ( v74 != 3015 && sub_436E60(a1: a2) != 0 )\\n    {\\n      sub_436E60(a1: a2);\\n      if ( sub_9B4D10(a1: 2) != 0 )\\n        return 1;\\n    }\\n  }\\n  if ( a5 != (a3 | (a4 + ~v64)) )\\n    return 0;\\n  if ( (unsigned __int8)sub_A2CB70() == 0 )\\n    return 0;\\n  if ( v71 == 1071 )\\n    v72 = sub_9F2A90(a1: *(_DWORD *)(this + 188));\\n  sub_9CBEE0(a1: this);\\n  v82 = sub_9D60E0(a1: a2);\\n  v77 = 0;\\n  v83 = 0;\\n  v73 = 0;\\n  v78 = 0;\\n  *(float *)&v69 = 0.0;\\n  v75 = sub_422460(a1: a2);\\n  if ( sub_43E0D0(a1: a2) != 0 )\\n  {\\n    v6 = sub_43E0D0(a1: a2);\\n    if ( sub_44C550(a1: v6) != 4 )\\n      sub_9DF920(a1: 0);\\n  }\\n  if ( sub_4438F0(a1: a2) != 0 )\\n  {\\n    sub_4438F0(a1: a2);\\n    if ( sub_A633A0(a1: v74) != 0 )\\n      return 0;\\n  }\\n  v36 = v82;\\n  sub_A7ECB0();\\n  v66 = sub_A7E6D0(a1: v36, a2: v74, a3: &v77, a4: &v83);\\n  if ( v66 == 0 )\\n    return 0;\\n  if ( (v77 == 2006 || v77 == 2007 || v77 == 2005) && v75 != 0 && sub_443D10(a1: v75) != 0 )\\n  {\\n    sub_443D10(a1: v75);\\n    if ( sub_A428B0(a1: 3) != 0 )\\n      return 0;\\n  }\\n  v80 = v66;\\n  sub_A632F0();\\n  v70 = sub_A61D20(a1: v66);\\n  if ( v70 != 0 && (*(float *)(v70 + 8) > (long double)dbl_BE8368 || *(_DWORD *)(v70 + 4) != 0) )\\n  {\\n    if ( dword_1230370 != 0 && sub_9D69E0(a1: v70) == 0 )\\n      return 0;\\n    v35 = (float)*(unsigned int *)(v70 + 4);\\n    sub_9E29F0(a1: v35, a2: 0, a3: 0, a4: 0, a5: 1, a6: 0);\\n    v58 = *(float *)(v70 + 8) * dbl_BE8460;\\n    sub_9D5180(a1: v58);\\n  }\\n  if ( v74 >= 2071 && v74 <= 2096 )\\n  {\\n    if ( v70 == 0 )\\n      return 0;\\n    if ( sub_9D7C70(a1: a2) != 0\\n      && (unsigned int)sub_44C4C0(a1: a2) < 8\\n      && dword_17C8710 != 0\\n      && sub_443DB0(a1: dword_17C8710) != 0 )\\n    {\\n      v57 = sub_443DB0(a1: dword_17C8710);\\n      v7 = sub_443F50(a1: v70 + 116);\\n      (*(void (__thiscall **)(int, int))(*(_DWORD *)v57 + 212))(a1: v57, a2: v7);\\n    }\\n    v56 = (_WORD *)(sub_4436C0(a1: a2) + 34);\\n    ++*v56;\\n    v8 = *(float *)(v70 + 8);\\n    a4 = sub_65E430(a1: *(double *)&v8);\\n  }\\n  if ( sub_9D7C70(a1: a2) != 0 && dword_17C8710 != 0 && sub_443DB0(a1: dword_17C8710) != 0 )\\n  {\\n    if ( v71 == 1011 && (v74 == 3003 || v74 == 3005 || v74 == 3006) && sub_443870(a1: a2) != 0 )\\n    {\\n      v55 = sub_443DB0(a1: dword_17C8710);\\n      (*(void (__thiscall **)(int, _DWORD))(*(_DWORD *)v55 + 204))(a1: v55, a2: 0);\\n    }\\n    else if ( v74 == 3001 )\\n    {\\n      v54 = sub_443DB0(a1: dword_17C8710);\\n      (*(void (__thiscall **)(int, int))(*(_DWORD *)v54 + 204))(a1: v54, a2: 1);\\n    }\\n    else if ( v74 == 3002 )\\n    {\\n      v53 = sub_443DB0(a1: dword_17C8710);\\n      (*(void (__thiscall **)(int, int))(*(_DWORD *)v53 + 204))(a1: v53, a2: 3);\\n    }\\n  }\\n  if ( v74 != 1011 && v74 != 1041 && v74 != 1031 && v74 != 1061 && v74 != 1062 && v74 != 1063 )\\n  {\\n    sub_9D6840(a1: a2);\\n    sub_9DD890(a1: a2);\\n  }\\n  *(_DWORD *)(this + 192) = sub_975BD0(a1: dword_17C8710);\\n  if ( v71 != 1111 || v74 == 1111 )\\n  {\\n    if ( v71 == 3011 )\\n    {\\n      v9 = sub_43B540(a1: dword_17C86F8);\\n      sub_443830(a1: *(_DWORD *)(v9 + 28));\\n      v10 = sub_3F1000(a1: a2);\\n      if ( sub_976890(a1: v10, a2: HIDWORD(v10), a3: 0.0, a4: 0, a5: 0, a6: 0) != 0 )\\n        sub_9D3EC0(a1: 0);\\n    }\\n  }\\n  else\\n  {\\n    sub_9D6240(a1: a2);\\n  }\\n  if ( v74 == 3006 || v74 == 3005 || v74 == 3007 || v74 == 3008 || v74 == 3010 || v74 == 3012 || v74 == 3004 )\\n  {\\n    if ( sub_809120(a1: dword_17C8708) != 0 && (v11 = sub_809120(a1: dword_17C8708), sub_43B3F0(a1: v11) != 0)\\n      || (v12 = sub_3F30C0(), sub_3F31A0(a1: v12) == 2) )\\n    {\\n      sub_9CC340(a1: a2);\\n    }\\n  }\\n  if ( v77 == 2002 && *(_DWORD *)(this + 188) != 0 )\\n  {\\n    v73 = sub_452480(a1: *(_DWORD *)(this + 188));\\n    v65 = (long double)a4 / dbl_BE83D0;\\n    sub_A48700(a1: v65, a2: (int)&v78, a3: (int)&v69);\\n  }\\n  if ( *(_DWORD *)(this + 188) != 0 )\\n  {\\n    v63 = (*(int (__fastcall **)(_DWORD))(**(_DWORD **)(this + 188) + 36))(a1: *(_DWORD *)(this + 188));\\n    if ( (v63 == 2006 || v63 == 2007) && sub_422460(a1: a2) == 0 )\\n    {\\n      if ( sub_443680(a1: a2) != 0 )\\n      {\\n        sub_443680(a1: a2);\\n        sub_9AFBF0(a1: 1);\\n      }\\n      else if ( sub_4437E0(a1: a2) != 0 )\\n      {\\n        if ( sub_40B750(a1: a2) != 0 )\\n        {\\n          v13 = sub_40B750(a1: a2);\\n          if ( sub_443C50(a1: v13) == 0 )\\n          {\\n            sub_40B750(a1: a2);\\n            sub_9AFBF0(a1: 1);\\n          }\\n        }\\n      }\\n      else if ( sub_40B770(a1: a2) != 0 )\\n      {\\n        v14 = sub_40B770(a1: a2);\\n        if ( sub_443C50(a1: v14) == 0 )\\n        {\\n          sub_40B770(a1: a2);\\n          sub_9AFBF0(a1: 1);\\n        }\\n      }\\n    }\\n  }\\n  if ( v74 == 1031 || v74 == 1061 || v74 == 1062 )\\n    sub_44C480(a1: a2);\\n  if ( (unsigned __int8)sub_9D3AE0(a1: v74) != 0 )\\n  {\\n    if ( v74 != 1081 )\\n      sub_9D99F0(a1: 0);\\n    v15 = sub_44C4A0(a1: a2);\\n    sub_A46F10(a1: v15);\\n    if ( sub_9D6B00(a1: a2) != 0 )\\n    {\\n      v16 = sub_9D42E0(a1: a2);\\n      sub_44C4E0(a1: v16);\\n    }\\n  }\\n  v41 = v74;\\n  v37 = v71;\\n  sub_4367E0();\\n  v67 = sub_9FB090(a1: v37, a2: v41);\\n  if ( sub_9D4100(a1: a2) != 0 || v67 <= 0 )\\n  {\\n    v43 = sub_43B260(a1: a2);\\n    sub_43A8D0();\\n    v61 = sub_43A960(a1: v43);\\n    if ( v61 != 0 )\\n      sub_9FAFE0(a1: v61);\\n  }\\n  else\\n  {\\n    v42 = sub_43B260(a1: a2);\\n    sub_43A8D0();\\n    v62 = sub_43A960(a1: v42);\\n    if ( v62 != 0 )\\n      sub_9FB040(a1: v62);\\n  }\\n  v79 = *(_DWORD *)(this + 188);\\n  sub_9CB220(a1: v74);\\n  v44 = v77;\\n  sub_A7B110();\\n  *(_DWORD *)(this + 188) = sub_A7B360(a1: v44);\\n  sub_9E3CF0(a1: a2);\\n  if ( *(_DWORD *)(this + 188) == 0\\n    || (*(int (__thiscall **)(_DWORD, int, int, int))(**(_DWORD **)(this + 188) + 40))(\\n         a1: *(_DWORD *)(this + 188),\\n         a2,\\n         a3: v83,\\n         a4) == 0 )\\n  {\\n    *(_DWORD *)(this + 188) = v79;\\n    sub_6503A0(a1: aWord, v77, v83);\\n    sub_9CB220(a1: v71);\\n    return 0;\\n  }\\n  if ( v79 != 0 )\\n  {\\n    v45 = (*(int (__fastcall **)(int))(*(_DWORD *)v79 + 36))(a1: v79);\\n    v38 = v79;\\n    sub_A7B110();\\n    sub_A7B020(a1: v38, a2: v45);\\n  }\\n  v81 = 0;\\n  v52 = sub_44C380(a1: *(_DWORD *)(this + 188));\\n  if ( v52 != 0 )\\n  {\\n    if ( v52 == 1 )\\n    {\\n      v81 = 1;\\n    }\\n    else\\n    {\\n      v51 = v74 == 2011 || v74 == 2021 || v74 == 2031 || v74 == 2041 || v74 == 2061;\\n      v81 = v51;\\n    }\\n  }\\n  else\\n  {\\n    v81 = 0;\\n  }\\n  if ( v81 != 0 && sub_9D9A30(a1: a2) != 0 && (unsigned __int8)sub_43B2C0(a1: a2) == 0 )\\n    sub_9E1CD0(a1: 1);\\n  if ( sub_44C3A0(a1: *(_DWORD *)(this + 188)) == 1 || sub_91DA80(a1: dword_17C870C) == 1 )\\n    sub_9D5B60(a1: a2);\\n  if ( v67 > 0 && sub_9D4100(a1: a2) == 0 )\\n  {\\n    v46 = sub_43B260(a1: a2);\\n    sub_43A8D0();\\n    v60 = sub_43A960(a1: v46);\\n    if ( v60 != 0 )\\n    {\\n      sub_9FB000(a1: v60);\\n      sub_44C5A0(a1: v67);\\n    }\\n  }\\n  if ( sub_9D9A30(a1: a2) != 0 )\\n  {\\n    v17 = sub_980070();\\n    if ( sub_97FD50(a1: v17) == 9 )\\n      sub_9CC2E0(a1: a2, a2: v71, a3: v74, a4);\\n  }\\n  switch ( v77 )\\n  {\\n    case 2002:\\n      v18 = sub_3F1040(a1: a2);\\n      if ( sub_4B4640(a1: v18) != 0 )\\n      {\\n        sub_44C3E0(a1: v78);\\n        sub_44C400(a1: *(float *)&v69);\\n      }\\n      break;\\n    case 2006:\\n      v19 = sub_3F1040(a1: a2);\\n      if ( sub_4B4640(a1: v19) == 0 )\\n        break;\\n      if ( v71 != 1041 )\\n      {\\n        v20 = (_DWORD *)sub_43B320(a1: a2);\\n        sub_44C3C0(a1: *v20 & 3);\\n        break;\\n      }\\nLABEL_189:\\n      sub_44C3C0(a1: 3);\\n      break;\\n    case 2007:\\n      v21 = sub_3F1040(a1: a2);\\n      if ( sub_4B4640(a1: v21) != 0 )\\n      {\\n        if ( v71 != 1041 )\\n        {\\n          v22 = (_DWORD *)sub_43B320(a1: a2);\\n          sub_44C3C0(a1: *v22 & 3);\\n          break;\\n        }\\n        goto LABEL_189;\\n      }\\n      break;\\n    default:\\n      break;\\n  }\\n  if ( (v77 == 3007 || v77 == 3006 || v77 == 3008) && sub_436E60(a1: a2) != 0 && sub_809120(a1: dword_17C8708) != 0 )\\n  {\\n    v23 = sub_809120(a1: dword_17C8708);\\n    if ( sub_43B3F0(a1: v23) != 0 )\\n    {\\n      v24 = sub_436E60(a1: a2);\\n      sub_9B6150(a1: v24);\\n    }\\n  }\\n  if ( (v74 > 3000 && v74 < 3016 || v74 == 4001) && sub_436E60(a1: a2) != 0 && sub_809120(a1: dword_17C8708) != 0 )\\n  {\\n    v25 = sub_809120(a1: dword_17C8708);\\n    if ( sub_43B3F0(a1: v25) != 0 )\\n    {\\n      v26 = sub_436E60(a1: a2);\\n      sub_9B6020(a1: v26);\\n    }\\n  }\\n  if ( v74 > 2000 && v74 < 2202 || v74 == 1081 )\\n  {\\n    v50 = (_WORD *)(sub_4436C0(a1: a2) + 26);\\n    ++*v50;\\n  }\\n  v27 = sub_3F2AA0(a1: dword_17C86FC);\\n  v76 = sub_808C70(a1: v27, a2: HIDWORD(v27));\\n  if ( v71 == 1071 && v74 == 3001 )\\n  {\\n    sub_44C3C0(a1: v72);\\n    if ( v76 != 0 )\\n    {\\n      v28 = sub_3F1000(a1: a2);\\n      if ( v28 == sub_3F1000(a1: v76) )\\n        dword_B33380(a1: dword_17C8718, a2: 24576, a3: 0, a4: 14);\\n    }\\n  }\\n  if ( v74 == 2101 && v71 == 3001 && v76 != 0 )\\n  {\\n    v29 = sub_3F1000(a1: a2);\\n    if ( v29 == sub_3F1000(a1: v76) )\\n      dword_B33380(a1: dword_17C8718, a2: 24576, a3: 0, a4: 10);\\n  }\\n  sub_9D4040(a1: 0, a2: 5);\\n  if ( sub_9D7C70(a1: a2) != 0 && sub_975540(a1: dword_17C8710) != 0 )\\n  {\\n    v30 = sub_975540(a1: dword_17C8710);\\n    if ( sub_972910(a1: v30) != 0 && (v74 == 1081 || v74 > 3000 && v74 < 3016 || v74 == 4001) )\\n    {\\n      sub_975540(a1: dword_17C8710);\\n      sub_973E20(a1: 0);\\n    }\\n  }\\n  v31 = sub_4224A0(a1: a2);\\n  sub_A47620(a1: v31);\\n  if ( v68 != 1000 )\\n    sub_9DC290(a1: v68);\\n  if ( sub_44C420(a1: a2) != 0 )\\n  {\\n    v47 = v74;\\n    v39 = v71;\\n    sub_44C420(a1: a2);\\n    sub_9B2D40(a1: v39, a2: v47);\\n  }\\n  v32 = sub_3F1000(a1: a2);\\n  v33 = sub_40B6F0(a1: dword_17C86FC);\\n  if ( v32 == sub_3F1000(a1: v33) )\\n  {\\n    sub_44C6B0(a1: &v74);\\n    if ( (unsigned int)sub_4B4CB0(a1: this + 328) > 0x14 )\\n      sub_4B6080(a1: this + 328);\\n    if ( dword_17C8710 != 0 && sub_443DB0(a1: dword_17C8710) != 0 )\\n    {\\n      v49 = sub_443DB0(a1: dword_17C8710);\\n      if ( (*(unsigned __int8 (__thiscall **)(int, int))(*(_DWORD *)v49 + 244))(a1: v49, a2: this + 328) != 0 )\\n        sub_4B6130(a1: this + 328);\\n    }\\n  }\\n  if ( (v71 > 3000 && v71 < 3016 || v71 == 4001) && (v74 <= 3000 || v74 >= 3016) && v74 != 4001 )\\n  {\\n    v34 = sub_44C4A0(a1: a2);\\n    sub_A46F10(a1: v34);\\n  }\\n  sub_9DB900(a1: v71, a2: v74, a3: a4);\\n  if ( sub_9D7C70(a1: a2) == 0 || dword_12F14B4 != 1 )\\n    return 1;\\n  v48 = v74;\\n  v40 = v71;\\n  sub_A3CA00();\\n  sub_A3C3C0(a1: v40, a2: v48);\\n  return 1;\\n}\",\"refs\":[{\"addr\":\"0x3f1000\",\"name\":\"sub_3F1000\"},{\"addr\":\"0x414f30\",\"name\":\"sub_414F30\"},{\"addr\":\"0x436e60\",\"name\":\"sub_436E60\"},{\"addr\":\"0x9b4d10\",\"name\":\"sub_9B4D10\"},{\"addr\":\"0x9d9a30\",\"name\":\"sub_9D9A30\"},{\"addr\":\"0xa2cb70\",\"name\":\"sub_A2CB70\"},{\"addr\":\"0x9f2a90\",\"name\":\"sub_9F2A90\"},{\"addr\":\"0x9cbee0\",\"name\":\"sub_9CBEE0\"},{\"addr\":\"0x9d60e0\",\"name\":\"sub_9D60E0\"},{\"addr\":\"0x422460\",\"name\":\"sub_422460\"},{\"addr\":\"0x43e0d0\",\"name\":\"sub_43E0D0\"},{\"addr\":\"0x9df920\",\"name\":\"sub_9DF920\"},{\"addr\":\"0x44c550\",\"name\":\"sub_44C550\"},{\"addr\":\"0x4438f0\",\"name\":\"sub_4438F0\"},{\"addr\":\"0xa633a0\",\"name\":\"sub_A633A0\"},{\"addr\":\"0xa7ecb0\",\"name\":\"sub_A7ECB0\"},{\"addr\":\"0xa7e6d0\",\"name\":\"sub_A7E6D0\"},{\"addr\":\"0x443d10\",\"name\":\"sub_443D10\"},{\"addr\":\"0xa428b0\",\"name\":\"sub_A428B0\"},{\"addr\":\"0xa632f0\",\"name\":\"sub_A632F0\"},{\"addr\":\"0xa61d20\",\"name\":\"sub_A61D20\"},{\"addr\":\"0x1230370\",\"name\":\"dword_1230370\"},{\"addr\":\"0x9d69e0\",\"name\":\"sub_9D69E0\"},{\"addr\":\"0x9e29f0\",\"name\":\"sub_9E29F0\"},{\"addr\":\"0xbe8460\",\"name\":\"dbl_BE8460\"},{\"addr\":\"0x9d5180\",\"name\":\"sub_9D5180\"},{\"addr\":\"0xbe8368\",\"name\":\"dbl_BE8368\"},{\"addr\":\"0x443db0\",\"name\":\"sub_443DB0\"},{\"addr\":\"0x17c8710\",\"name\":\"dword_17C8710\"},{\"addr\":\"0x443f50\",\"name\":\"sub_443F50\"},{\"addr\":\"0x9d7c70\",\"name\":\"sub_9D7C70\"},{\"addr\":\"0x44c4c0\",\"name\":\"sub_44C4C0\"},{\"addr\":\"0x4436c0\",\"name\":\"sub_4436C0\"},{\"addr\":\"0x65e430\",\"name\":\"sub_65E430\"},{\"addr\":\"0x443870\",\"name\":\"sub_443870\"},{\"addr\":\"0x9d6840\",\"name\":\"sub_9D6840\"},{\"addr\":\"0x9dd890\",\"name\":\"sub_9DD890\"},{\"addr\":\"0x975bd0\",\"name\":\"sub_975BD0\"},{\"addr\":\"0x43b540\",\"name\":\"sub_43B540\"},{\"addr\":\"0x17c86f8\",\"name\":\"dword_17C86F8\"},{\"addr\":\"0x443830\",\"name\":\"sub_443830\"},{\"addr\":\"0x9d3ec0\",\"name\":\"sub_9D3EC0\"},{\"addr\":\"0x976890\",\"name\":\"sub_976890\"},{\"addr\":\"0x9d6240\",\"name\":\"sub_9D6240\"},{\"addr\":\"0x9cc340\",\"name\":\"sub_9CC340\"},{\"addr\":\"0x809120\",\"name\":\"sub_809120\"},{\"addr\":\"0x17c8708\",\"name\":\"dword_17C8708\"},{\"addr\":\"0x43b3f0\",\"name\":\"sub_43B3F0\"},{\"addr\":\"0x3f30c0\",\"name\":\"sub_3F30C0\"},{\"addr\":\"0x3f31a0\",\"name\":\"sub_3F31A0\"},{\"addr\":\"0x452480\",\"name\":\"sub_452480\"},{\"addr\":\"0xbe83d0\",\"name\":\"dbl_BE83D0\"},{\"addr\":\"0xa48700\",\"name\":\"sub_A48700\"},{\"addr\":\"0x443680\",\"name\":\"sub_443680\"},{\"addr\":\"0x9afbf0\",\"name\":\"sub_9AFBF0\"},{\"addr\":\"0x40b750\",\"name\":\"sub_40B750\"},{\"addr\":\"0x443c50\",\"name\":\"sub_443C50\"},{\"addr\":\"0x40b770\",\"name\":\"sub_40B770\"},{\"addr\":\"0x4437e0\",\"name\":\"sub_4437E0\"},{\"addr\":\"0x44c480\",\"name\":\"sub_44C480\"},{\"addr\":\"0x9d99f0\",\"name\":\"sub_9D99F0\"},{\"addr\":\"0x44c4a0\",\"name\":\"sub_44C4A0\"},{\"addr\":\"0xa46f10\",\"name\":\"sub_A46F10\"},{\"addr\":\"0x9d42e0\",\"name\":\"sub_9D42E0\"},{\"addr\":\"0x44c4e0\",\"name\":\"sub_44C4E0\"},{\"addr\":\"0x9d6b00\",\"name\":\"sub_9D6B00\"},{\"addr\":\"0x9d3ae0\",\"name\":\"sub_9D3AE0\"},{\"addr\":\"0x4367e0\",\"name\":\"sub_4367E0\"},{\"addr\":\"0x9fb090\",\"name\":\"sub_9FB090\"},{\"addr\":\"0x43b260\",\"name\":\"sub_43B260\"},{\"addr\":\"0x43a8d0\",\"name\":\"sub_43A8D0\"},{\"addr\":\"0x43a960\",\"name\":\"sub_43A960\"},{\"addr\":\"0x9fafe0\",\"name\":\"sub_9FAFE0\"},{\"addr\":\"0x9fb040\",\"name\":\"sub_9FB040\"},{\"addr\":\"0x9d4100\",\"name\":\"sub_9D4100\"},{\"addr\":\"0x9cb220\",\"name\":\"sub_9CB220\"},{\"addr\":\"0xa7b110\",\"name\":\"sub_A7B110\"},{\"addr\":\"0xa7b360\",\"name\":\"sub_A7B360\"},{\"addr\":\"0x9e3cf0\",\"name\":\"sub_9E3CF0\"},{\"addr\":\"0x6503a0\",\"name\":\"sub_6503A0\"},{\"addr\":\"0xba1c74\",\"name\":\"aWord\",\"string\":\"word\"},{\"addr\":\"0xa7b020\",\"name\":\"sub_A7B020\"},{\"addr\":\"0x44c380\",\"name\":\"sub_44C380\"},{\"addr\":\"0x9e1cd0\",\"name\":\"sub_9E1CD0\"},{\"addr\":\"0x43b2c0\",\"name\":\"sub_43B2C0\"},{\"addr\":\"0x9d5b60\",\"name\":\"sub_9D5B60\"},{\"addr\":\"0x44c3a0\",\"name\":\"sub_44C3A0\"},{\"addr\":\"0x91da80\",\"name\":\"sub_91DA80\"},{\"addr\":\"0x17c870c\",\"name\":\"dword_17C870C\"},{\"addr\":\"0x9fb000\",\"name\":\"sub_9FB000\"},{\"addr\":\"0x44c5a0\",\"name\":\"sub_44C5A0\"},{\"addr\":\"0x980070\",\"name\":\"sub_980070\"},{\"addr\":\"0x9cc2e0\",\"name\":\"sub_9CC2E0\"},{\"addr\":\"0x97fd50\",\"name\":\"sub_97FD50\"},{\"addr\":\"0x3f1040\",\"name\":\"sub_3F1040\"},{\"addr\":\"0x44c3e0\",\"name\":\"sub_44C3E0\"},{\"addr\":\"0x44c400\",\"name\":\"sub_44C400\"},{\"addr\":\"0x4b4640\",\"name\":\"sub_4B4640\"},{\"addr\":\"0x43b320\",\"name\":\"sub_43B320\"},{\"addr\":\"0x44c3c0\",\"name\":\"sub_44C3C0\"},{\"addr\":\"0x9b6150\",\"name\":\"sub_9B6150\"},{\"addr\":\"0x9b6020\",\"name\":\"sub_9B6020\"},{\"addr\":\"0x3f2aa0\",\"name\":\"sub_3F2AA0\"},{\"addr\":\"0x17c86fc\",\"name\":\"dword_17C86FC\"},{\"addr\":\"0x808c70\",\"name\":\"sub_808C70\"},{\"addr\":\"0xb33380\",\"name\":\"dword_B33380\"},{\"addr\":\"0x17c8718\",\"name\":\"dword_17C8718\"},{\"addr\":\"0x9d4040\",\"name\":\"sub_9D4040\"},{\"addr\":\"0x975540\",\"name\":\"sub_975540\"},{\"addr\":\"0x973e20\",\"name\":\"sub_973E20\"},{\"addr\":\"0x972910\",\"name\":\"sub_972910\"},{\"addr\":\"0x4224a0\",\"name\":\"sub_4224A0\"},{\"addr\":\"0xa47620\",\"name\":\"sub_A47620\"},{\"addr\":\"0x9dc290\",\"name\":\"sub_9DC290\"},{\"addr\":\"0x44c420\",\"name\":\"sub_44C420\"},{\"addr\":\"0x9b2d40\",\"name\":\"sub_9B2D40\"},{\"addr\":\"0x40b6f0\",\"name\":\"sub_40B6F0\"},{\"addr\":\"0x44c6b0\",\"name\":\"sub_44C6B0\"},{\"addr\":\"0x4b6080\",\"name\":\"sub_4B6080\"},{\"addr\":\"0x4b4cb0\",\"name\":\"sub_4B4CB0\"},{\"addr\":\"0x4b6130\",\"name\":\"sub_4B6130\"},{\"addr\":\"0x9db900\",\"name\":\"sub_9DB900\"},{\"addr\":\"0x12f14b4\",\"name\":\"dword_12F14B4\"},{\"addr\":\"0xa3ca00\",\"name\":\"sub_A3CA00\"},{\"addr\":\"0xa3c3c0\",\"name\":\"sub_A3C3C0\"}]}"
+      }
+    ],
+    "structuredContent": {
+      "addr": "0x9CD1B0",
+      "code": "int __thiscall sub_9CC4C0(int this, int a2, int a3, int a4, int a5)\n{\n  int v6; // eax\n  int v7; // eax\n  long double v8; // fst7\n  int v9; // eax\n  __int64 v10; // rax\n  int v11; // eax\n  int v12; // eax\n  int v13; // eax\n  int v14; // eax\n  int v15; // eax\n  int v16; // eax\n  int v17; // eax\n  int v18; // eax\n  int v19; // eax\n  _DWORD *v20; // eax\n  int v21; // eax\n  _DWORD *v22; // eax\n  int v23; // eax\n  int v24; // eax\n  int v25; // eax\n  int v26; // eax\n  __int64 v27; // rax\n  __int64 v28; // kr00_8\n  __int64 v29; // kr08_8\n  int v30; // eax\n  int v31; // eax\n  __int64 v32; // kr10_8\n  int v33; // eax\n  int v34; // eax\n  float v35; // [esp+0h] [ebp-10Ch]\n  int v36; // [esp+8h] [ebp-104h]\n  int v37; // [esp+10h] [ebp-FCh]\n  int v38; // [esp+10h] [ebp-FCh]\n  int v39; // [esp+10h] [ebp-FCh]\n  int v40; // [esp+10h] [ebp-FCh]\n  int v41; // [esp+14h] [ebp-F8h]\n  char v42; // [esp+14h] [ebp-F8h]\n  char v43; // [esp+14h] [ebp-F8h]\n  int v44; // [esp+14h] [ebp-F8h]\n  char v45; // [esp+14h] [ebp-F8h]\n  char v46; // [esp+14h] [ebp-F8h]\n  int v47; // [esp+14h] [ebp-F8h]\n  int v48; // [esp+14h] [ebp-F8h]\n  int v49; // [esp+20h] [ebp-ECh]\n  _WORD *v50; // [esp+54h] [ebp-B8h]\n  bool v51; // [esp+58h] [ebp-B4h]\n  int v52; // [esp+5Ch] [ebp-B0h]\n  int v53; // [esp+60h] [ebp-ACh]\n  int v54; // [esp+64h] [ebp-A8h]\n  int v55; // [esp+68h] [ebp-A4h]\n  _WORD *v56; // [esp+6Ch] [ebp-A0h]\n  int v57; // [esp+70h] [ebp-9Ch]\n  float v58; // [esp+74h] [ebp-98h]\n  int v60; // [esp+94h] [ebp-78h]\n  int v61; // [esp+9Ch] [ebp-70h]\n  int v62; // [esp+A0h] [ebp-6Ch]\n  int v63; // [esp+A4h] [ebp-68h]\n  unsigned int v64; // [esp+B8h] [ebp-54h]\n  float v65; // [esp+BCh] [ebp-50h]\n  int v66; // [esp+C0h] [ebp-4Ch]\n  int v67; // [esp+C4h] [ebp-48h]\n  int v68; // [esp+C8h] [ebp-44h]\n  int v69; // [esp+D0h] [ebp-3Ch] BYREF\n  int v70; // [esp+D4h] [ebp-38h]\n  int v71; // [esp+D8h] [ebp-34h]\n  int v72; // [esp+DCh] [ebp-30h]\n  int v73; // [esp+E0h] [ebp-2Ch]\n  int v74; // [esp+E4h] [ebp-28h] BYREF\n  int v75; // [esp+E8h] [ebp-24h]\n  int v76; // [esp+ECh] [ebp-20h]\n  int v77; // [esp+F0h] [ebp-1Ch] BYREF\n  int v78; // [esp+F4h] [ebp-18h] BYREF\n  int v79; // [esp+F8h] [ebp-14h]\n  int v80; // [esp+FCh] [ebp-10h]\n  char v81; // [esp+103h] [ebp-9h]\n  int v82; // [esp+104h] [ebp-8h]\n  int v83; // [esp+108h] [ebp-4h] BYREF\n\n  v64 = sub_3F1000(a1: a2);\n  v72 = 0;\n  v71 = *(_DWORD *)sub_414F30(a1: *(_DWORD *)(this + 184));\n  v68 = 1000;\n  if ( *(_DWORD *)(this + 188) != 0 )\n    v68 = (*(int (__fastcall **)(_DWORD))(**(_DWORD **)(this + 188) + 36))(a1: *(_DWORD *)(this + 188));\n  v74 = a3 - v64 / 0xA;\n  if ( a2 != 0\n    && sub_9D9A30(a1: a2) != 0\n    && (v71 <= 3000 || v71 >= 3016)\n    && v71 != 4001\n    && v71 != 1011\n    && v71 != 1021\n    && v71 != 1031\n    && v71 != 1041\n    && v71 != 1051\n    && (v74 == 1011 || v74 == 1021 || v74 == 1031 || v74 == 1041 || v74 == 1051)\n    && sub_436E60(a1: a2) != 0 )\n  {\n    sub_436E60(a1: a2);\n    if ( sub_9B4D10(a1: 4) != 0 )\n      return 1;\n  }\n  if ( a2 != 0 && sub_9D9A30(a1: a2) != 0 )\n  {\n    if ( v74 == 1011 && sub_436E60(a1: a2) != 0 )\n    {\n      sub_436E60(a1: a2);\n      if ( sub_9B4D10(a1: 3) != 0 )\n        return 1;\n    }\n    if ( (v74 <= 3000 || v74 >= 3016) && v74 != 4001 && sub_436E60(a1: a2) != 0 )\n    {\n      sub_436E60(a1: a2);\n      if ( sub_9B4D10(a1: 1) != 0 )\n        return 1;\n    }\n    if ( v74 != 3015 && sub_436E60(a1: a2) != 0 )\n    {\n      sub_436E60(a1: a2);\n      if ( sub_9B4D10(a1: 2) != 0 )\n        return 1;\n    }\n  }\n  if ( a5 != (a3 | (a4 + ~v64)) )\n    return 0;\n  if ( (unsigned __int8)sub_A2CB70() == 0 )\n    return 0;\n  if ( v71 == 1071 )\n    v72 = sub_9F2A90(a1: *(_DWORD *)(this + 188));\n  sub_9CBEE0(a1: this);\n  v82 = sub_9D60E0(a1: a2);\n  v77 = 0;\n  v83 = 0;\n  v73 = 0;\n  v78 = 0;\n  *(float *)&v69 = 0.0;\n  v75 = sub_422460(a1: a2);\n  if ( sub_43E0D0(a1: a2) != 0 )\n  {\n    v6 = sub_43E0D0(a1: a2);\n    if ( sub_44C550(a1: v6) != 4 )\n      sub_9DF920(a1: 0);\n  }\n  if ( sub_4438F0(a1: a2) != 0 )\n  {\n    sub_4438F0(a1: a2);\n    if ( sub_A633A0(a1: v74) != 0 )\n      return 0;\n  }\n  v36 = v82;\n  sub_A7ECB0();\n  v66 = sub_A7E6D0(a1: v36, a2: v74, a3: &v77, a4: &v83);\n  if ( v66 == 0 )\n    return 0;\n  if ( (v77 == 2006 || v77 == 2007 || v77 == 2005) && v75 != 0 && sub_443D10(a1: v75) != 0 )\n  {\n    sub_443D10(a1: v75);\n    if ( sub_A428B0(a1: 3) != 0 )\n      return 0;\n  }\n  v80 = v66;\n  sub_A632F0();\n  v70 = sub_A61D20(a1: v66);\n  if ( v70 != 0 && (*(float *)(v70 + 8) > (long double)dbl_BE8368 || *(_DWORD *)(v70 + 4) != 0) )\n  {\n    if ( dword_1230370 != 0 && sub_9D69E0(a1: v70) == 0 )\n      return 0;\n    v35 = (float)*(unsigned int *)(v70 + 4);\n    sub_9E29F0(a1: v35, a2: 0, a3: 0, a4: 0, a5: 1, a6: 0);\n    v58 = *(float *)(v70 + 8) * dbl_BE8460;\n    sub_9D5180(a1: v58);\n  }\n  if ( v74 >= 2071 && v74 <= 2096 )\n  {\n    if ( v70 == 0 )\n      return 0;\n    if ( sub_9D7C70(a1: a2) != 0\n      && (unsigned int)sub_44C4C0(a1: a2) < 8\n      && dword_17C8710 != 0\n      && sub_443DB0(a1: dword_17C8710) != 0 )\n    {\n      v57 = sub_443DB0(a1: dword_17C8710);\n      v7 = sub_443F50(a1: v70 + 116);\n      (*(void (__thiscall **)(int, int))(*(_DWORD *)v57 + 212))(a1: v57, a2: v7);\n    }\n    v56 = (_WORD *)(sub_4436C0(a1: a2) + 34);\n    ++*v56;\n    v8 = *(float *)(v70 + 8);\n    a4 = sub_65E430(a1: *(double *)&v8);\n  }\n  if ( sub_9D7C70(a1: a2) != 0 && dword_17C8710 != 0 && sub_443DB0(a1: dword_17C8710) != 0 )\n  {\n    if ( v71 == 1011 && (v74 == 3003 || v74 == 3005 || v74 == 3006) && sub_443870(a1: a2) != 0 )\n    {\n      v55 = sub_443DB0(a1: dword_17C8710);\n      (*(void (__thiscall **)(int, _DWORD))(*(_DWORD *)v55 + 204))(a1: v55, a2: 0);\n    }\n    else if ( v74 == 3001 )\n    {\n      v54 = sub_443DB0(a1: dword_17C8710);\n      (*(void (__thiscall **)(int, int))(*(_DWORD *)v54 + 204))(a1: v54, a2: 1);\n    }\n    else if ( v74 == 3002 )\n    {\n      v53 = sub_443DB0(a1: dword_17C8710);\n      (*(void (__thiscall **)(int, int))(*(_DWORD *)v53 + 204))(a1: v53, a2: 3);\n    }\n  }\n  if ( v74 != 1011 && v74 != 1041 && v74 != 1031 && v74 != 1061 && v74 != 1062 && v74 != 1063 )\n  {\n    sub_9D6840(a1: a2);\n    sub_9DD890(a1: a2);\n  }\n  *(_DWORD *)(this + 192) = sub_975BD0(a1: dword_17C8710);\n  if ( v71 != 1111 || v74 == 1111 )\n  {\n    if ( v71 == 3011 )\n    {\n      v9 = sub_43B540(a1: dword_17C86F8);\n      sub_443830(a1: *(_DWORD *)(v9 + 28));\n      v10 = sub_3F1000(a1: a2);\n      if ( sub_976890(a1: v10, a2: HIDWORD(v10), a3: 0.0, a4: 0, a5: 0, a6: 0) != 0 )\n        sub_9D3EC0(a1: 0);\n    }\n  }\n  else\n  {\n    sub_9D6240(a1: a2);\n  }\n  if ( v74 == 3006 || v74 == 3005 || v74 == 3007 || v74 == 3008 || v74 == 3010 || v74 == 3012 || v74 == 3004 )\n  {\n    if ( sub_809120(a1: dword_17C8708) != 0 && (v11 = sub_809120(a1: dword_17C8708), sub_43B3F0(a1: v11) != 0)\n      || (v12 = sub_3F30C0(), sub_3F31A0(a1: v12) == 2) )\n    {\n      sub_9CC340(a1: a2);\n    }\n  }\n  if ( v77 == 2002 && *(_DWORD *)(this + 188) != 0 )\n  {\n    v73 = sub_452480(a1: *(_DWORD *)(this + 188));\n    v65 = (long double)a4 / dbl_BE83D0;\n    sub_A48700(a1: v65, a2: (int)&v78, a3: (int)&v69);\n  }\n  if ( *(_DWORD *)(this + 188) != 0 )\n  {\n    v63 = (*(int (__fastcall **)(_DWORD))(**(_DWORD **)(this + 188) + 36))(a1: *(_DWORD *)(this + 188));\n    if ( (v63 == 2006 || v63 == 2007) && sub_422460(a1: a2) == 0 )\n    {\n      if ( sub_443680(a1: a2) != 0 )\n      {\n        sub_443680(a1: a2);\n        sub_9AFBF0(a1: 1);\n      }\n      else if ( sub_4437E0(a1: a2) != 0 )\n      {\n        if ( sub_40B750(a1: a2) != 0 )\n        {\n          v13 = sub_40B750(a1: a2);\n          if ( sub_443C50(a1: v13) == 0 )\n          {\n            sub_40B750(a1: a2);\n            sub_9AFBF0(a1: 1);\n          }\n        }\n      }\n      else if ( sub_40B770(a1: a2) != 0 )\n      {\n        v14 = sub_40B770(a1: a2);\n        if ( sub_443C50(a1: v14) == 0 )\n        {\n          sub_40B770(a1: a2);\n          sub_9AFBF0(a1: 1);\n        }\n      }\n    }\n  }\n  if ( v74 == 1031 || v74 == 1061 || v74 == 1062 )\n    sub_44C480(a1: a2);\n  if ( (unsigned __int8)sub_9D3AE0(a1: v74) != 0 )\n  {\n    if ( v74 != 1081 )\n      sub_9D99F0(a1: 0);\n    v15 = sub_44C4A0(a1: a2);\n    sub_A46F10(a1: v15);\n    if ( sub_9D6B00(a1: a2) != 0 )\n    {\n      v16 = sub_9D42E0(a1: a2);\n      sub_44C4E0(a1: v16);\n    }\n  }\n  v41 = v74;\n  v37 = v71;\n  sub_4367E0();\n  v67 = sub_9FB090(a1: v37, a2: v41);\n  if ( sub_9D4100(a1: a2) != 0 || v67 <= 0 )\n  {\n    v43 = sub_43B260(a1: a2);\n    sub_43A8D0();\n    v61 = sub_43A960(a1: v43);\n    if ( v61 != 0 )\n      sub_9FAFE0(a1: v61);\n  }\n  else\n  {\n    v42 = sub_43B260(a1: a2);\n    sub_43A8D0();\n    v62 = sub_43A960(a1: v42);\n    if ( v62 != 0 )\n      sub_9FB040(a1: v62);\n  }\n  v79 = *(_DWORD *)(this + 188);\n  sub_9CB220(a1: v74);\n  v44 = v77;\n  sub_A7B110();\n  *(_DWORD *)(this + 188) = sub_A7B360(a1: v44);\n  sub_9E3CF0(a1: a2);\n  if ( *(_DWORD *)(this + 188) == 0\n    || (*(int (__thiscall **)(_DWORD, int, int, int))(**(_DWORD **)(this + 188) + 40))(\n         a1: *(_DWORD *)(this + 188),\n         a2,\n         a3: v83,\n         a4) == 0 )\n  {\n    *(_DWORD *)(this + 188) = v79;\n    sub_6503A0(a1: aWord, v77, v83);\n    sub_9CB220(a1: v71);\n    return 0;\n  }\n  if ( v79 != 0 )\n  {\n    v45 = (*(int (__fastcall **)(int))(*(_DWORD *)v79 + 36))(a1: v79);\n    v38 = v79;\n    sub_A7B110();\n    sub_A7B020(a1: v38, a2: v45);\n  }\n  v81 = 0;\n  v52 = sub_44C380(a1: *(_DWORD *)(this + 188));\n  if ( v52 != 0 )\n  {\n    if ( v52 == 1 )\n    {\n      v81 = 1;\n    }\n    else\n    {\n      v51 = v74 == 2011 || v74 == 2021 || v74 == 2031 || v74 == 2041 || v74 == 2061;\n      v81 = v51;\n    }\n  }\n  else\n  {\n    v81 = 0;\n  }\n  if ( v81 != 0 && sub_9D9A30(a1: a2) != 0 && (unsigned __int8)sub_43B2C0(a1: a2) == 0 )\n    sub_9E1CD0(a1: 1);\n  if ( sub_44C3A0(a1: *(_DWORD *)(this + 188)) == 1 || sub_91DA80(a1: dword_17C870C) == 1 )\n    sub_9D5B60(a1: a2);\n  if ( v67 > 0 && sub_9D4100(a1: a2) == 0 )\n  {\n    v46 = sub_43B260(a1: a2);\n    sub_43A8D0();\n    v60 = sub_43A960(a1: v46);\n    if ( v60 != 0 )\n    {\n      sub_9FB000(a1: v60);\n      sub_44C5A0(a1: v67);\n    }\n  }\n  if ( sub_9D9A30(a1: a2) != 0 )\n  {\n    v17 = sub_980070();\n    if ( sub_97FD50(a1: v17) == 9 )\n      sub_9CC2E0(a1: a2, a2: v71, a3: v74, a4);\n  }\n  switch ( v77 )\n  {\n    case 2002:\n      v18 = sub_3F1040(a1: a2);\n      if ( sub_4B4640(a1: v18) != 0 )\n      {\n        sub_44C3E0(a1: v78);\n        sub_44C400(a1: *(float *)&v69);\n      }\n      break;\n    case 2006:\n      v19 = sub_3F1040(a1: a2);\n      if ( sub_4B4640(a1: v19) == 0 )\n        break;\n      if ( v71 != 1041 )\n      {\n        v20 = (_DWORD *)sub_43B320(a1: a2);\n        sub_44C3C0(a1: *v20 & 3);\n        break;\n      }\nLABEL_189:\n      sub_44C3C0(a1: 3);\n      break;\n    case 2007:\n      v21 = sub_3F1040(a1: a2);\n      if ( sub_4B4640(a1: v21) != 0 )\n      {\n        if ( v71 != 1041 )\n        {\n          v22 = (_DWORD *)sub_43B320(a1: a2);\n          sub_44C3C0(a1: *v22 & 3);\n          break;\n        }\n        goto LABEL_189;\n      }\n      break;\n    default:\n      break;\n  }\n  if ( (v77 == 3007 || v77 == 3006 || v77 == 3008) && sub_436E60(a1: a2) != 0 && sub_809120(a1: dword_17C8708) != 0 )\n  {\n    v23 = sub_809120(a1: dword_17C8708);\n    if ( sub_43B3F0(a1: v23) != 0 )\n    {\n      v24 = sub_436E60(a1: a2);\n      sub_9B6150(a1: v24);\n    }\n  }\n  if ( (v74 > 3000 && v74 < 3016 || v74 == 4001) && sub_436E60(a1: a2) != 0 && sub_809120(a1: dword_17C8708) != 0 )\n  {\n    v25 = sub_809120(a1: dword_17C8708);\n    if ( sub_43B3F0(a1: v25) != 0 )\n    {\n      v26 = sub_436E60(a1: a2);\n      sub_9B6020(a1: v26);\n    }\n  }\n  if ( v74 > 2000 && v74 < 2202 || v74 == 1081 )\n  {\n    v50 = (_WORD *)(sub_4436C0(a1: a2) + 26);\n    ++*v50;\n  }\n  v27 = sub_3F2AA0(a1: dword_17C86FC);\n  v76 = sub_808C70(a1: v27, a2: HIDWORD(v27));\n  if ( v71 == 1071 && v74 == 3001 )\n  {\n    sub_44C3C0(a1: v72);\n    if ( v76 != 0 )\n    {\n      v28 = sub_3F1000(a1: a2);\n      if ( v28 == sub_3F1000(a1: v76) )\n        dword_B33380(a1: dword_17C8718, a2: 24576, a3: 0, a4: 14);\n    }\n  }\n  if ( v74 == 2101 && v71 == 3001 && v76 != 0 )\n  {\n    v29 = sub_3F1000(a1: a2);\n    if ( v29 == sub_3F1000(a1: v76) )\n      dword_B33380(a1: dword_17C8718, a2: 24576, a3: 0, a4: 10);\n  }\n  sub_9D4040(a1: 0, a2: 5);\n  if ( sub_9D7C70(a1: a2) != 0 && sub_975540(a1: dword_17C8710) != 0 )\n  {\n    v30 = sub_975540(a1: dword_17C8710);\n    if ( sub_972910(a1: v30) != 0 && (v74 == 1081 || v74 > 3000 && v74 < 3016 || v74 == 4001) )\n    {\n      sub_975540(a1: dword_17C8710);\n      sub_973E20(a1: 0);\n    }\n  }\n  v31 = sub_4224A0(a1: a2);\n  sub_A47620(a1: v31);\n  if ( v68 != 1000 )\n    sub_9DC290(a1: v68);\n  if ( sub_44C420(a1: a2) != 0 )\n  {\n    v47 = v74;\n    v39 = v71;\n    sub_44C420(a1: a2);\n    sub_9B2D40(a1: v39, a2: v47);\n  }\n  v32 = sub_3F1000(a1: a2);\n  v33 = sub_40B6F0(a1: dword_17C86FC);\n  if ( v32 == sub_3F1000(a1: v33) )\n  {\n    sub_44C6B0(a1: &v74);\n    if ( (unsigned int)sub_4B4CB0(a1: this + 328) > 0x14 )\n      sub_4B6080(a1: this + 328);\n    if ( dword_17C8710 != 0 && sub_443DB0(a1: dword_17C8710) != 0 )\n    {\n      v49 = sub_443DB0(a1: dword_17C8710);\n      if ( (*(unsigned __int8 (__thiscall **)(int, int))(*(_DWORD *)v49 + 244))(a1: v49, a2: this + 328) != 0 )\n        sub_4B6130(a1: this + 328);\n    }\n  }\n  if ( (v71 > 3000 && v71 < 3016 || v71 == 4001) && (v74 <= 3000 || v74 >= 3016) && v74 != 4001 )\n  {\n    v34 = sub_44C4A0(a1: a2);\n    sub_A46F10(a1: v34);\n  }\n  sub_9DB900(a1: v71, a2: v74, a3: a4);\n  if ( sub_9D7C70(a1: a2) == 0 || dword_12F14B4 != 1 )\n    return 1;\n  v48 = v74;\n  v40 = v71;\n  sub_A3CA00();\n  sub_A3C3C0(a1: v40, a2: v48);\n  return 1;\n}",
+      "refs": [
+        {
+          "addr": "0x3f1000",
+          "name": "sub_3F1000"
+        },
+        {
+          "addr": "0x414f30",
+          "name": "sub_414F30"
+        },
+        {
+          "addr": "0x436e60",
+          "name": "sub_436E60"
+        },
+        {
+          "addr": "0x9b4d10",
+          "name": "sub_9B4D10"
+        },
+        {
+          "addr": "0x9d9a30",
+          "name": "sub_9D9A30"
+        },
+        {
+          "addr": "0xa2cb70",
+          "name": "sub_A2CB70"
+        },
+        {
+          "addr": "0x9f2a90",
+          "name": "sub_9F2A90"
+        },
+        {
+          "addr": "0x9cbee0",
+          "name": "sub_9CBEE0"
+        },
+        {
+          "addr": "0x9d60e0",
+          "name": "sub_9D60E0"
+        },
+        {
+          "addr": "0x422460",
+          "name": "sub_422460"
+        },
+        {
+          "addr": "0x43e0d0",
+          "name": "sub_43E0D0"
+        },
+        {
+          "addr": "0x9df920",
+          "name": "sub_9DF920"
+        },
+        {
+          "addr": "0x44c550",
+          "name": "sub_44C550"
+        },
+        {
+          "addr": "0x4438f0",
+          "name": "sub_4438F0"
+        },
+        {
+          "addr": "0xa633a0",
+          "name": "sub_A633A0"
+        },
+        {
+          "addr": "0xa7ecb0",
+          "name": "sub_A7ECB0"
+        },
+        {
+          "addr": "0xa7e6d0",
+          "name": "sub_A7E6D0"
+        },
+        {
+          "addr": "0x443d10",
+          "name": "sub_443D10"
+        },
+        {
+          "addr": "0xa428b0",
+          "name": "sub_A428B0"
+        },
+        {
+          "addr": "0xa632f0",
+          "name": "sub_A632F0"
+        },
+        {
+          "addr": "0xa61d20",
+          "name": "sub_A61D20"
+        },
+        {
+          "addr": "0x1230370",
+          "name": "dword_1230370"
+        },
+        {
+          "addr": "0x9d69e0",
+          "name": "sub_9D69E0"
+        },
+        {
+          "addr": "0x9e29f0",
+          "name": "sub_9E29F0"
+        },
+        {
+          "addr": "0xbe8460",
+          "name": "dbl_BE8460"
+        },
+        {
+          "addr": "0x9d5180",
+          "name": "sub_9D5180"
+        },
+        {
+          "addr": "0xbe8368",
+          "name": "dbl_BE8368"
+        },
+        {
+          "addr": "0x443db0",
+          "name": "sub_443DB0"
+        },
+        {
+          "addr": "0x17c8710",
+          "name": "dword_17C8710"
+        },
+        {
+          "addr": "0x443f50",
+          "name": "sub_443F50"
+        },
+        {
+          "addr": "0x9d7c70",
+          "name": "sub_9D7C70"
+        },
+        {
+          "addr": "0x44c4c0",
+          "name": "sub_44C4C0"
+        },
+        {
+          "addr": "0x4436c0",
+          "name": "sub_4436C0"
+        },
+        {
+          "addr": "0x65e430",
+          "name": "sub_65E430"
+        },
+        {
+          "addr": "0x443870",
+          "name": "sub_443870"
+        },
+        {
+          "addr": "0x9d6840",
+          "name": "sub_9D6840"
+        },
+        {
+          "addr": "0x9dd890",
+          "name": "sub_9DD890"
+        },
+        {
+          "addr": "0x975bd0",
+          "name": "sub_975BD0"
+        },
+        {
+          "addr": "0x43b540",
+          "name": "sub_43B540"
+        },
+        {
+          "addr": "0x17c86f8",
+          "name": "dword_17C86F8"
+        },
+        {
+          "addr": "0x443830",
+          "name": "sub_443830"
+        },
+        {
+          "addr": "0x9d3ec0",
+          "name": "sub_9D3EC0"
+        },
+        {
+          "addr": "0x976890",
+          "name": "sub_976890"
+        },
+        {
+          "addr": "0x9d6240",
+          "name": "sub_9D6240"
+        },
+        {
+          "addr": "0x9cc340",
+          "name": "sub_9CC340"
+        },
+        {
+          "addr": "0x809120",
+          "name": "sub_809120"
+        },
+        {
+          "addr": "0x17c8708",
+          "name": "dword_17C8708"
+        },
+        {
+          "addr": "0x43b3f0",
+          "name": "sub_43B3F0"
+        },
+        {
+          "addr": "0x3f30c0",
+          "name": "sub_3F30C0"
+        },
+        {
+          "addr": "0x3f31a0",
+          "name": "sub_3F31A0"
+        },
+        {
+          "addr": "0x452480",
+          "name": "sub_452480"
+        },
+        {
+          "addr": "0xbe83d0",
+          "name": "dbl_BE83D0"
+        },
+        {
+          "addr": "0xa48700",
+          "name": "sub_A48700"
+        },
+        {
+          "addr": "0x443680",
+          "name": "sub_443680"
+        },
+        {
+          "addr": "0x9afbf0",
+          "name": "sub_9AFBF0"
+        },
+        {
+          "addr": "0x40b750",
+          "name": "sub_40B750"
+        },
+        {
+          "addr": "0x443c50",
+          "name": "sub_443C50"
+        },
+        {
+          "addr": "0x40b770",
+          "name": "sub_40B770"
+        },
+        {
+          "addr": "0x4437e0",
+          "name": "sub_4437E0"
+        },
+        {
+          "addr": "0x44c480",
+          "name": "sub_44C480"
+        },
+        {
+          "addr": "0x9d99f0",
+          "name": "sub_9D99F0"
+        },
+        {
+          "addr": "0x44c4a0",
+          "name": "sub_44C4A0"
+        },
+        {
+          "addr": "0xa46f10",
+          "name": "sub_A46F10"
+        },
+        {
+          "addr": "0x9d42e0",
+          "name": "sub_9D42E0"
+        },
+        {
+          "addr": "0x44c4e0",
+          "name": "sub_44C4E0"
+        },
+        {
+          "addr": "0x9d6b00",
+          "name": "sub_9D6B00"
+        },
+        {
+          "addr": "0x9d3ae0",
+          "name": "sub_9D3AE0"
+        },
+        {
+          "addr": "0x4367e0",
+          "name": "sub_4367E0"
+        },
+        {
+          "addr": "0x9fb090",
+          "name": "sub_9FB090"
+        },
+        {
+          "addr": "0x43b260",
+          "name": "sub_43B260"
+        },
+        {
+          "addr": "0x43a8d0",
+          "name": "sub_43A8D0"
+        },
+        {
+          "addr": "0x43a960",
+          "name": "sub_43A960"
+        },
+        {
+          "addr": "0x9fafe0",
+          "name": "sub_9FAFE0"
+        },
+        {
+          "addr": "0x9fb040",
+          "name": "sub_9FB040"
+        },
+        {
+          "addr": "0x9d4100",
+          "name": "sub_9D4100"
+        },
+        {
+          "addr": "0x9cb220",
+          "name": "sub_9CB220"
+        },
+        {
+          "addr": "0xa7b110",
+          "name": "sub_A7B110"
+        },
+        {
+          "addr": "0xa7b360",
+          "name": "sub_A7B360"
+        },
+        {
+          "addr": "0x9e3cf0",
+          "name": "sub_9E3CF0"
+        },
+        {
+          "addr": "0x6503a0",
+          "name": "sub_6503A0"
+        },
+        {
+          "addr": "0xba1c74",
+          "name": "aWord",
+          "string": "word"
+        },
+        {
+          "addr": "0xa7b020",
+          "name": "sub_A7B020"
+        },
+        {
+          "addr": "0x44c380",
+          "name": "sub_44C380"
+        },
+        {
+          "addr": "0x9e1cd0",
+          "name": "sub_9E1CD0"
+        },
+        {
+          "addr": "0x43b2c0",
+          "name": "sub_43B2C0"
+        },
+        {
+          "addr": "0x9d5b60",
+          "name": "sub_9D5B60"
+        },
+        {
+          "addr": "0x44c3a0",
+          "name": "sub_44C3A0"
+        },
+        {
+          "addr": "0x91da80",
+          "name": "sub_91DA80"
+        },
+        {
+          "addr": "0x17c870c",
+          "name": "dword_17C870C"
+        },
+        {
+          "addr": "0x9fb000",
+          "name": "sub_9FB000"
+        },
+        {
+          "addr": "0x44c5a0",
+          "name": "sub_44C5A0"
+        },
+        {
+          "addr": "0x980070",
+          "name": "sub_980070"
+        },
+        {
+          "addr": "0x9cc2e0",
+          "name": "sub_9CC2E0"
+        },
+        {
+          "addr": "0x97fd50",
+          "name": "sub_97FD50"
+        },
+        {
+          "addr": "0x3f1040",
+          "name": "sub_3F1040"
+        },
+        {
+          "addr": "0x44c3e0",
+          "name": "sub_44C3E0"
+        },
+        {
+          "addr": "0x44c400",
+          "name": "sub_44C400"
+        },
+        {
+          "addr": "0x4b4640",
+          "name": "sub_4B4640"
+        },
+        {
+          "addr": "0x43b320",
+          "name": "sub_43B320"
+        },
+        {
+          "addr": "0x44c3c0",
+          "name": "sub_44C3C0"
+        },
+        {
+          "addr": "0x9b6150",
+          "name": "sub_9B6150"
+        },
+        {
+          "addr": "0x9b6020",
+          "name": "sub_9B6020"
+        },
+        {
+          "addr": "0x3f2aa0",
+          "name": "sub_3F2AA0"
+        },
+        {
+          "addr": "0x17c86fc",
+          "name": "dword_17C86FC"
+        },
+        {
+          "addr": "0x808c70",
+          "name": "sub_808C70"
+        },
+        {
+          "addr": "0xb33380",
+          "name": "dword_B33380"
+        },
+        {
+          "addr": "0x17c8718",
+          "name": "dword_17C8718"
+        },
+        {
+          "addr": "0x9d4040",
+          "name": "sub_9D4040"
+        },
+        {
+          "addr": "0x975540",
+          "name": "sub_975540"
+        },
+        {
+          "addr": "0x973e20",
+          "name": "sub_973E20"
+        },
+        {
+          "addr": "0x972910",
+          "name": "sub_972910"
+        },
+        {
+          "addr": "0x4224a0",
+          "name": "sub_4224A0"
+        },
+        {
+          "addr": "0xa47620",
+          "name": "sub_A47620"
+        },
+        {
+          "addr": "0x9dc290",
+          "name": "sub_9DC290"
+        },
+        {
+          "addr": "0x44c420",
+          "name": "sub_44C420"
+        },
+        {
+          "addr": "0x9b2d40",
+          "name": "sub_9B2D40"
+        },
+        {
+          "addr": "0x40b6f0",
+          "name": "sub_40B6F0"
+        },
+        {
+          "addr": "0x44c6b0",
+          "name": "sub_44C6B0"
+        },
+        {
+          "addr": "0x4b6080",
+          "name": "sub_4B6080"
+        },
+        {
+          "addr": "0x4b4cb0",
+          "name": "sub_4B4CB0"
+        },
+        {
+          "addr": "0x4b6130",
+          "name": "sub_4B6130"
+        },
+        {
+          "addr": "0x9db900",
+          "name": "sub_9DB900"
+        },
+        {
+          "addr": "0x12f14b4",
+          "name": "dword_12F14B4"
+        },
+        {
+          "addr": "0xa3ca00",
+          "name": "sub_A3CA00"
+        },
+        {
+          "addr": "0xa3c3c0",
+          "name": "sub_A3C3C0"
+        }
+      ]
+    },
+    "isError": false
+  }
+}

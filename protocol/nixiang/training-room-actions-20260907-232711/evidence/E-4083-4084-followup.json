@@ -1,0 +1,62 @@
+[
+  {
+    "addr": "0x8184f0",
+    "code": "int __thiscall sub_8184F0(void *this, _DWORD *a2, int a3)\n{\n  int result; // eax\n  int v4; // eax\n  int v5; // eax\n  int v6; // eax\n  int v8; // [esp+10h] [ebp-8h]\n\n  result = sub_808C70(a1: *a2, a2: a2[1]); /*0x81850f*/\n  v8 = result; /*0x818514*/\n  if ( result == 0 ) /*0x81851b*/\n    return result; /*0x8185d6*/\n  v4 = sub_3F1040(a1: result); /*0x818524*/\n  v5 = sub_4B4640(a1: v4); /*0x81852b*/\n  result = (*(int (__thiscall **)(int, int, void *))(*(_DWORD *)v5 + 36))(a1: v5, a2: v5, a3: this); /*0x81853e*/\n  if ( result != 1013 ) /*0x81854a*/\n    return result; /*0x8185d6*/\n  result = sub_9D9A30(a1: v8); /*0x81854f*/\n  if ( result == 0 ) /*0x818556*/\n    return result; /*0x8185d6*/\n  v6 = sub_3F1040(a1: v8); /*0x81855d*/\n  result = sub_4B4640(a1: v6); /*0x818564*/\n  if ( result == 0 ) /*0x818570*/\n    return result; /*0x8185d6*/\n  sub_5389A0(a1: 1); /*0x818577*/\n  sub_9D4040(a1: 0, a2: 5); /*0x818583*/\n  sub_40B710(a1: a2[3]); /*0x818592*/\n  result = sub_9D7C70(a1: v8); /*0x81859a*/\n  if ( result == 0 ) /*0x8185a1*/\n    return result; /*0x8185d6*/\n  result = (int)a2; /*0x8185a3*/\n  if ( a2[3] == 0 || dword_17C86FC == 0 ) /*0x8185b3*/\n    return result; /*0x8185d6*/\n  result = sub_40B6F0(a1: dword_17C86FC); /*0x8185bb*/\n  if ( result != 0 ) /*0x8185c2*/\n    return sub_9BD8E0(a1: a2[4]); /*0x8185d1*/\n  return result; /*0x8185d6*/\n}",
+    "refs": [
+      {
+        "addr": "0x808c70",
+        "name": "sub_808C70"
+      },
+      {
+        "addr": "0x3f1040",
+        "name": "sub_3F1040"
+      },
+      {
+        "addr": "0x4b4640",
+        "name": "sub_4B4640"
+      },
+      {
+        "addr": "0x9d9a30",
+        "name": "sub_9D9A30"
+      },
+      {
+        "addr": "0x5389a0",
+        "name": "sub_5389A0"
+      },
+      {
+        "addr": "0x9d4040",
+        "name": "sub_9D4040"
+      },
+      {
+        "addr": "0x40b710",
+        "name": "sub_40B710"
+      },
+      {
+        "addr": "0x9d7c70",
+        "name": "sub_9D7C70"
+      },
+      {
+        "addr": "0x17c86fc",
+        "name": "dword_17C86FC"
+      },
+      {
+        "addr": "0x40b6f0",
+        "name": "sub_40B6F0"
+      },
+      {
+        "addr": "0x9bd8e0",
+        "name": "sub_9BD8E0"
+      }
+    ]
+  },
+  {
+    "addr": "0x817bc0",
+    "code": "int __stdcall sub_817BC0(int a1, int a2)\n{\n  return sub_A2CA00(a1: 4084, a2: 0); /*0x817bd6*/\n}",
+    "refs": [
+      {
+        "addr": "0xa2ca00",
+        "name": "sub_A2CA00"
+      }
+    ]
+  }
+]

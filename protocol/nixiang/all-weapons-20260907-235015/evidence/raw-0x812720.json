@@ -1,0 +1,18 @@
+{
+  "addr": "0x812720",
+  "code": "unsigned int __thiscall sub_812720(void *this, int a2, unsigned int a3)\n{\n  unsigned int result; // eax\n  signed int i; // [esp+4h] [ebp-Ch]\n  int v5; // [esp+8h] [ebp-8h]\n\n  if ( a2 == 0 || a3 == 0 )\n    return result;\n  sub_9BE630(a1: dword_17C86FC, a2: this);\n  result = a3 / 0x44;\n  v5 = a2;\n  for ( i = 0; i < (int)(a3 / 0x44); ++i )\n  {\n    sub_9BE710(a1: v5);\n    v5 += 68;\n    result = i + 1;\n  }\n  return result;\n}",
+  "refs": [
+    {
+      "addr": "0x9be630",
+      "name": "sub_9BE630"
+    },
+    {
+      "addr": "0x17c86fc",
+      "name": "dword_17C86FC"
+    },
+    {
+      "addr": "0x9be710",
+      "name": "sub_9BE710"
+    }
+  ]
+}

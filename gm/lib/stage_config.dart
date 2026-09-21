@@ -25,6 +25,11 @@ class _StageConfigPageState extends State<StageConfigPage> {
   int? revision;
   bool busy = false;
   String status = '';
+  String serverHash = '';
+  bool get versionMismatch =>
+      serverHash.isNotEmpty &&
+      (preserved['client_hash'] as String? ?? '').isNotEmpty &&
+      preserved['client_hash'] != serverHash;
   @override
   void initState() {
     super.initState();
@@ -48,6 +53,7 @@ class _StageConfigPageState extends State<StageConfigPage> {
     setState(() {
       revision = result['revision'] as int;
       preserved = Map<String, dynamic>.from(result as Map);
+      serverHash = preserved.remove('server_client_hash') as String? ?? '';
       requirements = ((result['requirements'] as List?) ?? [])
           .map((r) => Map<String, dynamic>.from(r as Map))
           .toList();
@@ -63,6 +69,9 @@ class _StageConfigPageState extends State<StageConfigPage> {
     apply(await widget.api({'operation': 'stages_get'}));
   });
   Future<void> save() => run(() async {
+    if (versionMismatch) {
+      throw const FormatException('关卡绑定与目标服务器版本不一致，请先同步资源版本');
+    }
     final result = await widget.api({
       'operation': 'stages_save',
       'stage_access': {
@@ -87,6 +96,9 @@ class _StageConfigPageState extends State<StageConfigPage> {
       throw const FormatException('地图目录缺少有效版本指纹');
     }
     final oldHash = preserved['client_hash'] as String? ?? '';
+    if (serverHash.isNotEmpty && hash != serverHash) {
+      throw const FormatException('本机地图资源与目标服务器版本不同，请先更新本机客户端再读取');
+    }
     if (oldHash.isNotEmpty && oldHash != hash) {
       throw const FormatException('本机客户端与已保存目录版本不同，请先核对目标服务器客户端');
     }
@@ -282,6 +294,16 @@ class _StageConfigPageState extends State<StageConfigPage> {
             '开放：跳过称号和个人解锁条件。原规则：恢复默认准入。只控制地图准入，不增加未实现的关卡玩法；进行中的战斗不强制中断。',
           ),
           const SizedBox(height: 12),
+          Text(
+            serverHash.isEmpty
+                ? '服务器资源版本：未提供，请更新管理服务后核对'
+                : '服务器资源：${serverHash.substring(0, 12)} · 关卡绑定：${(preserved['client_hash'] as String? ?? '').characters.take(12)}',
+          ),
+          if (versionMismatch)
+            const Text(
+              '版本不一致：当前关卡可能无法进入。请同步资源与关卡配置后重新读取；不能靠关闭校验解决。',
+              style: TextStyle(color: Colors.red),
+            ),
           SwitchListTile(
             title: const Text('启用地图准入条件'),
             subtitle: const Text('检查客户端版本、全员称号及已勾选的个人解锁条件；关闭后保留配置，不解锁未支持玩法'),

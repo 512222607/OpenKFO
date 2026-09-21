@@ -1,0 +1,10 @@
+{
+  "date_local": "2026-09-08",
+  "timezone": "Asia/Shanghai",
+  "source": "User reply to final post-install verification question",
+  "user_answer": "显示365+，换装成功",
+  "permanent_display_confirmed": true,
+  "warehouse_equip_confirmed": true,
+  "verification_method": "User performed client restart, login and warehouse equip; assistant did not capture a final screenshot",
+  "computer_use_stopped_by_user_escape": true
+}

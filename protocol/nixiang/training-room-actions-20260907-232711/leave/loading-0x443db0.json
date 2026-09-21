@@ -1,0 +1,4 @@
+{
+  "addr": "0x443db0",
+  "code": "int __fastcall sub_443DB0(int a1)\n{\n  return *(_DWORD *)(a1 + 172); /*0x443dc0*/\n}"
+}

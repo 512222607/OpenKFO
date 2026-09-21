@@ -1,0 +1,50 @@
+{
+  "pid": 22320,
+  "test_count": 82,
+  "target": "127.0.0.1:10035",
+  "uid": 1001,
+  "items": 280,
+  "weapons": 274,
+  "all_permanent": true,
+  "client_display": "365+",
+  "slot_zero_acknowledged": true,
+  "unsupported_slot_rejected_without_disconnect": true,
+  "original_role_unchanged": true,
+  "inventory_unchanged_by_smoke": true,
+  "equipped_instance_preserved": 102,
+  "read_chunks_max97bytes": 407,
+  "frames": [
+    {
+      "id": 1020,
+      "length": 37
+    },
+    {
+      "id": 1120,
+      "length": 19040
+    },
+    {
+      "id": 1130,
+      "length": 360
+    }
+  ],
+  "database_sha256": "00445e8d196b0540eb0911401ccc7cb192c3367e3339f1a884e7cdf4671842f9",
+  "ui_confirmation_source": "user",
+  "ui_inventory_confirmed": true,
+  "ui_weapon_switch_confirmed": true,
+  "temporary_control_restored": true,
+  "original_role_rows_unchanged": true,
+  "source_sha256": {
+    "role_protocol.py": "ebd9cd595431a8af0faf4f2c38f70c16a88fc85c9c2d876306648778f193806f",
+    "inventory_protocol.py": "1296b2c8c49699ddd58e7566fa3044c839439113e39864eae8873a694cf07947",
+    "test_inventory_protocol.py": "6236edb0f70af65501e2fa22bf4de53a51e59abf5bdd9414c05514ab740a29d3",
+    "test_inventory_store.py": "eda32c02ad80d9d6a0221aa0eb2320bfecbe5da39fb836747cbc827d54c69743",
+    "weapon_ids.json": "fde38888aa7c7383f88c17da0e6438f2328dc9a053c9dc47538c559ef71fc978"
+  },
+  "equipped_weapons": [
+    {
+      "instance_id": 124,
+      "local_id": 253133
+    }
+  ],
+  "backup_directory": "C:\\Users\\24032\\Desktop\\code\\kungfu-mock-server\\research\\2026-09-07\\all-weapons-20260907-235015\\before-permanent-20260908-001056"
+}

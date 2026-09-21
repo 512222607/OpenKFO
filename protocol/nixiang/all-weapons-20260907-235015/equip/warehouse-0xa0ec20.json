@@ -1,0 +1,50 @@
+{
+  "addr": "0xa0ec20",
+  "code": "int __cdecl sub_A0EC20(int a1, int a2, unsigned int a3, int a4)\n{\n  _BYTE v5[4]; // [esp+8h] [ebp-10h] BYREF\n  unsigned int v6; // [esp+Ch] [ebp-Ch]\n  int v7; // [esp+14h] [ebp-4h]\n\n  sub_3F5F90(a1: v5); /*0xa0ec4f*/\n  v7 = 0; /*0xa0ec54*/\n  if ( a4 != 0 || a3 == 0 ) /*0xa0ec69*/\n  {\n    if ( a4 == 0 || a3 != 0 ) /*0xa0ed8f*/\n      sub_3F63A0(a1: v5); /*0xa0edab*/\n    else\n      sub_401C60(a1: v5, a2: 12180548); /*0xa0ed9e*/\n  }\n  else if ( a2 != 0 ) /*0xa0ec73*/\n  {\n    if ( a2 == 1 ) /*0xa0ecd5*/\n    {\n      if ( a3 / 0x5A0 != 0 ) /*0xa0ece9*/\n      {\n        if ( a3 / 0x3C < 0x2238 ) /*0xa0ed3f*/\n          sub_401C60(a1: v5, a2: 12180492); /*0xa0ed66*/\n        else\n          sub_3F6090(a1: aOndelustate); /*0xa0ed49*/\n      }\n      else if ( a3 / 0x3C != 0 ) /*0xa0ecf9*/\n      {\n        sub_401C60(a1: v5, a2: aOnustatetimer); /*0xa0ed24*/\n      }\n      else\n      {\n        sub_401C60(a1: v5, a2: 12180532); /*0xa0ed04*/\n      }\n    }\n    else if ( a2 == 2 ) /*0xa0ed74*/\n    {\n      sub_3F6090(a1: &aOnustatebehite[4]); /*0xa0ed7e*/\n    }\n  }\n  else if ( a3 < 0x2238 ) /*0xa0ec7c*/\n  {\n    if ( a3 < 0x18 ) /*0xa0ec95*/\n      sub_401C60(a1: v5, a2: 12180524); /*0xa0ecc4*/\n    else\n      sub_401C60(a1: v5, a2: aOnustatehiteve); /*0xa0ecad*/\n  }\n  else\n  {\n    sub_401C60(a1: v5, a2: &aOnustatetimer[8]); /*0xa0ec87*/\n  }\n  sub_3F5FB0(a1: v5); /*0xa0edb7*/\n  v7 = -1; /*0xa0edc5*/\n  sub_3F6050(a1: v5); /*0xa0edcf*/\n  __writefsdword(0, v6); /*0xa0edda*/\n  return a1; /*0xa0ede2*/\n}",
+  "refs": [
+    {
+      "addr": "0x3f5f90",
+      "name": "sub_3F5F90"
+    },
+    {
+      "addr": "0x3f63a0",
+      "name": "sub_3F63A0"
+    },
+    {
+      "addr": "0x401c60",
+      "name": "sub_401C60"
+    },
+    {
+      "addr": "0x3f6090",
+      "name": "sub_3F6090"
+    },
+    {
+      "addr": "0xb9dc04",
+      "name": "aOndelustate",
+      "string": "OnDelUstate_"
+    },
+    {
+      "addr": "0xb9dc14",
+      "name": "aOnustatetimer",
+      "string": "OnUstateTimer_"
+    },
+    {
+      "addr": "0xb9dc38",
+      "name": "aOnustatebehite",
+      "string": "OnUstateBeHitEvent_"
+    },
+    {
+      "addr": "0xb9dc24",
+      "name": "aOnustatehiteve",
+      "string": "OnUstateHitEvent_"
+    },
+    {
+      "addr": "0x3f5fb0",
+      "name": "sub_3F5FB0"
+    },
+    {
+      "addr": "0x3f6050",
+      "name": "sub_3F6050"
+    }
+  ]
+}

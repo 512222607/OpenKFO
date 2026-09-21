@@ -94,16 +94,40 @@ func measure(endpoint, certPath string) (sample Sample) {
 func main() {
 	cert := flag.String("cert", "runtime-local/go-online/origin.crt", "pinned certificate")
 	count := flag.Int("count", 15, "samples per endpoint")
-	direct := flag.Bool("direct", false, "also measure direct TLS with the configured domain")
+	direct := flag.Bool("direct", false, "compare configured WSS and direct TLS endpoints")
+	configPath := flag.String("config", "config/network.json", "central network config (relative to working directory)")
 	customEndpoint := flag.String("endpoint", "", "measure only this TLS or WSS endpoint")
 	output := flag.String("output", "latency-report.json", "report path")
 	flag.Parse()
-	endpoints := []string{"wss://jrnygtxy.top/kk/tunnel"}
-	if *direct {
-		endpoints = append(endpoints, "tls://jrnygtxy.top:19091")
-	}
+	var endpoints []string
 	if *customEndpoint != "" {
 		endpoints = []string{*customEndpoint}
+	} else {
+		var config struct {
+			Game   string `json:"game_endpoint"`
+			Direct string `json:"direct_endpoint"`
+			WSS    string `json:"wss_endpoint"`
+		}
+		data, err := os.ReadFile(*configPath)
+		if err != nil {
+			panic(err)
+		}
+		if err := json.Unmarshal(data, &config); err != nil {
+			panic(err)
+		}
+		endpoints = []string{config.Game}
+		if *direct {
+			endpoints = []string{config.WSS, config.Direct}
+		}
+	}
+	if *count < 1 {
+		panic("count must be positive")
+	}
+	for _, endpoint := range endpoints {
+		parsed, err := url.Parse(endpoint)
+		if err != nil || parsed.Hostname() == "" || (parsed.Scheme != "tls" && parsed.Scheme != "wss") {
+			panic("invalid TLS/WSS endpoint")
+		}
 	}
 	var samples []Sample
 	for index := 0; index < *count; index++ {

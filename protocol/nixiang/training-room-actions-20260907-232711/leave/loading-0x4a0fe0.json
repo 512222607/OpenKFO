@@ -1,0 +1,4 @@
+{
+  "addr": "0x4a0fe0",
+  "code": "_BYTE *__thiscall sub_4A0FE0(_BYTE *this, char a2)\n{\n  *(this + 52) = a2; /*0x4a0fed*/\n  return this; /*0x4a0ff0*/\n}"
+}

@@ -1,0 +1,4 @@
+{
+  "addr": "0x807b10",
+  "code": "int __thiscall sub_807B10(int this, _DWORD *a2)\n{\n  int v2; // edx\n\n  v2 = a2[1]; /*0x807b1c*/\n  *(_DWORD *)(this + 785) = *a2; /*0x807b22*/\n  *(_DWORD *)(this + 789) = v2; /*0x807b28*/\n  return this; /*0x807b2e*/\n}"
+}

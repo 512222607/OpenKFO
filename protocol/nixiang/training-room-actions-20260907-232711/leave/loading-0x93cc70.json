@@ -1,0 +1,18 @@
+{
+  "addr": "0x93cc70",
+  "code": "int __fastcall sub_93CC70(int a1)\n{\n  int v1; // eax\n  int v2; // eax\n  int result; // eax\n\n  if ( dword_17C8710 != 0 && sub_443DB0(a1: dword_17C8710) != 0 ) /*0x93cc8f*/\n  {\n    v1 = sub_443DB0(a1: dword_17C8710); /*0x93cc97*/\n    v2 = (*(int (__thiscall **)(int, int))(*(_DWORD *)v1 + 20))(a1: v1, a2: v1); /*0x93ccaa*/\n    result = sub_93CC40(a1: v2 / 1000); /*0x93ccb8*/\n  }\n  else\n  {\n    result = sub_93CC40(a1: 999); /*0x93ccc7*/\n  }\n  *(_DWORD *)(a1 + 36) = 0; /*0x93cccf*/\n  return result; /*0x93ccd6*/\n}",
+  "refs": [
+    {
+      "addr": "0x443db0",
+      "name": "sub_443DB0"
+    },
+    {
+      "addr": "0x17c8710",
+      "name": "dword_17C8710"
+    },
+    {
+      "addr": "0x93cc40",
+      "name": "sub_93CC40"
+    }
+  ]
+}
