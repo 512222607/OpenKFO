@@ -13,6 +13,7 @@ import (
 )
 
 type AdminOffer struct {
+	Recommended *bool `json:"recommended,omitempty"`
 	// nil preserves an existing policy for older GM clients; zero is permanent.
 	ServerExpiryDays *uint32 `json:"server_expiry_days,omitempty"`
 	Offer
@@ -53,7 +54,7 @@ func itemKey(record []byte) string {
 	return fmt.Sprintf("%d:%d", record[4], protocol.ReadUint32(record, 5))
 }
 func (store *Store) adminOffers() ([]AdminOffer, error) {
-	rows, err := store.DB.Query(`SELECT o.catalog_key,o.category,o.variant,o.record,o.grant_record,o.enabled,COALESCE(l.days,0) FROM offers o LEFT JOIN offer_lifetimes l ON l.catalog_key=o.catalog_key ORDER BY o.catalog_key`)
+	rows, err := store.DB.Query(`SELECT o.catalog_key,o.category,o.variant,o.record,o.grant_record,o.enabled,COALESCE(l.days,0),COALESCE(f.enabled,FALSE) FROM offers o LEFT JOIN offer_lifetimes l ON l.catalog_key=o.catalog_key LEFT JOIN offer_recommendations f ON f.catalog_key=o.catalog_key ORDER BY o.catalog_key`)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +62,7 @@ func (store *Store) adminOffers() ([]AdminOffer, error) {
 	result := []AdminOffer{}
 	for rows.Next() {
 		var offer AdminOffer
-		if err = rows.Scan(&offer.Key, &offer.Category, &offer.Variant, &offer.Record, &offer.Grant, &offer.Enabled, &offer.ServerExpiryDays); err != nil {
+		if err = rows.Scan(&offer.Key, &offer.Category, &offer.Variant, &offer.Record, &offer.Grant, &offer.Enabled, &offer.ServerExpiryDays, &offer.Recommended); err != nil {
 			return nil, err
 		}
 		result = append(result, offer)
@@ -397,7 +398,7 @@ func (store *Store) Admin(request AdminRequest) (any, error) {
 		}
 		result["uid"], result["added"], result["updated"], result["skipped"] = uid, added, updated, skipped
 	} else {
-		rows, readErr := tx.Query(`SELECT o.catalog_key,o.category,o.variant,o.record,o.grant_record,o.enabled,COALESCE(l.days,0) FROM offers o LEFT JOIN offer_lifetimes l ON l.catalog_key=o.catalog_key ORDER BY o.catalog_key FOR UPDATE`)
+		rows, readErr := tx.Query(`SELECT o.catalog_key,o.category,o.variant,o.record,o.grant_record,o.enabled,COALESCE(l.days,0),COALESCE(f.enabled,FALSE) FROM offers o LEFT JOIN offer_lifetimes l ON l.catalog_key=o.catalog_key LEFT JOIN offer_recommendations f ON f.catalog_key=o.catalog_key ORDER BY o.catalog_key FOR UPDATE`)
 		if readErr != nil {
 			return nil, readErr
 		}
@@ -406,7 +407,7 @@ func (store *Store) Admin(request AdminRequest) (any, error) {
 		byKey := map[uint32]AdminOffer{}
 		for rows.Next() {
 			var offer AdminOffer
-			if err = rows.Scan(&offer.Key, &offer.Category, &offer.Variant, &offer.Record, &offer.Grant, &offer.Enabled, &offer.ServerExpiryDays); err != nil {
+			if err = rows.Scan(&offer.Key, &offer.Category, &offer.Variant, &offer.Record, &offer.Grant, &offer.Enabled, &offer.ServerExpiryDays, &offer.Recommended); err != nil {
 				rows.Close()
 				return nil, err
 			}
@@ -520,6 +521,12 @@ func (store *Store) Admin(request AdminRequest) (any, error) {
 				if _, err = tx.Exec(`INSERT INTO offers(catalog_key,category,variant,record,grant_record,enabled) VALUES(?,?,?,?,?,?) ON DUPLICATE KEY UPDATE record=VALUES(record),grant_record=VALUES(grant_record),enabled=VALUES(enabled)`, offer.Key, offer.Category, offer.Variant, offer.Record, offer.Grant, offer.Enabled); err != nil {
 					return nil, err
 				}
+				if offer.Recommended != nil {
+					if _, err = tx.Exec(`INSERT INTO offer_recommendations(catalog_key,enabled) VALUES(?,?) ON DUPLICATE KEY UPDATE enabled=VALUES(enabled)`, offer.Key, *offer.Recommended); err != nil {
+						return nil, err
+					}
+					result["recommendation_saved"] = true
+				}
 				if offer.ServerExpiryDays != nil {
 					if _, err = tx.Exec(`INSERT INTO offer_lifetimes(catalog_key,days) VALUES(?,?) ON DUPLICATE KEY UPDATE days=VALUES(days)`, offer.Key, *offer.ServerExpiryDays); err != nil {
 						return nil, err
@@ -559,6 +566,9 @@ func validateAdminOffer(offer AdminOffer) error {
 		return ErrDenied
 	}
 	if len(offer.Record) != 108 || len(offer.Grant) != 68 || offer.Key == 0 || offer.Category != 10 || offer.Variant != offer.Grant[4] || offer.Record[4] != offer.Grant[4] || protocol.ReadUint32(offer.Record, 5) != protocol.ReadUint32(offer.Grant, 5) || protocol.ReadUint32(offer.Record, 9) != offer.Key {
+		return ErrDenied
+	}
+	if offer.Recommended != nil && *offer.Recommended && offer.Grant[4] != protocol.ItemWeapon {
 		return ErrDenied
 	}
 	gold, tickets := protocol.ReadUint32(offer.Record, 30), protocol.ReadUint32(offer.Record, 38)

@@ -8,29 +8,61 @@ namespace KungFuLauncher;
 
 internal sealed record WindowCredentials(string Account, string Password)
 {
+    // Distribution default, not an authentication secret. DPAPI binds saved keys to this Windows user.
+    internal const string DefaultKey = "LS1KuGmfVgqfuRT2";
+    private sealed record Envelope(int Version, byte[] WrappedKey, byte[] Nonce, byte[] Tag, byte[] Ciphertext);
+    internal static bool ValidKey(string? key) => key is { Length: 16 } && key.All(c => c >= 33 && c <= 126);
+
     internal static WindowCredentials Load(string directory)
     {
         string path = Path.Combine(directory, "credentials.bin");
         if (!File.Exists(path)) return new("", "");
-        byte[] plain = ProtectedData.Unprotect(File.ReadAllBytes(path), null, DataProtectionScope.CurrentUser);
+        byte[] stored = File.ReadAllBytes(path);
+        byte[] plain;
+        if (stored.Length > 0 && stored[0] == (byte)'{')
+        {
+            var envelope = JsonSerializer.Deserialize<Envelope>(stored) ?? throw new IOException("账号记录格式无效。");
+            if (envelope.Version != 1) throw new IOException("账号记录版本不支持。");
+            byte[] key = ProtectedData.Unprotect(envelope.WrappedKey, null, DataProtectionScope.CurrentUser);
+            plain = new byte[envelope.Ciphertext.Length];
+            try { using var aes = new AesGcm(key, 16); aes.Decrypt(envelope.Nonce, envelope.Ciphertext, envelope.Tag, plain); }
+            catch { CryptographicOperations.ZeroMemory(plain); throw; }
+            finally { CryptographicOperations.ZeroMemory(key); }
+        }
+        else plain = ProtectedData.Unprotect(stored, null, DataProtectionScope.CurrentUser); // Previous launcher format.
         try { return JsonSerializer.Deserialize<WindowCredentials>(plain) ?? throw new IOException("保存的账号数据无效。"); }
         finally { CryptographicOperations.ZeroMemory(plain); }
     }
 
-    internal void Save(string directory)
+    internal void Save(string directory, string? configuredKey = null)
     {
         Directory.CreateDirectory(directory);
         string path = Path.Combine(directory, "credentials.bin");
         if (Account.Length == 0 && Password.Length == 0) { File.Delete(path); return; }
-        byte[] plain = JsonSerializer.SerializeToUtf8Bytes(this);
+        string selected = string.IsNullOrEmpty(configuredKey) ? DefaultKey : configuredKey;
+        if (!ValidKey(selected)) throw new IOException("账号保存密钥必须为16位可打印ASCII字符。");
+        byte[] plain = JsonSerializer.SerializeToUtf8Bytes(this), key = Encoding.ASCII.GetBytes(selected);
         try
         {
-            byte[] encrypted = ProtectedData.Protect(plain, null, DataProtectionScope.CurrentUser);
+            byte[] nonce = RandomNumberGenerator.GetBytes(12), tag = new byte[16], encrypted = new byte[plain.Length];
+            using (var aes = new AesGcm(key, 16)) aes.Encrypt(nonce, plain, encrypted, tag);
+            var envelope = new Envelope(1, ProtectedData.Protect(key, null, DataProtectionScope.CurrentUser), nonce, tag, encrypted);
             string temporary = path + ".tmp";
-            File.WriteAllBytes(temporary, encrypted);
+            File.WriteAllBytes(temporary, JsonSerializer.SerializeToUtf8Bytes(envelope));
             File.Move(temporary, path, true);
         }
-        finally { CryptographicOperations.ZeroMemory(plain); }
+        finally { CryptographicOperations.ZeroMemory(plain); CryptographicOperations.ZeroMemory(key); }
+    }
+
+    internal static WindowCredentials LoadMigrating(string destination, string legacy, string key)
+    {
+        if (File.Exists(Path.Combine(destination, "credentials.bin"))) return Load(destination);
+        var saved = Load(legacy);
+        if (!File.Exists(Path.Combine(legacy, "credentials.bin"))) return saved;
+        saved.Save(destination, key);
+        if (Load(destination) != saved) throw new IOException("旧账号记录迁移校验失败。");
+        File.Delete(Path.Combine(legacy, "credentials.bin"));
+        return saved;
     }
 
     internal async Task<bool> FillAsync(Process game)

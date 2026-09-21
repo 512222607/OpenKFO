@@ -27,10 +27,12 @@ func (s *Session) syncEquipmentChange(request protocol.Message, changed []byte, 
 		}
 	}
 	prefix := bytes.Clone(request.Payload)
+	responseID := uint32(protocol.MsgItemUnequipped)
 	if request.ID == protocol.MsgEquipItem {
+		responseID = protocol.MsgEquipmentChanged
 		protocol.WriteUint32(prefix, 4, uint32(protocol.ReadUint16(changed, 17)))
 	}
-	s.sendGame(protocol.Message{ID: request.ID + 10, Payload: append(prefix, changed...)})
+	s.sendGame(protocol.Message{ID: responseID, Payload: append(prefix, changed...)})
 	// Preserve incremental updates for expiry/other inventory changes committed
 	// by the equipment transaction; do not rely on a login-only inventory packet.
 	s.syncInventory(records)

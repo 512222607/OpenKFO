@@ -20,7 +20,11 @@ class ShopConfigPage extends StatefulWidget {
 class _ShopConfigPageState extends State<ShopConfigPage> {
   Map<String, dynamic>? data, item;
   String query = '', message = '', currency = 'ticket';
-  bool busy = true, enabled = false, dirty = false, serverExpiry = false;
+  bool busy = true,
+      enabled = false,
+      dirty = false,
+      serverExpiry = false,
+      recommended = false;
   final price = TextEditingController(text: '100');
   final days = TextEditingController(text: '365');
   final quantity = TextEditingController(text: '1');
@@ -36,12 +40,15 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
   bool loadingImages = false;
   final images = <String, Uint8List>{};
   final requestedImages = <String>{};
+  final imageStatus = <String, bool>{};
+  bool scanningImages = false;
   List<dynamic> get filteredItems => (data?['items'] as List? ?? []).where((i) {
     if (!'${i['id']} ${i['name']}'.contains(query)) return false;
     final kind = i['kind'];
     final text = '${i['category']} ${i['group']}';
     return switch (category) {
-      '推荐/优惠' => false,
+      '缺少图片' => imageStatus[i['key']] == false,
+      '推荐/优惠' => data?['offers']?[i['key']]?['recommended'] == true,
       '武器' => kind == 25 || kind == 26,
       '宠物/法宝' =>
         text.contains('宠物') || text.contains('法宝') || text.contains('护符'),
@@ -54,6 +61,42 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
       _ => true,
     };
   }).toList();
+
+  Future<void> scanImages() async {
+    if (busy || scanningImages || data == null) return;
+    final keys = (data!['items'] as List)
+        .map((i) => i['key'] as String)
+        .toList();
+    setState(() {
+      scanningImages = true;
+      imageStatus.clear();
+    });
+    try {
+      for (var start = 0; start < keys.length; start += 24) {
+        final batchKeys = keys.skip(start).take(24).toList();
+        final result = await widget.api({
+          'operation': 'shop_image_status',
+          'keys': batchKeys,
+        });
+        if (!mounted) return;
+        if (result is! Map || batchKeys.any((k) => result[k] is! bool)) {
+          throw const FormatException('图片检测结果不完整，未将未确认商品判为缺图');
+        }
+        setState(() {
+          for (final key in batchKeys) {
+            imageStatus[key] = result[key] as bool;
+          }
+          message =
+              '图片检测 ${imageStatus.length}/${keys.length}，无可用图片 ${imageStatus.values.where((v) => !v).length} 件';
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => message = '检测未完成：$e。未检测商品不会归入缺图。');
+    } finally {
+      if (mounted) setState(() => scanningImages = false);
+    }
+  }
+
   Future<void> loadImages() async {
     if (!mounted || loadingImages || !scroll.hasClients) return;
     final firstRow = (scroll.offset.clamp(0, double.infinity) / 166).floor();
@@ -150,9 +193,11 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
     final config = data!['offers'][item!['key']] as Map?;
     currency = config?['currency'] ?? 'ticket';
     enabled = config?['enabled'] ?? false;
+    recommended = config?['recommended'] ?? false;
     price.text = '${config?['price'] ?? 100}';
     serverExpiry = (config?['server_expiry_days'] ?? 0) > 0;
-    days.text = '${serverExpiry ? config!['server_expiry_days'] : config?['days'] ?? 365}';
+    days.text =
+        '${serverExpiry ? config!['server_expiry_days'] : config?['days'] ?? 365}';
     quantity.text = '${config?['quantity'] ?? 1}';
     dirty = false;
   }
@@ -165,6 +210,7 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
       if (!mounted) return;
       setState(() {
         data = result;
+        imageStatus.clear();
         requestedImages.removeWhere((key) => !images.containsKey(key));
         busy = false;
         if (item != null) select(item!);
@@ -219,9 +265,14 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
           'server_expiry_days': serverExpiry ? int.parse(days.text) : 0,
         'quantity': int.parse(quantity.text),
         'enabled': enabled,
+        'recommended': recommended,
       };
       final result = await widget.api({...request, 'id': operationId(request)});
-      if (request.containsKey('server_expiry_days') && result['expiry_policy_saved'] != true) {
+      if (result['recommendation_saved'] != true) {
+        throw StateError('服务器尚未确认推荐设置，请更新管理接口后刷新核对。');
+      }
+      if (request.containsKey('server_expiry_days') &&
+          result['expiry_policy_saved'] != true) {
         throw StateError('服务端未确认期限策略，请更新对应环境的管理接口。其他商品设置可能已保存，请刷新核对。');
       }
       if (!mounted) return;
@@ -235,6 +286,7 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
             'server_expiry_days',
             'quantity',
             'enabled',
+            'recommended',
           ])
             key: request[key],
         };
@@ -253,10 +305,19 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
     }
   }
 
-  Future<void> batch(bool publish, {bool all = false}) async {
-    if (busy || data == null || (!all && selected.isEmpty)) return;
+  Future<void> batch(
+    bool publish, {
+    bool all = false,
+    List<String>? explicitKeys,
+  }) async {
+    if (busy ||
+        scanningImages ||
+        data == null ||
+        (!all && (explicitKeys ?? selected.toList()).isEmpty)) {
+      return;
+    }
     if (!await discard() || !mounted) return;
-    final keys = selected.toList()..sort();
+    final keys = List<String>.of(explicitKeys ?? selected.toList())..sort();
     final count = all ? (data!['items'] as List).length : keys.length;
     final accepted = await showDialog<bool>(
       context: context,
@@ -454,6 +515,7 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
                   children: [
                     for (final name in [
                       '全部商品',
+                      '缺少图片',
                       '推荐/优惠',
                       '武器',
                       '宠物/法宝',
@@ -478,7 +540,7 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
             if (category == '推荐/优惠')
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 16),
-                child: Text('推荐、新品、热销、礼包、新手、特价：协议字段待核实，尚未开放保存。普通商品请切换分类配置。'),
+                child: Text('推荐商品显示在游戏推荐页。在武器分类中选择商品，打开“加入推荐”并保存；价格独立配置。'),
               ),
 
             Padding(
@@ -488,6 +550,22 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
                 runSpacing: 8,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
+                  OutlinedButton(
+                    onPressed: busy || scanningImages ? null : scanImages,
+                    child: Text(scanningImages ? '检测图片中…' : '检测全部商品图片'),
+                  ),
+                  if (category == '缺少图片')
+                    OutlinedButton(
+                      onPressed: busy || scanningImages || filteredItems.isEmpty
+                          ? null
+                          : () => batch(
+                              false,
+                              explicitKeys: filteredItems
+                                  .map((i) => i['key'] as String)
+                                  .toList(),
+                            ),
+                      child: const Text('批量下架当前缺图商品'),
+                    ),
                   OutlinedButton(
                     onPressed: busy || data == null
                         ? null
@@ -702,6 +780,17 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
                                             dirty = true;
                                           }),
                                   ),
+                                  SwitchListTile(
+                                    title: const Text('加入推荐（武器）'),
+                                    subtitle: const Text('推荐页复用同一商品、价格和购买校验'),
+                                    value: recommended,
+                                    onChanged: busy || item!['kind'] != 25
+                                        ? null
+                                        : (v) => setState(() {
+                                            recommended = v;
+                                            dirty = true;
+                                          }),
+                                  ),
                                   SegmentedButton<String>(
                                     segments: const [
                                       ButtonSegment(
@@ -723,6 +812,12 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
                                   ),
                                   const SizedBox(height: 20),
                                   number(price, '售价', 2147483647),
+                                  if (item!['kind'] == 30)
+                                    const Text(
+                                      '宠物/法宝每次购买 1 件，初始耐久 100；使用消耗在宠物/法宝配置中设置。',
+                                    ),
+                                  if (item!['supported'] == false)
+                                    const Text('该类型尚未支持上架，可查看图片并批量下架已有商品。'),
                                   const SizedBox(height: 20),
                                   if (item!['stackable'] == true)
                                     number(quantity, '每次购买数量', 999)
@@ -732,16 +827,23 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
                                     CheckboxListTile(
                                       contentPadding: EdgeInsets.zero,
                                       title: const Text('购买后按上述天数到期'),
-                                      subtitle: const Text('仅影响之后购买的物品；不勾选则服务器永久有效。已有物品期限不变。'),
+                                      subtitle: const Text(
+                                        '仅影响之后购买的物品；不勾选则服务器永久有效。已有物品期限不变。',
+                                      ),
                                       value: serverExpiry,
-                                      onChanged: busy ? null : (value) => setState(() {
-                                        serverExpiry = value ?? false;
-                                        dirty = true;
-                                      }),
+                                      onChanged: busy
+                                          ? null
+                                          : (value) => setState(() {
+                                              serverExpiry = value ?? false;
+                                              dirty = true;
+                                            }),
                                     ),
                                   const SizedBox(height: 24),
                                   FilledButton(
-                                    onPressed: busy ? null : save,
+                                    onPressed:
+                                        busy || item!['supported'] == false
+                                        ? null
+                                        : save,
                                     child: const Text('保存商城配置'),
                                   ),
                                   const SizedBox(height: 16),

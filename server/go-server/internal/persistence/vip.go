@@ -56,7 +56,7 @@ func projectVIPMinutes(records [][]byte, deadlines map[uint32]int64, now int64) 
 func (s *Store) projectVIPInventory(a *Account) error {
 	hasVIP := false
 	for _, r := range a.Inventory {
-		if activeVIPCard(r) {
+		if activeVIPCard(r) || (len(r) == protocol.InventoryRecordSize && len(Slots[r[protocol.InventoryKindOffset]]) != 0 && protocol.ReadUint32(r, inventoryStateOffset) == inventoryActive) {
 			hasVIP = true
 			break
 		}
@@ -82,6 +82,12 @@ func (s *Store) projectVIPInventory(a *Account) error {
 		return err
 	}
 	projectVIPMinutes(a.Inventory, deadlines, time.Now().Unix())
+	for _, r := range a.Inventory {
+		if len(r) == protocol.InventoryRecordSize && len(Slots[r[protocol.InventoryKindOffset]]) != 0 && protocol.ReadUint32(r, inventoryStateOffset) == inventoryActive {
+			end, finite := deadlines[protocol.ReadUint32(r, 0)]
+			projectItemMinutes(r, sql.NullInt64{Int64: end, Valid: finite}, time.Now().Unix())
+		}
+	}
 	return nil
 }
 

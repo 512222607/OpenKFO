@@ -214,3 +214,31 @@ GM的`updater-settings.json`放EXE同目录，启用自己的HTTPS更新服务�
 | GM能打开但读不到数据 | Go后端EXE、gm-settings路径、目标库、服务端是否已建表 |
 
 真实配置、密码和密钥只保存在运行目录；提交Git前核对文件清单。本说明不会创建或修改线上账号、数据库或服务。
+
+
+## 登录器记住账号与更新
+
+账号记录存于 `%LOCALAPPDATA%/OpenKFO/Launcher/<服务器地址摘要>/window-N/credentials.bin`，本地与线上隔离，不随游戏包分发。旧的 `launcher-components/window-N/credentials.bin` 首次读取时迁移，校验成功才移除旧文件。
+
+服务器 `config.json` 可设置 `launcher_credentials_key`：16位可打印ASCII字符，例如 `ExampleKey123456`（示例必须自行替换为16位值）。不配置时登录器使用EXE内置随机默认值。该配置经HTTPS或校验证书的TLS健康接口下发，是客户端分发密钥，不是服务器认证凭据。保存采用AES-128-GCM随机nonce，密钥由Windows当前用户DPAPI保护；更改服务器密钥不影响旧记录读取。记录无法跨Windows用户直接搬迁。
+
+线上WSS登录器通过同域名HTTPS检查 `/updates/launcher.json`、`/updates/client.json`。TLS直连登录器保留原有不自动检查HTTPS更新的行为，避免更新网络不可用导致游戏无法打开；升级可用独立更新助手（需要HTTPS更新地址可达）：同目录 `launcher-update.json` 指定 `launcher`（待更新EXE）、`root`（bridge配置目录）、`manifest`（HTTPS清单URL），双击助手后确认下载更新。助手保留原文件名及连接配置，并在替换后重新打开登录器。
+
+### 游戏直连与更新入口分离
+
+登录器 `bridge.json` 支持独立的 HTTPS 更新目录：
+
+```json
+{
+  "url": "tls://game.example:19091",
+  "update_base_url": "https://updates.example/updates/"
+}
+```
+
+这是配置片段，应合并到现有配置中，保留客户端路径、证书和资源校验等字段。`update_base_url` 必须以 `/` 结尾。配置该字段后，线上 TLS 登录器也会检查登录器及客户端更新；本地回环服务器不启用。游戏域名使用直连解析，更新域名可以使用 HTTPS 下载服务或代理，两者无需共用入口。
+
+发布清单可携带 `game_endpoint` 和 `update_base_url`，让新版更新助手在替换登录器时同步迁移连接配置；配置与 EXE 一起备份、失败一起回滚。迁移保留 `credentials_scope`，避免换域名后丢失已保存账号。本地登录器拒绝此线上配置迁移。
+
+网络更新不可达时，在助手选择“本地更新清单”，清单 JSON 和其中引用的 SHA-256 文件名 ZIP 必须在同一目录。仍会校验长度、包哈希、EXE 哈希和允许替换的路径，校验完成后才关闭旧登录器。只接受可信发布者提供的完整更新包；本地清单不是数字签名。也可在助手的 `launcher-update.json` 增加 `offline_manifest`，双击直接读取该本地清单，无需联网。
+
+失败诊断日志保存在 `%LOCALAPPDATA%/OpenKFO/Updater/update.log`。证书有效不代表下载入口可达；需要从玩家网络实际验证清单与完整 ZIP 下载，而不仅是服务器本机测试。

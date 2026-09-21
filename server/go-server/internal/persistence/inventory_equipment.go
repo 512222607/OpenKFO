@@ -8,23 +8,23 @@ import (
 )
 
 // Native warehouse 8B3919/8B3924 selects slot 37 for type 30 before 2080.
-var Slots = map[byte][]uint16{12: {4}, 13: {3}, 14: {7}, 15: {2}, 16: {6}, 17: {5}, 18: {4}, 20: {10}, 21: {11}, protocol.ItemWeapon: {protocol.SlotPrimaryWeapon, protocol.SlotSecondaryWeapon}, protocol.ItemTalisman: {protocol.SlotPrimaryTalisman, protocol.SlotSecondaryTalisman}, protocol.ItemConsumable: {protocol.SlotPrimaryConsumable, protocol.SlotSecondaryConsumable}}
+var Slots = map[byte][]uint16{protocol.ItemTop: {4}, protocol.ItemFace: {3}, protocol.ItemShoes: {7}, protocol.ItemHair: {2}, protocol.ItemPants: {6}, protocol.ItemGloves: {5}, 18: {4}, 20: {10}, 21: {11}, protocol.ItemWeapon: {protocol.SlotPrimaryWeapon, protocol.SlotSecondaryWeapon}, protocol.ItemTalisman: {protocol.SlotPrimaryTalisman, protocol.SlotSecondaryTalisman}, protocol.ItemConsumable: {protocol.SlotPrimaryConsumable, protocol.SlotSecondaryConsumable}}
 
 // Current native 660CE0 default-slot switch. Only include types whose explicit
 // equipment paths are already supported here; suits and consumables differ.
 func defaultEquipmentSlot(kind byte) uint16 {
 	switch kind {
-	case 12:
+	case protocol.ItemTop:
 		return 4
-	case 13:
+	case protocol.ItemFace:
 		return 3
-	case 14:
+	case protocol.ItemShoes:
 		return 7
-	case 15:
+	case protocol.ItemHair:
 		return 2
-	case 16:
+	case protocol.ItemPants:
 		return 6
-	case 17:
+	case protocol.ItemGloves:
 		return 5
 	case 20:
 		return 10
@@ -122,8 +122,28 @@ func (m *EquipmentManager) equip(uid uint64, instance uint32, slot uint16, autom
 		}
 	}
 	protocol.WriteUint16(record, 17, slot)
+	prepareAppearanceAttachment(record)
+	if err = activateEquipmentInTransaction(transaction, uid, record, time.Now().Unix()); err != nil {
+		return nil, err
+	}
 	if _, err = transaction.Exec(`UPDATE inventory SET record=? WHERE uid=? AND instance=?`, record, uid, instance); err != nil {
 		return nil, err
 	}
 	return record, transaction.Commit()
+}
+
+// Native A19AE0 selects the model part for clothing only when DWORD +9 is
+// nonzero. Zero leaves the attachment name empty during live equip, although
+// reopening the wardrobe rebuilds the appearance. Preserve nonzero values:
+// other consumers of this field have not been fully reconstructed.
+func prepareAppearanceAttachment(record []byte) {
+	if len(record) != protocol.InventoryRecordSize || protocol.ReadUint16(record, protocol.InventorySlotOffset) == protocol.SlotUnequipped {
+		return
+	}
+	switch record[protocol.InventoryKindOffset] {
+	case protocol.ItemTop, protocol.ItemFace, protocol.ItemShoes, protocol.ItemHair, protocol.ItemPants, protocol.ItemGloves:
+		if protocol.ReadUint32(record, protocol.InventoryAppearanceMarkerOffset) == 0 {
+			protocol.WriteUint32(record, protocol.InventoryAppearanceMarkerOffset, protocol.AppearanceAttachmentPresent)
+		}
+	}
 }

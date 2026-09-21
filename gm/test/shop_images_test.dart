@@ -50,7 +50,7 @@ void main() {
       expect(find.text('已选 1 件'), findsOneWidget);
       await tester.tap(find.text('推荐/优惠'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('协议字段待核实'), findsOneWidget);
+      expect(find.textContaining('推荐商品显示在游戏推荐页'), findsOneWidget);
       await tester.tap(find.text('武器'));
       await tester.pumpAndSettle();
       await tester.pump(const Duration(milliseconds: 200));

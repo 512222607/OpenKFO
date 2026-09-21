@@ -106,7 +106,10 @@ func (m *ShopManager) Purchase(uid uint64, operationID string, request []byte) (
 func (m *ShopManager) Offers(category, variant int) ([]Offer, error) {
 	query := `SELECT catalog_key,category,variant,record,grant_record FROM offers WHERE enabled=TRUE`
 	args := []any{}
-	if category >= 0 {
+	if category == protocol.ShopCategoryRecommended {
+		query += ` AND variant=? AND EXISTS(SELECT 1 FROM offer_recommendations f WHERE f.catalog_key=offers.catalog_key AND f.enabled=TRUE)`
+		args = append(args, variant)
+	} else if category >= 0 {
 		query += ` AND category=? AND variant=?`
 		args = append(args, category, variant)
 	}

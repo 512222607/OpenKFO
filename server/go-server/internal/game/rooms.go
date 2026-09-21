@@ -12,21 +12,22 @@ import (
 )
 
 type Config struct {
-	StageWaveVariants map[uint32][]StageWaveVariant    `json:"stage_wave_variants,omitempty"`
-	StageWaves        map[uint32][]StageWavePlan       `json:"stage_waves,omitempty"`
-	TitleLevels       []byte                           `json:"title_levels,omitempty"` // Verified roletitle.xml levels; empty disables announcements.
-	TalismanUses      []TalismanUseRule                `json:"talisman_uses,omitempty"`
-	TalismanRepairs   []persistence.TalismanRepairRule `json:"talisman_repairs,omitempty"`
-	Honour            HonourRules                      `json:"honour,omitempty"`
-	WeaponUpgradeMode string                           `json:"weapon_upgrade_mode,omitempty"`
-	WeaponLevels      []WeaponLevel                    `json:"weapon_levels,omitempty"`
-	LobbyNames        map[uint32]string                `json:"lobby_names,omitempty"`
-	LobbyIDs          []uint32                         `json:"lobby_ids,omitempty"`
-	CharacterChoices  []persistence.CharacterChoice    `json:"character_choices"`
-	Settlement        SettlementRewards                `json:"settlement"`
-	ConfigHash        string                           `json:"config_hash"`
-	Pools             map[string][]uint32              `json:"pools"`
-	Groups            map[string][]uint32              `json:"groups"`
+	LauncherCredentialsKey string                           `json:"launcher_credentials_key,omitempty"`
+	StageWaveVariants      map[uint32][]StageWaveVariant    `json:"stage_wave_variants,omitempty"`
+	StageWaves             map[uint32][]StageWavePlan       `json:"stage_waves,omitempty"`
+	TitleLevels            []byte                           `json:"title_levels,omitempty"` // Verified roletitle.xml levels; empty disables announcements.
+	TalismanUses           []TalismanUseRule                `json:"talisman_uses,omitempty"`
+	TalismanRepairs        []persistence.TalismanRepairRule `json:"talisman_repairs,omitempty"`
+	Honour                 HonourRules                      `json:"honour,omitempty"`
+	WeaponUpgradeMode      string                           `json:"weapon_upgrade_mode,omitempty"`
+	WeaponLevels           []WeaponLevel                    `json:"weapon_levels,omitempty"`
+	LobbyNames             map[uint32]string                `json:"lobby_names,omitempty"`
+	LobbyIDs               []uint32                         `json:"lobby_ids,omitempty"`
+	CharacterChoices       []persistence.CharacterChoice    `json:"character_choices"`
+	Settlement             SettlementRewards                `json:"settlement"`
+	ConfigHash             string                           `json:"config_hash"`
+	Pools                  map[string][]uint32              `json:"pools"`
+	Groups                 map[string][]uint32              `json:"groups"`
 }
 type Member struct {
 	WeaponSwitch         weaponSwitchAttempt

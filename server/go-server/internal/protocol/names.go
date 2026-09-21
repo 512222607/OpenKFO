@@ -64,21 +64,33 @@ func RoomTypeFromRequest(p []byte) RoomType {
 
 // Item kinds and equipment slots are different namespaces, even when values match.
 const (
-	ItemWeapon              = 25 // 武器
-	ItemTalisman            = 30 // 法宝
-	ItemDecorativeTitle     = 31 // 装饰称号物品；不等同角色成长称号
-	ItemConsumable          = 64 // 消耗品
-	ItemExperienceCard      = 72 // 经验卡
-	ItemVIPCard             = 73 // VIP 卡
-	ItemWeaponSwitchCard    = 74 // 武器切换卡
-	SlotUnequipped          = 0
-	SlotPrimaryWeapon       = 8 // 主武器槽
-	SlotSecondaryWeapon     = 9 // 副武器槽
-	SlotPrimaryTalisman     = 37
-	SlotSecondaryTalisman   = 38
-	SlotPrimaryConsumable   = 27
-	SlotSecondaryConsumable = 28
-	SlotDecorativeTitle     = 42
+	ItemTop             = 12
+	ItemFace            = 13
+	ItemShoes           = 14
+	ItemHair            = 15
+	ItemPants           = 16
+	ItemGloves          = 17
+	InventoryKindOffset = 4
+	InventorySlotOffset = 17
+	// A19AE0 tests this DWORD before selecting the live clothing model part.
+	// This names the confirmed appearance use, not all semantics of the field.
+	InventoryAppearanceMarkerOffset = 9
+	AppearanceAttachmentPresent     = 1
+	ItemWeapon                      = 25 // 武器
+	ItemTalisman                    = 30 // 法宝
+	ItemDecorativeTitle             = 31 // 装饰称号物品；不等同角色成长称号
+	ItemConsumable                  = 64 // 消耗品
+	ItemExperienceCard              = 72 // 经验卡
+	ItemVIPCard                     = 73 // VIP 卡
+	ItemWeaponSwitchCard            = 74 // 武器切换卡
+	SlotUnequipped                  = 0
+	SlotPrimaryWeapon               = 8 // 主武器槽
+	SlotSecondaryWeapon             = 9 // 副武器槽
+	SlotPrimaryTalisman             = 37
+	SlotSecondaryTalisman           = 38
+	SlotPrimaryConsumable           = 27
+	SlotSecondaryConsumable         = 28
+	SlotDecorativeTitle             = 42
 )
 
 // Native message IDs. Values are explicit wire contracts, never iota indexes.
@@ -153,3 +165,6 @@ const (
 	BattleEventBuff         = 8150
 	BattleEventScoreboard   = 8155
 )
+
+// Native rbpRecommend (852760) requests 9070 category 255, variant weapon.
+const ShopCategoryRecommended = 255

@@ -17,12 +17,13 @@ internal sealed class LauncherForm : Form
     private readonly ListView windows = new() { View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false, Dock = DockStyle.Fill, BorderStyle = BorderStyle.None };
     private readonly Button launch = MakeButton("启动选中窗口", true);
     private readonly Button another = MakeButton("再开一个窗口", false);
+    private readonly CheckBox hidePassword = new() { Text = "隐藏密码", AutoSize = true };
     private readonly Button refresh = MakeButton("刷新服务器状态", false);
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 3000 };
     private bool launching;
     private bool checking;
     private readonly TextBox account = new() { Width = 190 };
-    private readonly TextBox password = new() { Width = 190, UseSystemPasswordChar = true };
+    private readonly TextBox password = new() { Width = 170, UseSystemPasswordChar = false };
     private readonly Label credentialTitle = new() { AutoSize = true, Text = "窗口 1 的账号" };
     private int credentialWindow = 1;
     private bool credentialsLoaded;
@@ -43,15 +44,15 @@ internal sealed class LauncherForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = Color.FromArgb(242, 245, 250);
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(28), ColumnCount = 1, RowCount = 7 };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 110));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, localServer.Supported ? 195 : 145));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 108));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 63));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
         Controls.Add(layout);
-        var heading = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false };
+        var heading = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false };
         heading.Controls.Add(new Label { Text = "功夫小子", AutoSize = true, Font = new Font("Microsoft YaHei UI", 24, FontStyle.Bold), ForeColor = Color.FromArgb(25, 40, 65) });
         heading.Controls.Add(new Label { Text = instances.EnvironmentDescription, AutoSize = true, ForeColor = Color.DimGray });
         var updates = new LinkLabel { Text = "客户端更新说明", AutoSize = true };
@@ -90,11 +91,12 @@ internal sealed class LauncherForm : Form
         windows.Items[0].Selected = true;
         windows.DoubleClick += async (_, _) => await LaunchSelected();
         layout.Controls.Add(windows, 0, 3);
-        var credentials = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(0, 8, 0, 0) };
-        var inputs = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
+        var credentials = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(0, 8, 0, 0) };
+        var inputs = new FlowLayoutPanel { AutoSize = true, WrapContents = true, MaximumSize = new Size(800, 0) };
         var save = MakeButton("保存账号密码", false);
-        inputs.Controls.AddRange(new Control[] { new Label { Text = "账号", AutoSize = true }, account, new Label { Text = "密码", AutoSize = true }, password, save });
-        credentials.Controls.AddRange(new Control[] { credentialTitle, inputs, new Label { Text = "按窗口分别记住；切换窗口、启动或关闭登录器时自动保存。清空两项可移除记录。", AutoSize = true, ForeColor = Color.DimGray } });
+        inputs.Controls.AddRange(new Control[] { new Label { Text = "账号", AutoSize = true }, account, new Label { Text = "密码", AutoSize = true }, password, hidePassword, save });
+        hidePassword.CheckedChanged += (_, _) => password.UseSystemPasswordChar = hidePassword.Checked;
+        credentials.Controls.AddRange(new Control[] { credentialTitle, new Label { Text = "登录即注册账号（账号不存在时自动注册）；已有账号需输入正确密码。", AutoSize = true, ForeColor = Color.DimGray }, inputs, new Label { Text = "按窗口分别记住；切换窗口、启动或关闭登录器时自动保存。清空两项可移除记录。", AutoSize = true, ForeColor = Color.DimGray } });
         layout.Controls.Add(credentials, 0, 4);
         save.Click += (_, _) => { if (SaveCredentials()) activity.Text = $"窗口 {credentialWindow} 的账号密码已保存在本地。"; };
         windows.SelectedIndexChanged += (_, _) =>
@@ -112,7 +114,7 @@ internal sealed class LauncherForm : Form
         help.Width = 88;
         help.Click += (_, _) => MessageBox.Show(this, instances.UsageInstructions, "登录器使用说明", MessageBoxButtons.OK, MessageBoxIcon.Information);
         actions.Controls.AddRange(new Control[] { launch, another, focus, logs, help });
-        another.Visible = instances.WindowCount > 1;
+        another.Visible = false;
         layout.Controls.Add(actions, 0, 5);
         var footer = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2 };
         footer.RowStyles.Add(new RowStyle(SizeType.Percent, 55)); footer.RowStyles.Add(new RowStyle(SizeType.Percent, 45));
@@ -160,7 +162,7 @@ internal sealed class LauncherForm : Form
         credentialTitle.Text = $"窗口 {credentialWindow} 的账号";
         try
         {
-            var saved = WindowCredentials.Load(instances.InstanceDirectory(credentialWindow));
+            var saved = instances.LoadCredentials(credentialWindow);
             account.Text = saved.Account; password.Text = saved.Password;
             credentialsLoaded = true;
         }
@@ -175,7 +177,8 @@ internal sealed class LauncherForm : Form
         if (!credentialsLoaded && account.Text.Length == 0 && password.Text.Length == 0) return true;
         try
         {
-            new WindowCredentials(account.Text.Trim(), password.Text).Save(instances.InstanceDirectory(credentialWindow));
+            instances.SaveCredentials(credentialWindow, new WindowCredentials(account.Text.Trim(), password.Text));
+            windows.Items[credentialWindow - 1].Text = "窗口 " + credentialWindow + (account.Text.Trim().Length == 0 ? "" : " - " + account.Text.Trim());
             credentialsLoaded = true;
             return true;
         }
@@ -195,7 +198,10 @@ internal sealed class LauncherForm : Form
     {
         foreach (ListViewItem item in windows.Items)
         {
-            bool running = instances.IsRunning((int)item.Tag!);
+            int number = (int)item.Tag!;
+            bool running = instances.IsRunning(number);
+            try { string name = instances.LoadCredentials(number).Account; item.Text = "窗口 " + number + (name.Length == 0 ? "" : " - " + name); if (running) instances.UpdateGameTitle(number, name); }
+            catch (Exception error) { activity.Text = "读取窗口账号失败：" + error.Message; }
             item.SubItems[1].Text = running ? "游戏已运行" : "未启动";
             item.ForeColor = running ? Color.FromArgb(20, 125, 75) : Color.FromArgb(55, 65, 80);
         }

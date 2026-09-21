@@ -82,5 +82,8 @@ func (m *RoleManager) Snapshot(uid uint64) (Account, error) {
 	if err = rows.Close(); err != nil {
 		return account, err
 	}
+	if err = m.store.normalizeEquippedInventory(&account); err != nil {
+		return account, err
+	}
 	return account, m.store.projectVIPInventory(&account)
 }
