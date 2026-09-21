@@ -49,6 +49,8 @@ type Export struct {
 }
 
 var schema = []string{
+	// accounts precedes every FK-dependent table; stage_player_unlocks once
+	// referenced it before creation and fresh databases failed with error 1824.
 	`CREATE TABLE IF NOT EXISTS accounts(
         uid BIGINT UNSIGNED PRIMARY KEY ,
         account VARCHAR(20) CHARACTER SET ascii COLLATE ascii_bin NOT NULL UNIQUE ,

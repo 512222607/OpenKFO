@@ -18,6 +18,9 @@ import (
 
 // The local window starts a no-argument worker. Explicit CLI arguments retain
 // the normal server/admin behavior, including externally supplied database DSNs.
+// settings.private.json selects the database path: a filled ssh_config builds
+// the SSH tunnel to the remote independent test database, an empty one connects
+// to the loopback MySQL named by the DSN directly.
 func prepareLocalConsole() (func(), error) {
 	noop := func() {}
 	if len(os.Args) > 1 {
@@ -52,8 +55,9 @@ func prepareLocalConsole() (func(), error) {
 		return noop, fmt.Errorf("debug DSN must use a loopback TCP address and the configured independent database")
 	}
 	cleanup := noop
-	// A local MySQL instance needs no SSH tunnel.
 	if settings.SSHConfig != "" {
+		// SSH tunnel mode: settings.private.json points at a credential file
+		// forwarding the local DSN port to the remote host's own 127.0.0.1:3306.
 		sshPath := settings.SSHConfig
 		if !filepath.IsAbs(sshPath) {
 			sshPath = filepath.Join(root, sshPath)
@@ -126,6 +130,12 @@ func prepareLocalConsole() (func(), error) {
 				}()
 			}
 		}()
+	} else {
+		// Direct mode: the DSN already names a loopback MySQL account, so no
+		// tunnel is needed. Empty ssh_config is the documented selector here;
+		// the earlier unconditional Join(root, "") read the directory itself
+		// and failed with a misleading "Incorrect function" error.
+		fmt.Println("LOCAL DEBUG SERVER | direct database connection:", settings.Database)
 	}
 	logs := filepath.Join(root, "logs")
 	if err = os.MkdirAll(logs, 0700); err != nil {
