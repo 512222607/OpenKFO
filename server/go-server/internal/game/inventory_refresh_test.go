@@ -61,7 +61,7 @@ func TestExpiredEquipmentSynchronizesAtEachPlayersReturn(t *testing.T) {
 func assertPlayerRefresh(t *testing.T, message protocol.Message, uid uint64) {
 	t.Helper()
 	p := message.Payload
-	if message.ID != 3090 || len(p) < 149 || protocol.ReadUint64(p, 0) != uid || p[8] >= 8 || p[76] != 0 {
+	if (message.ID != 3090 && message.ID != protocol.MsgRoomRoster) || len(p) < 149 || protocol.ReadUint64(p, 0) != uid || p[8] >= 8 || p[76] != 0 {
 		t.Fatal("player equipment refresh entered native spectator branch", message)
 	}
 }
@@ -69,9 +69,13 @@ func assertPlayerRefresh(t *testing.T, message protocol.Message, uid uint64) {
 func TestEquipmentChangeRemainsPlayerRecord(t *testing.T) {
 	hub, host, peer, _ := waitingRoomFixture()
 	hub.Store = recoveryStore(t)
+	host.Room.Members[peer.UID].Ready = true
 	hub.equipmentChanged(host)
-	assertPlayerRefresh(t, roomOutputs(t, peer, 3090)[0], host.UID)
-	assertPlayerRefresh(t, roomOutputs(t, host, 3090)[0], host.UID)
+	if !host.Room.Members[peer.UID].Ready {
+		t.Fatal("equipment refresh cancelled peer readiness")
+	}
+	assertPlayerRefresh(t, roomOutputs(t, peer, protocol.MsgRoomRoster)[0], host.UID)
+	roomOutputs(t, host)
 }
 
 func TestRoomWeaponReplacementAndRemoval(t *testing.T) {
@@ -105,16 +109,13 @@ func TestRoomWeaponReplacementAndRemoval(t *testing.T) {
 		if oldEquipped {
 			expected = append(expected, protocol.MsgItemUpdated)
 		}
-		expected = append(expected, protocol.MsgItemUpdated, protocol.MsgRoomMemberUpdated)
+		expected = append(expected, protocol.MsgItemUpdated)
 		own := roomOutputs(t, host, expected...)
 		if oldEquipped && (protocol.ReadUint32(own[0].Payload, 0) != 1 || protocol.ReadUint16(own[0].Payload, 21) != 0) {
 			t.Fatal("displaced weapon was not explicitly unequipped first")
 		}
-		remote := roomOutputs(t, peer, protocol.MsgRoomMemberUpdated)[0]
+		remote := roomOutputs(t, peer, protocol.MsgRoomRoster)[0]
 		assertPlayerRefresh(t, remote, host.UID)
-		if !bytes.Equal(remote.Payload, own[len(own)-1].Payload) {
-			t.Fatal("self and peer received different room equipment")
-		}
 		wantCount := 0
 		if equip {
 			wantCount = 1
@@ -149,5 +150,23 @@ func TestExpiryRefreshSkipsUnsafeSessionPhases(t *testing.T) {
 	s.LoggedOut = true
 	if err := hub.RefreshExpiredInventory(s); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestTwoWeaponRoomRefreshOnlyUpdatesPeers(t *testing.T) {
+	hub, self, peer, _ := waitingRoomFixture()
+	records := [][]byte{}
+	for i, slot := range []uint16{protocol.SlotPrimaryWeapon, protocol.SlotSecondaryWeapon} {
+		item := make([]byte, protocol.InventoryRecordSize)
+		protocol.WriteUint32(item, 0, uint32(i+1))
+		item[4] = protocol.ItemWeapon
+		protocol.WriteUint16(item, 17, slot)
+		records = append(records, item)
+	}
+	hub.broadcastEquipment(self, persistence.Account{UID: self.UID, Profile: make([]byte, 360), Inventory: records})
+	roomOutputs(t, self)
+	messages := roomOutputs(t, peer, protocol.MsgRoomRoster)
+	if messages[0].Payload[64] != 2 || !bytes.Equal(messages[0].Payload[149:], append(bytes.Clone(records[0]), records[1]...)) {
+		t.Fatal("peer lost primary or secondary weapon")
 	}
 }

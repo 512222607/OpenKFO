@@ -137,7 +137,7 @@ func (config Config) ImagePath() (string, error) {
 	if name == "" {
 		name = "gfld.dat"
 	}
-	if name != "gfld.dat" {
+	if name != "gfld.dat" && name != "gfxz.dat" {
 		return "", fmt.Errorf("unsupported client executable: %s", name)
 	}
 	return filepath.Join(config.ClientDirectory, name), nil
@@ -332,7 +332,7 @@ func (bridge *Bridge) connect(account, password string, identity Identity) (*rem
 	var response tunnel.Frame
 	if err = json.Unmarshal(encoded, &response); err != nil || response.Op != "auth" || response.Error != "" || response.UID == 0 {
 		session.close()
-		return nil, fmt.Errorf("login rejected: %s", response.Error)
+		return nil, loginRejected(response.Error)
 	}
 	session.uid = response.UID
 	session.loggedOut = make(chan struct{})
@@ -407,7 +407,10 @@ func (bridge *Bridge) login(raw net.Conn, certificate tls.Certificate) {
 	request.Password = ""
 	if err != nil {
 		log.Printf("online login failed: %v", err)
-		json.NewEncoder(connection).Encode(map[string]any{"code": 403, "msg": "Online login failed"})
+		message := loginFailureMessage(err)
+		json.NewEncoder(connection).Encode(map[string]any{"code": 403, "msg": message})
+		// Legacy SDK hides server error text; show the reason for this process.
+		go showLoginFailure(identity, bridge.Image, message)
 		return
 	}
 	if err = session.send(tunnel.Frame{Op: "ready"}); err != nil {

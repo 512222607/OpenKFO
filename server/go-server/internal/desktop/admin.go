@@ -12,46 +12,49 @@ import (
 	"strings"
 	"time"
 
+	"kungfu.local/server/internal/gmversion"
 	"kungfu.local/server/internal/persistence"
 	"kungfu.local/server/internal/protocol"
 )
 
 type Request struct {
-	Recommended      *bool                           `json:"recommended,omitempty"`
-	Notes            string                          `json:"notes,omitempty"`
-	Definition       *persistence.ItemDefinition     `json:"definition,omitempty"`
-	StageUnlocks     *persistence.StagePlayerUnlocks `json:"stage_unlocks,omitempty"`
-	WeaponSettings   *persistence.WeaponSettings     `json:"weapon_settings,omitempty"`
-	VIPShopSettings  *persistence.VIPShopSettings    `json:"vip_shop_settings,omitempty"`
-	TalismanSettings *persistence.TalismanSettings   `json:"talisman_settings,omitempty"`
-	Titles           *persistence.TitleSettings      `json:"titles,omitempty"`
-	Tasks            *persistence.TaskSettings       `json:"tasks,omitempty"`
-	Training         *persistence.TrainingSettings   `json:"training,omitempty"`
-	VIPKind          uint32                          `json:"vip_kind,omitempty"`
-	Honour           *persistence.HonourSettings     `json:"honour,omitempty"`
-	StageAccess      *persistence.StageAccess        `json:"stage_access,omitempty"`
-	ServerExpiryDays *uint32                         `json:"server_expiry_days,omitempty"`
-	Instance         uint32                          `json:"instance"`
-	ExpiresAt        *int64                          `json:"expires_at,omitempty"`
-	Environment      string                          `json:"environment"`
-	Rewards          *persistence.RewardRules        `json:"rewards,omitempty"`
-	RewardRevision   uint64                          `json:"reward_revision"`
-	Operation        string                          `json:"operation"`
-	ID               string                          `json:"id"`
-	UID              uint64                          `json:"uid"`
-	Mode             string                          `json:"mode"`
-	Amount           uint32                          `json:"amount"`
-	Keys             []string                        `json:"keys"`
-	Key              string                          `json:"key"`
-	Quantity         int                             `json:"quantity"`
-	Days             int                             `json:"days"`
-	Currency         string                          `json:"currency"`
-	Price            int64                           `json:"price"`
-	Enabled          *bool                           `json:"enabled"`
-	All              bool                            `json:"all"`
-	Weapon           int                             `json:"weapon"`
-	Revision         string                          `json:"revision"`
-	Rules            []Rule                          `json:"rules"`
+	BannedWords      *persistence.BannedWordsSettings `json:"banned_words,omitempty"`
+	GMVersion        string                           `json:"gm_version"`
+	Recommended      *bool                            `json:"recommended,omitempty"`
+	Notes            string                           `json:"notes,omitempty"`
+	Definition       *persistence.ItemDefinition      `json:"definition,omitempty"`
+	StageUnlocks     *persistence.StagePlayerUnlocks  `json:"stage_unlocks,omitempty"`
+	WeaponSettings   *persistence.WeaponSettings      `json:"weapon_settings,omitempty"`
+	VIPShopSettings  *persistence.VIPShopSettings     `json:"vip_shop_settings,omitempty"`
+	TalismanSettings *persistence.TalismanSettings    `json:"talisman_settings,omitempty"`
+	Titles           *persistence.TitleSettings       `json:"titles,omitempty"`
+	Tasks            *persistence.TaskSettings        `json:"tasks,omitempty"`
+	Training         *persistence.TrainingSettings    `json:"training,omitempty"`
+	VIPKind          uint32                           `json:"vip_kind,omitempty"`
+	Honour           *persistence.HonourSettings      `json:"honour,omitempty"`
+	StageAccess      *persistence.StageAccess         `json:"stage_access,omitempty"`
+	ServerExpiryDays *uint32                          `json:"server_expiry_days,omitempty"`
+	Instance         uint32                           `json:"instance"`
+	ExpiresAt        *int64                           `json:"expires_at,omitempty"`
+	Environment      string                           `json:"environment"`
+	Rewards          *persistence.RewardRules         `json:"rewards,omitempty"`
+	RewardRevision   uint64                           `json:"reward_revision"`
+	Operation        string                           `json:"operation"`
+	ID               string                           `json:"id"`
+	UID              uint64                           `json:"uid"`
+	Mode             string                           `json:"mode"`
+	Amount           uint32                           `json:"amount"`
+	Keys             []string                         `json:"keys"`
+	Key              string                           `json:"key"`
+	Quantity         int                              `json:"quantity"`
+	Days             int                              `json:"days"`
+	Currency         string                           `json:"currency"`
+	Price            int64                            `json:"price"`
+	Enabled          *bool                            `json:"enabled"`
+	All              bool                             `json:"all"`
+	Weapon           int                              `json:"weapon"`
+	Revision         string                           `json:"revision"`
+	Rules            []Rule                           `json:"rules"`
 }
 type Admin struct {
 	Root          string
@@ -190,8 +193,21 @@ func (admin *Admin) Call(request Request) (any, error) {
 		call = admin.local
 		environment = "本地测试服"
 	}
+
+	transport := call
+	call = func(r persistence.AdminRequest) (json.RawMessage, error) {
+		r.GMVersion = request.GMVersion
+		return transport(r)
+	}
+	if request.Operation == "gm_version" {
+		if request.Environment == "local" {
+			return gmversion.Info(), nil
+		}
+		return call(persistence.AdminRequest{Operation: "gm_version"})
+	}
 	remote := persistence.AdminRequest{Operation: request.Operation, ID: request.ID, UID: request.UID, Mode: request.Mode, Amount: request.Amount, Rewards: request.Rewards, RewardRevision: request.RewardRevision}
 	remote.Instance, remote.ExpiresAt = request.Instance, request.ExpiresAt
+	remote.BannedWords = request.BannedWords
 	remote.StageAccess = request.StageAccess
 	remote.StageUnlocks = request.StageUnlocks
 	remote.Honour = request.Honour
@@ -204,7 +220,7 @@ func (admin *Admin) Call(request Request) (any, error) {
 	remote.Titles = request.Titles
 	remote.VIPKind = request.VIPKind
 	switch request.Operation {
-	case "stage_unlocks_get", "stage_unlocks_save":
+	case "banned_words_get", "banned_words_save", "stage_unlocks_get", "stage_unlocks_save":
 		return call(remote)
 	case "tasks_get", "tasks_save", "titles_get", "titles_save":
 		return call(remote)

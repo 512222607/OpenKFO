@@ -12,6 +12,11 @@ import (
 )
 
 type Config struct {
+	SuitBundles            map[uint32][]uint32              `json:"suit_bundles,omitempty"`
+	RandomWeaponTypes      map[uint32]uint32                `json:"random_weapon_types,omitempty"`
+	TeamSeriesRounds       uint32                           `json:"team_series_rounds,omitempty"`
+	RebornEnabled          bool                             `json:"reborn_enabled,omitempty"`
+	SpectatorCapacity      int                              `json:"spectator_capacity,omitempty"`
 	LauncherCredentialsKey string                           `json:"launcher_credentials_key,omitempty"`
 	StageWaveVariants      map[uint32][]StageWaveVariant    `json:"stage_wave_variants,omitempty"`
 	StageWaves             map[uint32][]StageWavePlan       `json:"stage_waves,omitempty"`
@@ -30,6 +35,8 @@ type Config struct {
 	Groups                 map[string][]uint32              `json:"groups"`
 }
 type Member struct {
+	ResultAcknowledged   bool
+	Spectator            bool
 	WeaponSwitch         weaponSwitchAttempt
 	NetworkDelay         uint32
 	TalismanEvents       map[uint64]uint32
@@ -40,32 +47,41 @@ type Member struct {
 	BattleEvents         map[battleEventKey]battleSequence
 }
 type Room struct {
-	PeerProbes           map[[2]uint64]peerProbeObservation
-	BattleStartedAt      time.Time
-	StageElapsedSeconds  uint32
-	StageWaves           *stageWaves
-	PVEActors            map[uint64]pveActor
-	PVEBlocks            map[uint32]pveBlock
-	FosterPositions      []byte
-	FosterPlan           *protocol.FosterPlan
-	FosterSpawned        []int
-	FosterTriggered      []bool
-	FosterRetired        []int // Per-group removals whose received-event HP was zero.
-	FosterFinishReported bool
-	NetworkProbe         *roomNetworkProbe
-	TutorialPending      bool
-	Reliable             map[reliableActor]*reliableExchange
-	ReliableSerial       uint32
-	Exchange             *seatExchange
-	LobbyID              uint32
-	LoadTimer            *time.Timer
-	Reports              map[uint64][]byte
-	ID                   uint16
-	Owner                uint64
-	Request              []byte
-	Stage                string
-	Serial               uint32
-	Members              map[uint64]*Member
+	Series                *teamSeries
+	HealthReceipts        map[[2]uint64]uint32
+	PairSelectionVersions map[uint64]uint32
+	PairSelections        map[uint64]pairSelection
+	Projectiles           map[uint32]*projectileState
+	Collectibles          map[[2]uint32]bool
+	SpectatorCapacity     int
+	PeerProbes            map[[2]uint64]peerProbeObservation
+	BattleStartedAt       time.Time
+	BattleClock           uint32
+	StageElapsedSeconds   uint32
+	StageWaves            *stageWaves
+	PVEActors             map[uint64]pveActor
+	PVEBlocks             map[uint32]pveBlock
+	FosterPositions       []byte
+	FosterPlan            *protocol.FosterPlan
+	FosterSpawned         []int
+	FosterTriggered       []bool
+	FosterRetired         []int // Per-group removals whose received-event HP was zero.
+	FosterFinishReported  bool
+	NetworkProbe          *roomNetworkProbe
+	TutorialPending       bool
+	Reliable              map[reliableActor]*reliableExchange
+	ReliableSerial        uint32
+	Exchange              *seatExchange
+	LobbyID               uint32
+	LoadTimer             *time.Timer
+	Reports               map[uint64][]byte
+	DepartedSlots         map[uint64]byte // Current round only; never eligible for rewards.
+	ID                    uint16
+	Owner                 uint64
+	Request               []byte
+	Stage                 string
+	Serial                uint32
+	Members               map[uint64]*Member
 }
 
 // The first settlement return sets Stage to room; other clients may still
@@ -130,7 +146,10 @@ func (hub *Hub) resolveWithPolicy(request []byte, allows func(uint32) bool, acce
 		protocol.WriteUint32(resolved, protocol.RoomSuggestedMapOffset, chosen)
 		return resolved, nil
 	}
-	if (!mode.IsCompetitive() && mode != protocol.FreePractice) || (capacity != 2 && capacity != 4 && capacity != 6 && capacity != 8) {
+	if mode == protocol.RebornMode && (!hub.Config.RebornEnabled || capacity > 6) {
+		return nil, protocol.ErrFrame
+	}
+	if (!mode.IsCompetitive() && mode != protocol.FreePractice && mode != protocol.RebornMode) || (capacity != 2 && capacity != 4 && capacity != 6 && capacity != 8) {
 		return nil, protocol.ErrFrame
 	}
 	chosen, suggested := protocol.ReadUint32(request, 38), protocol.ReadUint32(request, 42)
@@ -191,7 +210,11 @@ func (hub *Hub) broadcast(room *Room, message protocol.Message, exclude uint64) 
 	}
 }
 func (hub *Hub) install(room *Room, session *Session) error {
-	if room.LobbyID != session.LobbyID || room.Stage != "room" || len(room.Members) >= int(room.Request[37]) ||
+	return hub.installAs(room, session, false)
+}
+
+func (hub *Hub) installAs(room *Room, session *Session, spectator bool) error {
+	if room.LobbyID != session.LobbyID || room.Stage != "room" || (!spectator && room.fighterCount() >= int(room.Request[37])) || (spectator && room.observerCount() >= room.observerLimit()) ||
 		(!tutorialRoom(room) && (!session.Bound || time.Now().After(session.P2PUntil))) {
 		return protocol.ErrFrame
 	}
@@ -224,7 +247,10 @@ func (hub *Hub) install(room *Room, session *Session) error {
 		spawn++
 	}
 	member := &Member{Session: session, Slot: slot, Spawn: spawn, Team: slot % 2}
-	if room.Type().IsTeam() {
+	if spectator {
+		member.Spectator = true
+		member.Slot, member.Spawn = spectatorSlot, spectatorSlot
+	} else if room.Type().IsTeam() {
 		position, ok := room.freeTeamPosition(member.Team, session.UID)
 		if !ok {
 			member.Team ^= 1
@@ -285,7 +311,16 @@ func (hub *Hub) completeRoomJoin(room *Room, member *Member, own []byte, peers [
 	for _, peer := range peers {
 		peer.member.Session.sendGame(protocol.Message{ID: 3090, Payload: own})
 	}
-	hub.clearRoomReady(room)
+	// Membership changes invalidate pending operations, not the peers' consent.
+	hub.cancelNetworkProbe(room)
+	hub.cancelSeatExchange(room)
+	// 3090 invokes the native new-member callback. Reassert ready states after
+	// that notification for both existing clients and the newly joined client.
+	for _, peer := range peers {
+		if peer.member.Ready && !peer.member.Spectator {
+			hub.broadcast(room, protocol.Message{ID: protocol.MsgPlayerReady, Payload: protocol.Uint64Bytes(peer.member.Session.UID)}, 0)
+		}
+	}
 }
 
 func (hub *Hub) clearRoomReady(room *Room) {
@@ -300,6 +335,11 @@ func (hub *Hub) clearRoomReady(room *Room) {
 }
 
 func (hub *Hub) leave(session *Session, acknowledge bool) {
+	hub.leaveWithNotice(session, acknowledge, protocol.MsgPlayerLeftRoom)
+}
+
+func (hub *Hub) leaveWithNotice(session *Session, acknowledge bool, departure uint32) {
+	hub.clearInvitations(session)
 	room := session.Room
 	if room == nil {
 		if acknowledge {
@@ -309,6 +349,18 @@ func (hub *Hub) leave(session *Session, acknowledge bool) {
 	}
 	hub.cancelNetworkProbe(room)
 	hub.cancelSeatExchange(room)
+	observerLeft := room.isObserver(session)
+	teamBattle := !observerLeft && room.Type().IsTeam() && (room.Stage == "battle" || room.Stage == "finishing" || room.Stage == "settlement")
+	if teamBattle {
+		if member := room.Members[session.UID]; member != nil {
+			if room.DepartedSlots == nil {
+				room.DepartedSlots = map[uint64]byte{}
+			}
+			room.DepartedSlots[session.UID] = member.Slot
+		}
+		delete(room.Reports, session.UID)
+	}
+	room.retireBattleObjects(session.UID)
 	delete(room.Members, session.UID)
 	delete(room.Reliable, reliableActor{session.UID, 9000})
 	delete(room.Reliable, reliableActor{session.UID, 9500})
@@ -339,16 +391,50 @@ func (hub *Hub) leave(session *Session, acknowledge bool) {
 	// A settled stage has already committed rewards. A departing controller
 	// must not turn it into an aborted/no-reward match for the remaining peers.
 	interrupted := room.Stage != "room" && !stageSettled
-	hub.broadcast(room, protocol.Message{ID: protocol.MsgPlayerLeftRoom, Payload: protocol.Uint64Bytes(session.UID)}, 0)
+	hub.broadcast(room, protocol.Message{ID: departure, Payload: protocol.Uint64Bytes(session.UID)}, 0)
 	if room.Owner == session.UID {
 		var first *Member
 		for _, member := range room.Members {
-			if first == nil || member.Slot < first.Slot {
+			if !member.Spectator && (first == nil || member.Slot < first.Slot) {
 				first = member
 			}
 		}
+		if first == nil {
+			hub.closeObserverOnlyRoom(room)
+			return
+		}
 		room.Owner = first.Session.UID
 		hub.broadcast(room, protocol.Message{ID: protocol.MsgRoomOwner, Payload: protocol.Uint64Bytes(room.Owner)}, 0)
+	}
+	// Leaving the waiting room changes membership, not the remaining players'
+	// readiness. Pending start/seat negotiations were already cancelled above.
+	if room.Stage == "room" {
+		// A host must be able to start again after membership changes. Keep
+		// other fighters ready, but clear the current (possibly new) host.
+		if owner := room.Members[room.Owner]; owner != nil && owner.Ready {
+			owner.Ready = false
+			hub.broadcast(room, protocol.Message{ID: protocol.MsgPlayerNotReady, Payload: protocol.Uint64Bytes(room.Owner)}, 0)
+		}
+		return
+	}
+	if observerLeft {
+		hub.advanceRoomLoading(room)
+		hub.advanceResultAcknowledgements(room)
+		if room.Stage == "room" {
+			hub.clearRoomReady(room)
+		}
+		return
+	}
+	if room.Series != nil && room.Stage != "settlement" {
+		returnErr := hub.recoverRoom(room, "多回合成员变更，本场中止且不发放奖励。")
+		if returnErr != nil {
+			log.Printf("series_recovery_failed room=%d error=%v", room.ID, returnErr)
+		}
+		return
+	}
+	if teamBattle {
+		hub.teamBattleMemberLeft(room, session.UID)
+		return
 	}
 	if interrupted {
 		if err := hub.recoverRoom(room, "有玩家离开，本局中止，已返回房间。本次中止不发放奖励。"); err != nil {
@@ -377,15 +463,26 @@ func (hub *Hub) broadcastEquipment(session *Session, account persistence.Account
 	if member == nil {
 		return
 	}
-	// Native 81EEA0 -> 81CF10 -> 81CB00 replaces the actor in its room slot.
-	// Include self: 2090 updates the inventory actor, not every room actor.
-	hub.broadcast(session.Room, protocol.Message{ID: protocol.MsgRoomMemberUpdated, Payload: fighter(account, member)}, 0)
+	// The owner already receives 2090/2310 and incremental inventory updates.
+	// Only peers need 3105; its self branch rebuilds the local character via
+	// 9F3540. Do not apply a second local equipment reconstruction.
+	hub.broadcast(session.Room, protocol.Message{ID: protocol.MsgRoomRoster, Payload: fighter(account, member)}, session.UID)
 }
 func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol.Message) (bool, error) {
 	payload := message.Payload
 	room := session.Room
 	uid := session.UID
 	switch message.ID {
+	case protocol.MsgRoomInvite, protocol.MsgRoomInviteAccept, protocol.MsgRoomInviteDecline:
+		return true, hub.roomInvitation(session, channel, message)
+	case protocol.MsgRoomWaitingTimeout:
+		if len(payload) != 0 {
+			return true, protocol.ErrFrame
+		}
+		if room != nil && room.Stage == "room" && channel == session.game() && channel.Phase == "room" && room.Members[uid] != nil && room.Members[uid].Session == session {
+			session.sendGame(protocol.Message{ID: protocol.MsgRoomWaitingExpired, Payload: protocol.Uint64Bytes(uid)})
+			hub.leaveWithNotice(session, false, protocol.MsgRoomWaitingExpired)
+		}
 	case protocol.MsgRoomDetailRequest:
 		id, err := protocol.ParseRoomDetailRequest(payload)
 		if err != nil {
@@ -402,14 +499,14 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 	case protocol.MsgRoomListRequest:
 		// A lobby refresh can be sent while 3070 is still awaiting 3100.
 		// Joining must not invalidate that read-only request once it is dequeued.
-		if (channel.Phase != "lobby" && channel.Phase != "room") || len(payload) != 3 {
+		if (channel.Phase != "lobby" && channel.Phase != "room") || len(payload) != 3 || payload[1] > 1 {
 			return true, protocol.ErrFrame
 		}
 		// Native 92DD40 sends page, refresh option, mode (0x88 = all).
 		// The old adapter mistook the page for a mode and hid mode-0 rooms.
 		ids := []int{}
 		for id, room := range hub.Rooms {
-			if !tutorialRoom(room) && room.LobbyID == session.LobbyID && (payload[2] == 0x88 || protocol.RoomType(payload[2]) == room.Type()) {
+			if !tutorialRoom(room) && room.LobbyID == session.LobbyID && (payload[1] == 1 || room.Stage == "room") && (payload[2] == 0x88 || protocol.RoomType(payload[2]) == room.Type()) {
 				ids = append(ids, int(id))
 			}
 		}
@@ -430,6 +527,13 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		session.send(channel.ID, protocol.Message{ID: protocol.MsgRoomList, Payload: response})
 		log.Printf("room_directory uid=%d page=%d option=%d mode=%d rooms=%d returned=%d", uid, page, payload[1], payload[2], len(hub.Rooms), count)
 	case protocol.MsgCreateRoom:
+		if len(payload) == protocol.RoomRequestSize {
+			if err := hub.checkRoomName(payload); err != nil {
+				session.sendGame(protocol.Message{ID: protocol.MsgRoomCreateError, Payload: []byte{44, 0}})
+				session.sendGame(notice(moderationNotice(err)))
+				return true, nil
+			}
+		}
 		if room != nil && channel.Phase == "room" && room.Owner == uid {
 			resolved, err := hub.resolve(payload)
 			if err == nil && bytes.Equal(resolved, room.Request) {
@@ -472,7 +576,14 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		if id >= 256 {
 			return true, protocol.ErrFrame
 		}
-		newRoom := &Room{LobbyID: session.LobbyID, ID: id, Owner: uid, Request: resolvedRequest, Stage: "room", Members: map[uint64]*Member{}}
+		if hub.Config.TeamSeriesRounds != 0 && protocol.RoomType(resolvedRequest[protocol.RoomTypeOffset]) == protocol.TeamSurvival && resolvedRequest[protocol.RoomCapacityOffset] > seriesMaxFighters {
+			session.sendGame(notice("团队多回合最多六名参战者。"))
+			return true, nil
+		}
+		newRoom := &Room{SpectatorCapacity: hub.Config.SpectatorCapacity, LobbyID: session.LobbyID, ID: id, Owner: uid, Request: resolvedRequest, Stage: "room", Members: map[uint64]*Member{}}
+		if newRoom.Type() == protocol.TeamSurvival && hub.Config.TeamSeriesRounds != 0 {
+			newRoom.Series = newTeamSeries(hub.Config.TeamSeriesRounds)
+		}
 		if err = hub.install(newRoom, session); err != nil {
 			return true, err
 		}
@@ -496,13 +607,15 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		target := hub.Rooms[id]
 		code := uint32(0)
 		switch {
-		case join.Mode != protocol.JoinAsPlayer:
+		case join.Mode != protocol.JoinAsPlayer && join.Mode != protocol.JoinAsSpectator:
 			code = 130
 		case target == nil || target.LobbyID != session.LobbyID:
 			code = 29
 		case target.Stage != "room":
 			code = 30
-		case len(target.Members) >= int(target.Request[37]):
+		case join.Mode == protocol.JoinAsSpectator && target.observerCount() >= target.observerLimit():
+			code = 32
+		case join.Mode == protocol.JoinAsPlayer && target.fighterCount() >= int(target.Request[37]):
 			code = 32
 		case !bytes.Equal(bytes.SplitN(join.Password[:], []byte{0}, 2)[0], bytes.SplitN(target.Request[21:32], []byte{0}, 2)[0]):
 			code = 31
@@ -511,13 +624,26 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 			session.send(channel.ID, protocol.Message{ID: 3080, Payload: append(bytes.Clone(payload), protocol.Uint32Bytes(code)...)})
 			return true, nil
 		}
+		// A valid lobby request can arrive before native 1156 binding. This is
+		// an admission failure, not a corrupt frame: keep the login alive.
+		if !tutorialRoom(target) && (!session.Bound || time.Now().After(session.P2PUntil)) {
+			log.Printf("room_join_transport_not_ready uid=%d account=%q room=%d bound=%t peer=%d udp_port=%d lease_valid=%t", uid, session.Account, id, session.Bound, session.P2P, session.UDPPort, time.Now().Before(session.P2PUntil))
+			session.send(channel.ID, protocol.Message{ID: 3080, Payload: append(bytes.Clone(payload), protocol.Uint32Bytes(130)...)})
+			session.sendGame(notice("无法进入房间：游戏网络绑定尚未完成，请稍后重试。账号仍保持登录。"))
+			return true, nil
+		}
 		allows, err := hub.stageGate(session)
 		if err != nil || !allows(protocol.ReadUint32(target.Request, 38)) {
 			session.send(channel.ID, protocol.Message{ID: 3080, Payload: append(bytes.Clone(payload), protocol.Uint32Bytes(130)...)})
 			session.sendGame(notice("无法加入：地图已关闭、称号条件未满足或目录版本不匹配。"))
 			return true, nil
 		}
-		return true, hub.install(target, session)
+		return true, hub.installAs(target, session, join.Mode == protocol.JoinAsSpectator)
+	case protocol.MsgToggleSpectator:
+		if len(payload) != 0 {
+			return true, protocol.ErrFrame
+		}
+		return true, hub.toggleSpectator(session)
 	case 3075:
 		if len(payload) != 1 || channel.Phase != "lobby" || room != nil {
 			return true, protocol.ErrFrame
@@ -534,7 +660,7 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		sort.Ints(ids)
 		for _, id := range ids {
 			target := hub.Rooms[uint16(id)]
-			if target.LobbyID == session.LobbyID && target.Stage == "room" && target.Request[21] == 0 && len(target.Members) < int(target.Request[37]) && allows(protocol.ReadUint32(target.Request, 38)) && (payload[0] == 0 || protocol.RoomType(payload[0]) == target.Type()) {
+			if target.LobbyID == session.LobbyID && target.Stage == "room" && target.Request[21] == 0 && target.fighterCount() < int(target.Request[37]) && allows(protocol.ReadUint32(target.Request, 38)) && (payload[0] == 0x88 || protocol.RoomType(payload[0]) == target.Type()) {
 				return true, hub.install(target, session)
 			}
 		}
@@ -549,11 +675,17 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 			return true, hub.returnFromSettlement(session)
 		}
 		hub.leave(session, true)
+	case seriesReportMessage:
+		return true, hub.seriesResult(session, payload)
 	case 4110:
 		return true, hub.settleReport(session, payload)
 	case 4115:
 		if len(payload) != 4 {
 			return true, protocol.ErrFrame
+		}
+		if room != nil && channel.Phase == "settlement" && (room.Stage == "settlement" || room.Stage == "room") {
+			room.Members[uid].ResultAcknowledged = true
+			hub.advanceResultAcknowledgements(room)
 		}
 	case protocol.MsgRoomAcknowledgement:
 		if len(payload) != 12 || protocol.ReadUint64(payload, 0) != uid {
@@ -599,6 +731,9 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 			return true, nil
 		}
 		member := room.Members[uid]
+		if member.Spectator {
+			return true, nil
+		}
 		if member.Team == payload[0] {
 			session.sendGame(protocol.Message{ID: 3250, Payload: roomTeam(member)})
 			return true, nil
@@ -633,6 +768,9 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		if err != nil {
 			return true, nil
 		}
+		if hub.rejectRoomName(session, candidate) {
+			return true, nil
+		}
 		resolved, err := hub.resolveForPlayers(candidate, roomPlayers(room)...)
 		if err != nil {
 			session.sendGame(notice("房间设置或地图不可用。"))
@@ -640,6 +778,10 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		}
 		if bytes.Equal(room.Request, resolved) {
 			session.sendGame(protocol.Message{ID: 3220, Payload: roomSettings(resolved)})
+			return true, nil
+		}
+		if room.observerCount() > 0 && (resolved[34] == 0 || protocol.RoomTypeFromRequest(resolved) != protocol.TeamSurvival) {
+			session.sendGame(notice("请先让观战者离开或切换为参战者，再关闭观战。"))
 			return true, nil
 		}
 		room.Request = resolved
@@ -653,6 +795,9 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 			return true, nil
 		}
 		member := room.Members[uid]
+		if member.Spectator {
+			return true, nil
+		}
 		if room.TutorialPending {
 			return true, nil
 		}
@@ -667,13 +812,15 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 			return true, nil
 		}
 		if uid == room.Owner && room.Type() != protocol.FreePractice && room.Type() != protocol.StageAssault && !tutorialRoom(room) {
-			if len(room.Members) < 2 {
+			if room.fighterCount() < 2 {
 				return true, nil
 			}
 			if room.Type() == protocol.TeamSurvival || room.Type() == protocol.TeamDeathmatch {
 				teams := map[byte]bool{}
 				for _, member := range room.Members {
-					teams[member.Team] = true
+					if !member.Spectator {
+						teams[member.Team] = true
+					}
 				}
 				if len(teams) < 2 {
 					return true, nil
@@ -687,7 +834,7 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 				return true, nil
 			}
 			for other, member := range room.Members {
-				if other != uid && !member.Ready {
+				if !member.Spectator && other != uid && !member.Ready {
 					return true, nil
 				}
 			}
@@ -697,7 +844,7 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		hub.broadcast(room, protocol.Message{ID: protocol.MsgPlayerReady, Payload: protocol.Uint64Bytes(uid)}, 0)
 		if uid == room.Owner {
 			for _, member := range room.Members {
-				if !member.Ready || (!tutorialRoom(room) && time.Now().After(member.Session.P2PUntil)) {
+				if (!member.Spectator && !member.Ready) || (!tutorialRoom(room) && time.Now().After(member.Session.P2PUntil)) {
 					return true, nil
 				}
 			}
@@ -723,21 +870,7 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		}
 		room.Members[uid].Loaded = true
 		hub.broadcast(room, protocol.Message{ID: protocol.MsgPlayerResourceReady, Payload: protocol.Uint64Bytes(uid)}, 0)
-		for _, member := range room.Members {
-			if !member.Loaded {
-				return true, nil
-			}
-		}
-		room.Stage = "wait_ready"
-		hub.sendInitialPVEBlocks(room)
-		if room.FosterPositions != nil {
-			// 941A90 only constructs/sends; include the controller as a recipient.
-			hub.broadcast(room, protocol.Message{ID: protocol.MsgBattleEvent, Payload: room.FosterPositions}, 0)
-		}
-		for _, member := range room.Members {
-			member.Session.game().Phase = "wait_ready"
-		}
-		hub.broadcast(room, protocol.Message{ID: protocol.MsgAllResourcesReady}, 0)
+		hub.advanceRoomLoading(room)
 	case protocol.MsgBattleInputReady:
 		ready, err := protocol.ParseBattleInputReady(payload)
 		if err != nil || ready.UID != uid {
@@ -746,7 +879,7 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		if room == nil || ready.RoomID != room.ID {
 			return true, nil
 		}
-		if room.Members[uid].Input {
+		if room.Members[uid].Spectator || room.Members[uid].Input {
 			return true, nil
 		}
 		if room.Stage != "wait_ready" {
@@ -754,7 +887,7 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		}
 		room.Members[uid].Input = true
 		for _, member := range room.Members {
-			if !member.Input {
+			if !member.Spectator && !member.Input {
 				return true, nil
 			}
 		}
@@ -771,9 +904,7 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		response := append(protocol.Uint32Bytes(uint32(room.ID)), protocol.Uint32Bytes(uint32(room.ID))...)
 		response = append(response, protocol.Uint32Bytes(room.Serial)...)
 		hub.broadcast(room, protocol.Message{ID: protocol.MsgBattleStarted, Payload: response}, 0)
-		// 8070 initializes the native clock baseline; 8090 opens its run gate.
-		// Without it, timed effects never reach their expiration deadline.
-		hub.broadcast(room, protocol.Message{ID: protocol.MsgBattleClock, Payload: protocol.Uint32Bytes(1)}, 0)
+		hub.startBattleClock(room)
 	case protocol.MsgBattleEvent:
 		return true, hub.battleMessage(session, channel, message)
 	case protocol.MsgStageWaveReport:
@@ -785,6 +916,9 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 }
 
 func (hub *Hub) startBattle(room *Room) error {
+	if err := room.validateSeriesTeams(); err != nil {
+		return err
+	}
 	var waves *stageWaves
 	var foster *protocol.FosterPlan
 	if room.Type() == protocol.FosterMode {
@@ -801,6 +935,13 @@ func (hub *Hub) startBattle(room *Room) error {
 			return err
 		}
 	}
+	for _, member := range room.Members {
+		if randomWeaponsEnabled && !member.Spectator && member.Session.RandomWeaponMode != protocol.RandomWeaponOff {
+			if err := hub.selectRandomWeapon(member.Session, member.Session.RandomWeaponMode, true); err != nil {
+				return err
+			}
+		}
+	}
 	for uid, member := range room.Members {
 		account, err := hub.Store.RoleManager().Snapshot(uid)
 		if err != nil {
@@ -813,6 +954,9 @@ func (hub *Hub) startBattle(room *Room) error {
 		return err
 	}
 	room.Serial = serial
+	if room.Series != nil {
+		room.Series = newTeamSeries(room.Series.limit)
+	}
 	room.StageWaves = waves
 	room.FosterPlan = foster
 	room.FosterSpawned = nil
@@ -825,14 +969,21 @@ func (hub *Hub) startBattle(room *Room) error {
 		room.FosterRetired = make([]int, len(foster.Groups))
 	}
 	room.PVEActors = nil
+	room.HealthReceipts = nil
 	room.PVEBlocks = nil
 	room.FosterPositions = nil
 	room.Reliable = nil
 	room.ReliableSerial = serial
+	room.PairSelectionVersions = nil
+	room.PairSelections = nil
+	room.Projectiles = nil
+	room.Collectibles = nil
 	room.Reports = nil
+	room.DepartedSlots = nil
 	room.Stage = "loading"
 	hub.watchLoading(room)
 	for _, member := range room.Members {
+		member.ResultAcknowledged = false
 		member.Loaded, member.Input = false, false
 		member.BattleEvents = nil
 		member.TalismanEvents = nil

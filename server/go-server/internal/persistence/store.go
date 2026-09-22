@@ -22,7 +22,10 @@ var ErrDenied = errors.New("request rejected")
 var accountPattern = regexp.MustCompile(`^[a-zA-Z0-9]{3,20}$`)
 var legacyPattern = regexp.MustCompile(`^[a-fA-F0-9]{64}$`)
 
-type Store struct{ DB *sql.DB }
+type Store struct {
+	DB         *sql.DB
+	wordFilter *wordCache
+}
 type Account struct {
 	UID          uint64   `json:"uid"`
 	Account      string   `json:"account"`
@@ -49,6 +52,7 @@ type Export struct {
 }
 
 var schema = []string{
+	`CREATE TABLE IF NOT EXISTS banned_words_config(id TINYINT PRIMARY KEY, revision BIGINT UNSIGNED NOT NULL, words JSON NOT NULL)`,
 	// accounts precedes every FK-dependent table; stage_player_unlocks once
 	// referenced it before creation and fresh databases failed with error 1824.
 	`CREATE TABLE IF NOT EXISTS accounts(
@@ -63,6 +67,7 @@ var schema = []string{
         gold BIGINT UNSIGNED NOT NULL DEFAULT 0 ,
         tickets BIGINT UNSIGNED NOT NULL DEFAULT 0
     ) ENGINE=InnoDB`,
+	`CREATE TABLE IF NOT EXISTS random_weapon_settings(uid BIGINT UNSIGNED PRIMARY KEY, mode TINYINT UNSIGNED NOT NULL DEFAULT 0, instance INT UNSIGNED NOT NULL DEFAULT 0, FOREIGN KEY(uid) REFERENCES accounts(uid) ON DELETE CASCADE) ENGINE=InnoDB`,
 	`CREATE TABLE IF NOT EXISTS honour_rules(id TINYINT UNSIGNED PRIMARY KEY,revision BIGINT UNSIGNED NOT NULL,rules MEDIUMBLOB NOT NULL) ENGINE=InnoDB`,
 	`CREATE TABLE IF NOT EXISTS honour_rules_audit(revision BIGINT UNSIGNED PRIMARY KEY,before_data MEDIUMBLOB NOT NULL,after_data MEDIUMBLOB NOT NULL,created TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB`,
 	`CREATE TABLE IF NOT EXISTS battle_reward_rules(id TINYINT UNSIGNED PRIMARY KEY,revision BIGINT UNSIGNED NOT NULL,rules MEDIUMBLOB NOT NULL) ENGINE=InnoDB`,
@@ -181,7 +186,7 @@ func open(dsn string, initialize bool) (*Store, error) {
 	database.SetMaxOpenConns(8)
 	database.SetMaxIdleConns(4)
 	database.SetConnMaxLifetime(3 * time.Minute)
-	store := &Store{database}
+	store := &Store{DB: database, wordFilter: &wordCache{}}
 	contextWithTimeout, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	if err = database.PingContext(contextWithTimeout); err == nil && initialize {

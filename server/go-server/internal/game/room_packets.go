@@ -22,10 +22,14 @@ func roomEntry(room *Room, uid uint64) []byte {
 		entry[61] = 1
 	}
 	entry[62] = request[37]
+	entry[64] = byte(room.observerLimit())
 	entry[65] = request[protocol.RoomTypeOffset]
 	copy(entry[67:69], request[47:49])
 	copy(entry[69:73], request[50:54])
 	entry[73] = request[49]
+	if room.Series != nil {
+		protocol.WriteUint32(entry, 74, room.Series.limit)
+	}
 	copy(entry[78:82], request[59:63])
 	protocol.WriteUint64(entry, 96, uid)
 	return entry
@@ -43,7 +47,10 @@ func fighter(account persistence.Account, member *Member) []byte {
 	copy(record[54:57], account.Profile[122:125])
 	protocol.WriteUint32(record, 67, member.Session.P2P)
 	// Native 3090 handler 81EEA0 routes record[76] != 0 to the spectator
-	// container. Equipment refreshes remain player records, not spectators.
+	// container. Preserve this identity on equipment refreshes.
+	if member.Spectator {
+		record[76] = 1
+	}
 	for _, item := range account.Inventory {
 		if protocol.ReadUint16(item, 17) != 0 {
 			record[64]++
@@ -61,7 +68,12 @@ func roomList(room *Room) []byte {
 	record[31] = entry[61]
 	record[33] = entry[57]
 	record[39] = entry[62]
-	record[40] = byte(len(room.Members))
+	if room.observerLimit() > 0 {
+		record[34] = 1
+	}
+	protocol.WriteUint16(record, 35, uint16(room.observerLimit()))
+	protocol.WriteUint16(record, 37, uint16(room.observerCount()))
+	record[40] = byte(room.fighterCount())
 	if room.Stage == "room" {
 		record[41] = 1
 	}

@@ -52,8 +52,14 @@ func (hub *Hub) restoreRoom(room *Room, peers []roomPeer, reason string) {
 		room.LoadTimer = nil
 	}
 	room.Stage, room.Reports = "room", nil
+	room.PairSelections, room.PairSelectionVersions = nil, nil
+	room.Projectiles, room.Collectibles = nil, nil
 	room.PVEActors, room.StageWaves = nil, nil
 	room.PVEBlocks = nil
+	room.HealthReceipts = nil
+	if room.Series != nil {
+		room.Series = newTeamSeries(room.Series.limit)
+	}
 	room.FosterPositions = nil
 	room.FosterPlan = nil
 	room.FosterSpawned = nil

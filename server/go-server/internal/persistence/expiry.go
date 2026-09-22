@@ -77,3 +77,8 @@ func (m *InventoryManager) ExpireInventory(uid uint64) error {
 func usableItem(record []byte) bool {
 	return len(record) == 68 && protocol.ReadUint32(record, 19) != 2 && protocol.ReadUint32(record, 19) != 0xffffffff
 }
+
+// IsExpiredInventoryRecord uses the persisted state, never the display duration.
+func IsExpiredInventoryRecord(record []byte) bool {
+	return len(record) == protocol.InventoryRecordSize && protocol.ReadUint32(record, 19) == inventoryExpired
+}

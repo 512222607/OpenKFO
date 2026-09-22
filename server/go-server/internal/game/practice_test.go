@@ -14,6 +14,7 @@ func TestSoloPracticeNPCDoesNotTerminateSession(t *testing.T) {
 	room := &Room{ID: 1, Serial: 7, Stage: "battle", Request: request, Members: map[uint64]*Member{1003: {Session: session}}}
 	session.Room = room
 	hub := NewHub(nil, Config{})
+	hub.SecurityLogDirectory = t.TempDir()
 	hub.Sessions[1003] = session
 	hub.Rooms[1] = room
 	attack := make([]byte, 103)
@@ -31,7 +32,10 @@ func TestSoloPracticeNPCDoesNotTerminateSession(t *testing.T) {
 		t.Fatal("NPC event forwarded")
 	}
 	room.Request[46] = 0
-	if err := hub.Handle(session, frame); err == nil {
+	if err := hub.battleMessage(session, session.game(), protocol.Message{ID: protocol.MsgBattleEvent, Payload: attack}); err == nil {
 		t.Fatal("competitive actor spoof admitted")
+	}
+	if err := hub.Handle(session, frame); err != nil || len(session.Output) != 0 {
+		t.Fatal("rejected competitive event must be dropped without disconnect", err)
 	}
 }

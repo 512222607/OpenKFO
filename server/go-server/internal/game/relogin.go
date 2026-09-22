@@ -11,7 +11,8 @@ import (
 	"time"
 )
 
-var errPeerReceipt = errors.New("invalid or occupied transport receipt")
+var errPeerReceipt = errors.New("invalid transport receipt")
+var errPeerOccupied = errors.New("transport receipt belongs to an active connection")
 
 // A transport-only capability, never an account login token. Bound to the
 // origin certificate; the bridge retains it only for the same native process.
@@ -37,7 +38,15 @@ func (hub *Hub) resumePeer(s *Session, receipt string) error {
 	}
 	for _, other := range hub.Sessions {
 		if other != s && !other.LoggedOut && other.P2P == id {
-			return errPeerReceipt
+			select {
+			case <-other.Done:
+				// Close can precede deferred Detach. Release only a confirmed
+				// closed session; never take an active process's transport ID.
+				hub.leave(other, false)
+				delete(hub.Sessions, other.UID)
+			default:
+				return errPeerOccupied
+			}
 		}
 	}
 	s.P2P, s.P2PUntil = id, time.Now().Add(time.Minute)

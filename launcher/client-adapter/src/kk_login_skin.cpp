@@ -12,6 +12,19 @@ static HFONT headingFont, titleFont, textFont, smallFont, emblemFont;
 static const COLORREF Panel = RGB(23, 32, 47), Field = RGB(36, 48, 66);
 static const COLORREF Ink = RGB(239, 234, 219), Muted = RGB(157, 169, 185);
 static const COLORREF Gold = RGB(229, 186, 103);
+static constexpr int PanelWidth = 620, PanelHeight = 420;
+static void centerPanel(HWND window) {
+    HWND parent = GetParent(window);
+    RECT area = {};
+    if (!parent || !GetClientRect(parent, &area) || area.right <= 0 || area.bottom <= 0) return;
+    POINT position = { (area.right - PanelWidth) / 2, (area.bottom - PanelHeight) / 2 };
+    if (!(GetWindowLongW(window, GWL_STYLE) & WS_CHILD)) ClientToScreen(parent, &position);
+    RECT current = {}; GetWindowRect(window, &current);
+    POINT actual = {current.left, current.top};
+    if (GetWindowLongW(window, GWL_STYLE) & WS_CHILD) ScreenToClient(parent, &actual);
+    if (actual.x != position.x || actual.y != position.y || current.right-current.left != PanelWidth || current.bottom-current.top != PanelHeight)
+        SetWindowPos(window, nullptr, position.x, position.y, PanelWidth, PanelHeight, SWP_NOZORDER | SWP_NOACTIVATE);
+}
 
 static HFONT font(int height, int weight) {
     return CreateFontW(-height, 0, 0, 0, weight, FALSE, FALSE, FALSE,
@@ -85,8 +98,7 @@ static LRESULT CALLBACK loginProcedure(HWND window, UINT message, WPARAM wparam,
         return TRUE;
     }
     if (message == WM_SHOWWINDOW && wparam) {
-        RECT parent; GetClientRect(GetParent(window), &parent);
-        SetWindowPos(window, HWND_TOP, (parent.right - 620) / 2, (parent.bottom - 420) / 2, 620, 420, SWP_NOACTIVATE);
+        centerPanel(window);
     }
     if (message == WM_NCDESTROY) RemoveWindowSubclass(window, loginProcedure, SkinId);
     return DefSubclassProc(window, message, wparam, lparam);
@@ -94,7 +106,7 @@ static LRESULT CALLBACK loginProcedure(HWND window, UINT message, WPARAM wparam,
 
 extern "C" __declspec(dllexport) BOOL __stdcall SkinLoginWindow(HWND window) {
     DWORD_PTR installed = 0;
-    if (GetWindowSubclass(window, loginProcedure, SkinId, &installed)) return TRUE;
+    if (GetWindowSubclass(window, loginProcedure, SkinId, &installed)) { centerPanel(window); return TRUE; }
     HWND account = GetDlgItem(window, 1001), password = GetDlgItem(window, 1002);
     HWND login = GetDlgItem(window, 1003), cancel = GetDlgItem(window, 1004);
     if (!account || !password || !login || !cancel) return FALSE;
@@ -113,8 +125,7 @@ extern "C" __declspec(dllexport) BOOL __stdcall SkinLoginWindow(HWND window) {
     }
     SetWindowLongW(window, GWL_STYLE, (GetWindowLongW(window, GWL_STYLE) & ~(WS_CAPTION | WS_BORDER | WS_THICKFRAME)) | WS_CLIPCHILDREN);
     SetWindowLongW(window, GWL_EXSTYLE, GetWindowLongW(window, GWL_EXSTYLE) & ~(WS_EX_CLIENTEDGE | WS_EX_DLGMODALFRAME));
-    RECT parent; GetClientRect(GetParent(window), &parent);
-    SetWindowPos(window, nullptr, (parent.right - 620) / 2, (parent.bottom - 420) / 2, 620, 420, SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    centerPanel(window);
     HWND edits[] = { account, password };
     for (int index = 0; index < 2; ++index) {
         HWND edit = edits[index];

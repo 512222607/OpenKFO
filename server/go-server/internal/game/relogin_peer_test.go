@@ -169,3 +169,24 @@ func TestPeerRegistrationBeforeGameChannel(t *testing.T) {
 		t.Fatal("UDP registration granted game binding")
 	}
 }
+
+func TestClosedPeerRecoveredBeforeDetach(t *testing.T) {
+	for _, uid := range []uint64{1, 2} {
+		hub := NewHub(nil, Config{})
+		old, err := hub.Attach(persistence.Account{UID: 1}, 18001)
+		if err != nil {
+			t.Fatal(err)
+		}
+		old.P2P = 1001
+		receipt := hub.peerReceipt(old.P2P)
+		old.Close()
+		replacement, err := hub.Attach(persistence.Account{UID: uid}, 18001, receipt)
+		if err != nil || replacement.P2P != 1001 {
+			t.Fatalf("closed peer not recovered: %v", err)
+		}
+		hub.Detach(old)
+		if hub.Sessions[uid] != replacement {
+			t.Fatal("late detach removed replacement")
+		}
+	}
+}

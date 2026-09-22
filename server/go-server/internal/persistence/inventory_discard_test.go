@@ -129,6 +129,25 @@ func TestDiscardIndependentDatabase(t *testing.T) {
 			t.Fatal("discarded instance survives reconnect")
 		}
 	}
+	// Same template, distinct instances: discard must match owner + instance.
+	suitA, suitB := makeItem(150, protocol.ItemSuit, 0), makeItem(151, protocol.ItemSuit, 0)
+	protocol.WriteUint32(suitA, 5, 180021)
+	protocol.WriteUint32(suitB, 5, 180021)
+	insert(suitA)
+	insert(suitB)
+	if err = s.InventoryManager().Discard(uid+1, 150); !errors.Is(err, ErrDenied) {
+		t.Fatal("foreign suit discard", err)
+	}
+	if err = s.InventoryManager().Discard(uid, 150); err != nil {
+		t.Fatal("suit discard", err)
+	}
+	var remaining []byte
+	if err = s.DB.QueryRow("SELECT record FROM inventory WHERE uid=? AND instance=151", uid).Scan(&remaining); err != nil || !bytes.Equal(remaining, suitB) {
+		t.Fatal("other identical suit changed", err)
+	}
+	if err = s.InventoryManager().Discard(uid, 150); !errors.Is(err, ErrDenied) {
+		t.Fatal("duplicate suit discard", err)
+	}
 	// Highest ID retirement cannot reduce the allocator's high-water mark.
 	high := makeItem(200, 30, 0)
 	insert(high)
@@ -160,5 +179,24 @@ func TestDiscardRecordValidation(t *testing.T) {
 	protocol.WriteUint16(r, 17, 37)
 	if discardableItem(r, 1) {
 		t.Fatal("equipped pet")
+	}
+}
+
+func TestDiscardSuitPackageDoesNotDependOnEquipmentSlots(t *testing.T) {
+	r := make([]byte, protocol.InventoryRecordSize)
+	protocol.WriteUint32(r, 0, 1048590)
+	r[4] = protocol.ItemSuit
+	protocol.WriteUint32(r, 5, 180021)
+	if !discardableItem(r, 1048590) {
+		t.Fatal("unopened suit rejected")
+	}
+	protocol.WriteUint32(r, 19, 0xffffffff)
+	if discardableItem(r, 1048590) {
+		t.Fatal("consumed suit accepted")
+	}
+	protocol.WriteUint32(r, 19, 0)
+	protocol.WriteUint16(r, 17, 4)
+	if discardableItem(r, 1048590) {
+		t.Fatal("equipped item accepted")
 	}
 }

@@ -5,6 +5,8 @@ namespace KungFuLauncher;
 
 internal sealed class LauncherForm : Form
 {
+    private readonly CheckBox highFrameRate = new() { Text = "高帧模式（约125 FPS，实验）", AutoSize = true };
+    private readonly CheckBox showFPS = new() { Text = "顶部居中显示 FPS（窗口模式）", AutoSize = true, Checked = true };
     private readonly InstanceManager instances;
     private readonly LocalServerController localServer;
     private readonly Button startServer = MakeButton("启动本地服务器", false);
@@ -43,11 +45,12 @@ internal sealed class LauncherForm : Form
         MinimumSize = new Size(900, 740);
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = Color.FromArgb(242, 245, 250);
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(24), ColumnCount = 1, RowCount = 5 };
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(24), ColumnCount = 1, RowCount = 6 };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, localServer.Supported ? 166 : 112));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 66));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 62));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
         Controls.Add(layout);
@@ -125,6 +128,13 @@ internal sealed class LauncherForm : Form
         credentials.Controls.Add(credentialActions, 0, 6);
         hidePassword.CheckedChanged += (_, _) => password.UseSystemPasswordChar = hidePassword.Checked;
         credentials.Controls.Add(new Label { Text = "账号按窗口分别记住，启动或切换窗口时自动保存。\n清空账号和密码后保存，可移除本窗口记录。", AutoSize = true, Dock = DockStyle.Fill, ForeColor = Color.DimGray, Font = new Font(Font.FontFamily, 9) }, 0, 7);
+        highFrameRate.Enabled = showFPS.Enabled = instances.SharedClient;
+        var performance = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(0, 6, 0, 0) };
+        highFrameRate.Margin = new Padding(0, 2, 20, 0);
+        performance.Controls.AddRange(new Control[] { highFrameRate, showFPS });
+        performance.SetFlowBreak(showFPS, true);
+        performance.Controls.Add(new Label { Text = "切换模式后需关闭游戏再启动；实际帧率取决于场景和设备。", AutoSize = true, ForeColor = Color.DimGray, Font = new Font(Font.FontFamily, 9) });
+        layout.Controls.Add(performance, 0, 3);
         body.Controls.Add(credentials, 1, 0);
         save.Click += (_, _) => { if (SaveCredentials()) activity.Text = $"窗口 {credentialWindow} 的账号密码已保存在本地。"; };
         windows.SelectedIndexChanged += (_, _) =>
@@ -143,12 +153,12 @@ internal sealed class LauncherForm : Form
         help.Click += (_, _) => MessageBox.Show(this, instances.UsageInstructions, "启动器使用说明", MessageBoxButtons.OK, MessageBoxIcon.Information);
         actions.Controls.AddRange(new Control[] { launch, another, focus, logs, help });
         another.Visible = false;
-        layout.Controls.Add(actions, 0, 3);
+        layout.Controls.Add(actions, 0, 4);
         var footer = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2 };
         footer.RowStyles.Add(new RowStyle(SizeType.Percent, 55)); footer.RowStyles.Add(new RowStyle(SizeType.Percent, 45));
         activity.ForeColor = Color.FromArgb(45, 70, 105); footer.Controls.Add(activity, 0, 0);
         footer.Controls.Add(new Label { Text = "关闭启动器不会关闭游戏。服务器检测耗时不等于对战延迟。", Dock = DockStyle.Fill, ForeColor = Color.DimGray, Font = new Font(Font.FontFamily, 9) }, 0, 1);
-        layout.Controls.Add(footer, 0, 4);
+        layout.Controls.Add(footer, 0, 5);
         launch.Click += async (_, _) => await LaunchSelected();
         another.Click += async (_, _) =>
         {
@@ -218,8 +228,9 @@ internal sealed class LauncherForm : Form
         if (launching) return;
         if (!SaveCredentials()) return;
         launching = true; launch.Enabled = another.Enabled = false;
-        try { await instances.LaunchAsync(number, new Progress<string>(text => { if (!IsDisposed) activity.Text = text; })); }
-        catch (Exception exception) { activity.Text = "启动失败：" + exception.Message; MessageBox.Show(this, exception.Message, "启动失败", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+        try { await instances.LaunchAsync(number, new Progress<string>(text => { if (!IsDisposed) activity.Text = text; }), highFrameRate.Checked, showFPS.Checked); }
+        catch (GameDirectoryException exception) { activity.Text = "请放到游戏目录下"; MessageBox.Show(this, exception.Message, "启动器提示", MessageBoxButtons.OK, MessageBoxIcon.Information); }
+        catch (Exception exception) { activity.Text = "启动失败：" + exception.Message; OpenKFO.Updater.DiagnosticDialog.Show(this, "启动失败", OpenKFO.Updater.DiagnosticDialog.Details(exception, instances.LogPath(number))); }
         finally { launching = false; launch.Enabled = another.Enabled = true; RefreshWindows(); }
     }
     private void RefreshWindows()

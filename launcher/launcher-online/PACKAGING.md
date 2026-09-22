@@ -44,3 +44,15 @@ dotnet publish launcher/launcher-online/OnlineLauncher.csproj -c Release -o dist
 `Resources/client-config.xml` 作为资源嵌入启动器。启动游戏前统一生成 `Data/config.xml` 与 `server.ini`，本机地址固定为 `127.0.0.1`，端口与该窗口网络桥一致。已有不同配置先备份到 `launcher-components/connection-backups/<SHA256>/`，再原子替换；不改动资源包 `config.spf2` 或线上地址配置 `bridge.json`。共享多开使用同一组监听端口，并按进程身份关联各自会话。
 
 内置区服表只有一个区，因此同时把 `Settings.xml` 的 `LoginServer Index` 归零，避免原客户端保留的索引 2 导致空地址和端口 0。只修改选区字段，其他用户设置保留；旧设置同样按哈希备份。
+
+## 本地高帧试验版
+
+`dotnet publish launcher/launcher-online/OnlineLauncher.csproj -c Release -p:DefineConstants=LOCAL_FRAME_PREVIEW -o dist/launcher-fps-preview` 构建本地试验入口；该编译标记仅跳过启动器自身的线上更新检查，避免被线上旧版替换。客户端资源更新检查仍保留。正式发布不得使用此标记。
+
+- 默认普通模式，可勾选高帧模式（8ms × RenderIntervel，上限约 125 FPS）。只修改新建挂起进程的已验证指令，不改磁盘 gfld.dat，也不修改 QPC 时间倍率。
+- 高帧模式在游戏主循环起止配对调用 timeBeginPeriod(1)/timeEndPeriod(1)。后台遮挡、显示驱动及实际渲染耗时仍可能限制帧率。
+- FPS 统计 Direct3D9 device/swap-chain Present 成功返回次数，每半秒刷新。窗口模式顶部居中、点击穿透，跟随游戏窗口显示和最小化；不是显示目标帧率。
+- FPS 显示使用启动器自带的 `--fps-overlay` 子进程，关闭启动器不会关闭它；游戏退出时自动退出。无额外 DLL 或运行库安装。
+- 两个开关对新启动窗口生效；已打开的游戏需退出后重新启动。此实验依赖共享多开路径，旧复制目录模式不启用。
+- 原生计数器执行验证：先以 `KFO_FRAME_CODE_FILE` 指定输出路径运行 Go `TestPresentCounterCode`，再用 MSVC x86 编译并运行 `launcher/client-adapter/src/kk_frame_counter_test.cpp`，参数为输出文件。
+- 显式真实启动测试：设置 `KFO_FRAME_SMOKE_IMAGE` 为已校验的本地 gfld.dat，运行 Go `TestPerformanceClientSmoke`；只终止测试自身创建的进程，不登录账号。

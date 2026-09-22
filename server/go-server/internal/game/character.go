@@ -2,6 +2,8 @@ package game
 
 import (
 	"bytes"
+	"errors"
+	"kungfu.local/server/internal/persistence"
 	"kungfu.local/server/internal/protocol"
 )
 
@@ -18,6 +20,9 @@ func (hub *Hub) characterMessage(s *Session, ch *Channel, m protocol.Message) (b
 			// Current 822BC0 uses WORD >= 0x82 for its generic failure path.
 			// Do not index an undocumented message table or expose DB errors.
 			s.send(ch.ID, protocol.Message{ID: protocol.MsgCharacterCreateError, Payload: []byte{0x82, 0}})
+			if errors.Is(err, persistence.ErrBannedWord) {
+				s.send(ch.ID, notice(moderationNotice(err)))
+			}
 			return true, nil
 		}
 		s.Nickname = account.Nickname

@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
@@ -23,6 +23,7 @@
     <EmbeddedResource Include="../../dist/launcher-components/libcrypto-1_1.dll" LogicalName="libcrypto-1_1.dll" />
     <EmbeddedResource Include="../../dist/updater/OpenKFO.Updater.exe" LogicalName="OpenKFO.Updater.exe" />
     <Compile Include="../../tools/updater/UpdateEngine.cs" Link="Updates/UpdateEngine.cs" />
+    <Compile Include="../../tools/updater/DiagnosticDialog.cs" Link="Updates/DiagnosticDialog.cs" />
     <Compile Include="../../tools/updater/UpdateForm.cs" Link="Updates/UpdateForm.cs" />
     <EmbeddedResource Include="../../dist/launcher-components/OnlineBridge.exe" LogicalName="OnlineBridge.exe" />
   </ItemGroup>

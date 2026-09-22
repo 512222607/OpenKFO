@@ -12,6 +12,7 @@ internal static class SelfTests
         Directory.CreateDirectory(testRoot);
         try
         {
+            TestUpdaterExtraction(testRoot);
             var resources = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceNames();
             string fresh = Path.Combine(testRoot, "fresh-install");
             Bootstrap.Prepare(fresh);
@@ -70,6 +71,15 @@ internal static class SelfTests
             config["client_directory"] = "client";
             File.WriteAllText(Path.Combine(testRoot, "bridge.json"), config.ToJsonString());
             var manager = new InstanceManager(testRoot);
+            manager.ValidateGameDirectory();
+            string gameConfig = Path.Combine(manager.SourceDirectory, "Data", "config.spf2");
+            File.Move(gameConfig, gameConfig + ".test-backup");
+            try {
+                bool missingResourceRejected = false;
+                try { manager.ValidateGameDirectory(); } catch (IOException error) { missingResourceRejected = error.Message.Contains("请放到游戏目录下"); }
+                Require(missingResourceRejected, "missing game resources prompt for game directory");
+            } finally { File.Move(gameConfig + ".test-backup", gameConfig); }
+
             bool missingCertificate = false;
             try { manager.ValidateInstallation(); } catch (IOException error) { missingCertificate = error.Message.Contains("证书"); }
             Require(missingCertificate, "missing certificates explained");
@@ -214,6 +224,24 @@ internal static class SelfTests
         Require((GetWindowLongW(password, -16) & 0x20) != 0 && !clicked, "password masked and no automatic login");
         Require(!one.FillDialog(button.Handle), "unrelated control rejected");
     }
+    private static void TestUpdaterExtraction(string root)
+    {
+        string path = Path.Combine(root, "helper.exe");
+        byte[] old = [1, 2, 3], current = [4, 5, 6];
+        File.WriteAllBytes(path, old);
+        using (var locked = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            string prepared = InstanceManager.PrepareUpdaterFile(path, current);
+            Require(prepared != path && File.ReadAllBytes(prepared).SequenceEqual(current), "occupied helper uses verified private copy");
+            Require(File.ReadAllBytes(path).SequenceEqual(old), "occupied helper never truncated");
+        }
+        Require(InstanceManager.PrepareUpdaterFile(path, current) == path && File.ReadAllBytes(path).SequenceEqual(current), "unlocked helper replaced atomically");
+        using (var locked = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+            Require(InstanceManager.PrepareUpdaterFile(path, current) == path, "matching running helper reused");
+        string details = OpenKFO.Updater.DiagnosticDialog.Details(new IOException("network https://example.top:123/a password=hidden 192.0.2.1:999"));
+        Require(!details.Contains("example.top") && !details.Contains("192.0.2.1") && !details.Contains("hidden") && details.Contains("IOException"), "copyable diagnostics redact endpoints and credentials");
+    }
+
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr CreateWindowExW(int exStyle, string className, string text, int style, int x, int y, int width, int height, IntPtr parent, IntPtr menu, IntPtr instance, IntPtr parameter);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowTextW(IntPtr window, StringBuilder text, int length);
     [DllImport("user32.dll")] private static extern int GetWindowLongW(IntPtr window, int index);

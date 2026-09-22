@@ -35,7 +35,11 @@ func TestCharacterCreationVerifiedLayout(t *testing.T) {
 		t.Fatal("option layout")
 	}
 	for i, item := range role.Inventory {
-		if len(item) != 68 || protocol.ReadUint32(item, 5) != c[i].Item || protocol.ReadUint16(item, 17) != uint16(i+2) || protocol.ReadUint16(item, 23) != 1 {
+		count := uint16(0)
+		if item[4] == protocol.ItemWeapon {
+			count = 1
+		}
+		if len(item) != 68 || protocol.ReadUint32(item, 5) != c[i].Item || protocol.ReadUint16(item, 17) != uint16(i+2) || protocol.ReadUint16(item, 23) != count {
 			t.Fatalf("starter slot %d", i)
 		}
 	}

@@ -19,6 +19,8 @@ func (h *Hub) changeRoomOwner(s *Session, p []byte) error {
 		reason = "请选择其他房间玩家接任房主。"
 	case r.Members[request.TargetUID] == nil || r.Members[request.TargetUID].Session == nil || r.Members[request.TargetUID].Session.Room != r:
 		reason = "目标玩家已离开房间。"
+	case r.Members[request.TargetUID].Spectator:
+		reason = "观战者不能担任房主。"
 	case r.Members[request.TargetUID].Session.game() == nil || r.Members[request.TargetUID].Session.game().Phase != "room":
 		reason = "目标玩家尚未返回等待房间，请稍后再移交房主。"
 	}

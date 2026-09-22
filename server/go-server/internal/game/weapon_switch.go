@@ -25,6 +25,9 @@ func (h *Hub) switchWeapon(s *Session, ch *Channel, p []byte) error {
 	if r == nil || r.Stage != "battle" || ch.Phase != "battle" {
 		return nil
 	}
+	if r.isObserver(s) {
+		return nil
+	}
 	m := r.Members[s.UID]
 	if m == nil || m.Session != s {
 		return protocol.ErrFrame

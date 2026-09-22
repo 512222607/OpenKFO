@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"log"
 	"os"
 	"strings"
 )
@@ -19,6 +20,7 @@ func watchLocalMonitor(stop func()) {
 				break
 			}
 		}
+		log.Printf("local_server_stop source=monitor_stdin error=%v", scanner.Err())
 		stop()
 	}()
 }

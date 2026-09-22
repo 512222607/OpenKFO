@@ -10,6 +10,7 @@ internal static class Program
         ApplicationConfiguration.Initialize();
         try
         {
+            if (args.Length > 0 && args[0] == "--fps-overlay") { FpsOverlay.Run(args); return; }
             int controlTest = Array.IndexOf(args,"--server-control-test");
             if(controlTest>=0 && controlTest+1<args.Length){ServerControlTests.Run(args[controlTest+1]);return;}
             string root = AppContext.BaseDirectory;
@@ -39,7 +40,10 @@ internal static class Program
                 SelfTests.Run(instances);
                 return;
             }
+            if (!args.Contains("--preview")) instances.ValidateGameDirectory();
+#if !LOCAL_FRAME_PREVIEW
             if (!args.Contains("--preview") && !instances.CheckLauncherUpdate()) return;
+#endif
             if (!args.Contains("--preview")) instances.PrepareClientImage();
             int startOption = Array.IndexOf(args, "--start");
             int[] startWindows = startOption >= 0 && startOption + 1 < args.Length ? args[startOption + 1].Split(',').Select(int.Parse).ToArray() : [];
@@ -65,9 +69,9 @@ internal static class Program
                 File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "self-test-error.txt"), exception.ToString());
                 Environment.ExitCode = 1;
             }
-            else MessageBox.Show(exception is UnauthorizedAccessException
-                ? "登录器无法读写当前文件夹。请把整个游戏文件夹解压到可写目录后再启动，不要在压缩包中运行。"
-                : exception.Message, "启动器", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            else if (exception is GameDirectoryException)
+                MessageBox.Show(exception.Message, "启动器提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            else OpenKFO.Updater.DiagnosticDialog.Show(null, "启动器", OpenKFO.Updater.DiagnosticDialog.Details(exception));
         }
     }
 }

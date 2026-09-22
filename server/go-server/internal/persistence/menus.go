@@ -35,6 +35,9 @@ func (m *RoleManager) Rename(uid uint64, nickname string) (string, error) {
 	if decoded, err := DecodeGBK(encoded); err != nil || decoded != nickname {
 		return "", ErrDenied
 	}
+	if err := m.store.CheckText(nickname); err != nil {
+		return "", err
+	}
 	transaction, err := m.store.DB.Begin()
 	if err != nil {
 		return "", err

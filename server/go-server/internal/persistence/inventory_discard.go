@@ -93,6 +93,9 @@ func discardableItem(r []byte, instance uint32) bool {
 		return true
 	}
 	switch r[4] {
+	case protocol.ItemSuit:
+		// A suit package is discardable even though it has no equipment slot.
+		return true
 	case 60, protocol.ItemExperienceCard, protocol.ItemWeaponSwitchCard:
 		return protocol.ReadUint16(r, 23) > 0
 	}

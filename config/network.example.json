@@ -12,9 +12,6 @@
     "../功夫小子/bridge.json",
     "dist/登录器完整包-20260920/bridge.json"
   ],
-  "gm_updater_paths": [
-    "dist/GM管理器/updater-settings.json"
-  ],
   "admin_paths": [
     "runtime-local/online-admin.json"
   ],

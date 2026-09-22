@@ -8,7 +8,7 @@ func (r *Room) freeTeamPosition(team byte, except uint64) (byte, bool) {
 	for position := team * teamSideSize; position < (team+1)*teamSideSize; position++ {
 		occupied := false
 		for uid, member := range r.Members {
-			if uid != except && member.Spawn == position {
+			if !member.Spectator && uid != except && member.Spawn == position {
 				occupied = true
 				break
 			}

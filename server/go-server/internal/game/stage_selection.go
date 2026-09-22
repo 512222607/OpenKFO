@@ -37,6 +37,24 @@ func (h *Hub) sendStageSelection(s *Session, view persistence.StagePlayerView, e
 			}
 		}
 	}
+	// PVE admission uses persisted plans, not competitive map pools. Reuse
+	// the same validators as room creation for at least one supported size.
+	for _, plan := range view.Access.FosterPlans {
+		for players := 1; players <= 8; players++ {
+			if _, err := h.Config.persistedFosterPlan(view.Access, plan.MapID, players); err == nil {
+				supported[plan.MapID] = true
+				break
+			}
+		}
+	}
+	for _, plan := range view.Access.WavePlans {
+		for players := 1; players <= 8; players++ {
+			if _, err := h.Config.persistedStagePlan(view.Access, plan.MapID, players); err == nil {
+				supported[plan.MapID] = true
+				break
+			}
+		}
+	}
 	forced := map[uint32]bool{}
 	for _, id := range view.ForcedMaps {
 		forced[id] = true

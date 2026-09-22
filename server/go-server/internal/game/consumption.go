@@ -7,7 +7,7 @@ import (
 )
 
 func (hub *Hub) consume(session *Session, channel *Channel, message protocol.Message) error {
-	if channel.Phase != "battle" || session.Room == nil {
+	if channel.Phase != "battle" || session.Room == nil || session.Room.isObserver(session) {
 		return nil
 	}
 	payload := message.Payload

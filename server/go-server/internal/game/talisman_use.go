@@ -11,10 +11,11 @@ import (
 type TalismanUseRule = persistence.TalismanUseRule
 
 type pendingTalisman struct {
-	event   protocol.TalismanEvent
-	message protocol.Message
-	use     persistence.TalismanUse
-	expires time.Time
+	delivered map[uint64]bool
+	event     protocol.TalismanEvent
+	message   protocol.Message
+	use       persistence.TalismanUse
+	expires   time.Time
 }
 
 func (c Config) ValidateTalismanUses() error {
@@ -29,6 +30,9 @@ func (c Config) ValidateTalismanUses() error {
 }
 
 func (h *Hub) useTalisman(s *Session, ch *Channel, m protocol.Message) error {
+	return h.useTalismanObserved(s, ch, m, nil)
+}
+func (h *Hub) useTalismanObserved(s *Session, ch *Channel, m protocol.Message, delivered map[uint64]bool) error {
 	room := s.Room
 	if room == nil || room.Stage != "battle" || ch.Phase != "battle" {
 		return nil
@@ -86,7 +90,16 @@ func (h *Hub) useTalisman(s *Session, ch *Channel, m protocol.Message) error {
 			}
 		}
 		// Preserve the accepted cost and deadline even for an identical retry.
-		if _, ok := s.TalismanPending[instance]; ok {
+		if pending, ok := s.TalismanPending[instance]; ok {
+			if pending.event.Sequence == e.Sequence && bytes.Equal(pending.message.Payload, m.Payload) {
+				if pending.delivered == nil {
+					pending.delivered = map[uint64]bool{}
+				}
+				for uid := range delivered {
+					pending.delivered[uid] = true
+				}
+				s.TalismanPending[instance] = pending
+			}
 			return nil
 		}
 		cost := rule.ActiveCost
@@ -94,7 +107,7 @@ func (h *Hub) useTalisman(s *Session, ch *Channel, m protocol.Message) error {
 			cost = rule.PassiveCost
 		}
 		m.Payload = bytes.Clone(m.Payload)
-		s.TalismanPending[instance] = pendingTalisman{e, m, persistence.TalismanUse{Instance: instance, Item: rule.Item, Kind: e.Kind, Slot: e.Slot, Cost: cost}, now.Add(5 * time.Second)}
+		s.TalismanPending[instance] = pendingTalisman{event: e, message: m, use: persistence.TalismanUse{Instance: instance, Item: rule.Item, Kind: e.Kind, Slot: e.Slot, Cost: cost}, expires: now.Add(5 * time.Second), delivered: delivered}
 		return nil
 	}
 	if len(m.Payload) != 8 {
@@ -137,7 +150,11 @@ func (h *Hub) useTalisman(s *Session, ch *Channel, m protocol.Message) error {
 	// Billing and effect delivery are different: native code can reapply a
 	// passive within the same battle. Only the fee is once-per-battle.
 	if fresh && (applied || p.event.Kind == 8291) {
-		h.broadcast(room, p.message, s.UID)
+		for uid, target := range room.Members {
+			if uid != s.UID && !p.delivered[uid] {
+				target.Session.sendGame(p.message)
+			}
+		}
 	}
 	if fresh {
 		if member.TalismanEvents == nil {

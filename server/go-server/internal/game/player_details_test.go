@@ -85,3 +85,53 @@ func TestViewOtherPlayerRoutes2420To2421(t *testing.T) {
 		t.Fatal("accepted truncated UID")
 	}
 }
+
+func TestEquipmentInspectionOnlyReturnsEquippedRecords(t *testing.T) {
+	equipped, spare := make([]byte, protocol.InventoryRecordSize), make([]byte, protocol.InventoryRecordSize)
+	protocol.WriteUint32(equipped, 0, 100)
+	protocol.WriteUint16(equipped, protocol.InventorySlotOffset, protocol.SlotPrimaryWeapon)
+	protocol.WriteUint32(spare, 0, 101)
+	account := persistence.Account{UID: 7, Inventory: [][]byte{spare, equipped}}
+	reply, err := playerEquipment(account)
+	if err != nil || reply.ID != protocol.MsgPlayerEquipment || !bytes.Equal(reply.Payload, equipped) {
+		t.Fatal("wrong inspection layout", err)
+	}
+	reply.Payload[0] = 0
+	if equipped[0] != 100 {
+		t.Fatal("reply aliases stored inventory")
+	}
+	account.Inventory = nil
+	reply, err = playerEquipment(account)
+	if err != nil || len(reply.Payload) != 0 {
+		t.Fatal("empty list must clear previous inspection")
+	}
+	account.Inventory = [][]byte{make([]byte, 67)}
+	if _, err = playerEquipment(account); err == nil {
+		t.Fatal("malformed record admitted")
+	}
+}
+func TestEquipmentInspectionRoutes2590WithoutInventorySideEffects(t *testing.T) {
+	h, viewer, target, _ := waitingRoomFixture()
+	h.Store = recoveryStore(t)
+	for _, phase := range []string{"lobby", "room"} {
+		viewer.game().Phase = phase
+		before := len(viewer.Inventory)
+		if err := h.route(viewer, viewer.game(), protocol.Message{ID: protocol.MsgPlayerEquipmentRequest, Payload: protocol.Uint64Bytes(target.UID)}); err != nil {
+			t.Fatal(err)
+		}
+		roomOutputs(t, viewer, protocol.MsgPlayerEquipment)
+		roomOutputs(t, target)
+		if len(viewer.Inventory) != before {
+			t.Fatal("inspection overwrote viewer inventory")
+		}
+	}
+	for _, p := range [][]byte{nil, make([]byte, 7), make([]byte, 9)} {
+		if err := h.inspectEquipment(viewer, p); err == nil {
+			t.Fatal("invalid UID length")
+		}
+	}
+	if err := h.inspectEquipment(viewer, protocol.Uint64Bytes(0)); err != nil {
+		t.Fatal("missing target disconnected viewer")
+	}
+	roomOutputs(t, viewer, notice("").ID)
+}

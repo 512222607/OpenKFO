@@ -1,3 +1,5 @@
+import 'gm_version.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -33,7 +35,13 @@ class OnlineBackend {
         request.followRedirects = false;
         request.headers.contentType = ContentType.json;
         request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
-        request.write(jsonEncode({...input, 'environment': 'online'}));
+        request.write(
+          jsonEncode({
+            ...input,
+            'environment': 'online',
+            'gm_version': gmVersion,
+          }),
+        );
         final response = await request.close();
         if (response.statusCode == 401) throw StateError('管理令牌无效');
         if (response.isRedirect) throw StateError('管理地址不能重定向，请填写最终 HTTPS 地址');

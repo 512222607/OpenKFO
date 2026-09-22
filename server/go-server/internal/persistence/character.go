@@ -90,9 +90,10 @@ func ParseCharacterCreation(payload []byte, choices []CharacterChoice) (Characte
 		record[4] = types[slot]
 		protocol.WriteUint32(record, 5, item)
 		protocol.WriteUint16(record, 17, uint16(slot+2))
-		// A counted starter item is visible to the native warehouse. No invented
-		// expiry sentinel or quantity-at-offset-9 assumption.
+		// Preserve the legacy weapon count; clothing uses lifetime visibility,
+		// because count > 0 selects Use instead of Equip in the native menu.
 		protocol.WriteUint16(record, 23, 1)
+		normalizeClothingMenu(record)
 		result.Inventory = append(result.Inventory, record)
 	}
 	return result, nil
@@ -103,6 +104,9 @@ func ParseCharacterCreation(payload []byte, choices []CharacterChoice) (Characte
 func (m *RoleManager) CreateCharacter(uid uint64, payload []byte, choices []CharacterChoice) (Account, error) {
 	role, err := ParseCharacterCreation(payload, choices)
 	if err != nil {
+		return Account{}, err
+	}
+	if err := m.store.CheckText(role.Nickname); err != nil {
 		return Account{}, err
 	}
 	tx, err := m.store.DB.Begin()

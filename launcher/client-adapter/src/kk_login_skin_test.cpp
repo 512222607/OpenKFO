@@ -70,6 +70,13 @@ int wmain(int count, wchar_t** args) {
     while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) { TranslateMessage(&message); DispatchMessageW(&message); }
     if (loginClicks != 1) return 6;
     if (GetDlgItem(dialog, 0x4b55)) return 8; // Updates belong to the launcher.
+    // The host retries styling after the game's parent obtains its final size.
+    SetWindowPos(parent, nullptr, 0, 0, 1200, 850, SWP_NOZORDER | SWP_NOACTIVATE);
+    SetWindowPos(dialog, nullptr, -310, -210, 620, 420, SWP_NOZORDER | SWP_NOACTIVATE);
+    if (!install(dialog)) return 9;
+    RECT area = {}, panel = {}; GetClientRect(parent, &area); GetWindowRect(dialog, &panel);
+    POINT position = {panel.left, panel.top}; ScreenToClient(parent, &position);
+    if (position.x != (area.right-620)/2 || position.y != (area.bottom-420)/2) return 10;
     // Preview contains no account examples or password values.
     SetWindowTextW(account, L""); SetWindowTextW(password, L"");
     if (!savePreview(dialog, args[2])) return 7;

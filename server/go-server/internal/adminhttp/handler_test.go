@@ -15,17 +15,17 @@ func TestAuthorizationAndOnlineScope(t *testing.T) {
 		body, auth string
 		status     int
 	}{
-		{`{"operation":"rewards_get","environment":"online"}`, "", 401},
-		{`{"operation":"rewards_get","environment":"local"}`, "Bearer " + token, 403},
-		{`{"operation":"weapon_apply","environment":"online"}`, "Bearer " + token, 403},
-		{`{"operation":"rewards_get","environment":"online"} {}`, "Bearer " + token, 400},
-		{`{"operation":"rewards_get","environment":"online"}`, "Bearer " + token, 200},
-		{`{"operation":"inventory_expiry","environment":"online"}`, "", 401},
-		{`{"operation":"inventory_expiry","environment":"local"}`, "Bearer " + token, 403},
-		{`{"operation":"inventory_expiry","environment":"online"}`, "Bearer " + token, 200},
-		{`{"operation":"vip_grant","environment":"online"}`, "", 401},
-		{`{"operation":"vip_grant","environment":"local"}`, "Bearer " + token, 403},
-		{`{"operation":"vip_grant","environment":"online"}`, "Bearer " + token, 200},
+		{`{"gm_version":"1.1.0","operation":"rewards_get","environment":"online"}`, "", 401},
+		{`{"gm_version":"1.1.0","operation":"rewards_get","environment":"local"}`, "Bearer " + token, 403},
+		{`{"gm_version":"1.1.0","operation":"weapon_apply","environment":"online"}`, "Bearer " + token, 403},
+		{`{"gm_version":"1.1.0","operation":"rewards_get","environment":"online"} {}`, "Bearer " + token, 400},
+		{`{"gm_version":"1.1.0","operation":"rewards_get","environment":"online"}`, "Bearer " + token, 200},
+		{`{"gm_version":"1.1.0","operation":"inventory_expiry","environment":"online"}`, "", 401},
+		{`{"gm_version":"1.1.0","operation":"inventory_expiry","environment":"local"}`, "Bearer " + token, 403},
+		{`{"gm_version":"1.1.0","operation":"inventory_expiry","environment":"online"}`, "Bearer " + token, 200},
+		{`{"gm_version":"1.1.0","operation":"vip_grant","environment":"online"}`, "", 401},
+		{`{"gm_version":"1.1.0","operation":"vip_grant","environment":"local"}`, "Bearer " + token, 403},
+		{`{"gm_version":"1.1.0","operation":"vip_grant","environment":"online"}`, "Bearer " + token, 200},
 	} {
 		r := httptest.NewRequest("POST", "/gm/api", strings.NewReader(tc.body))
 		r.Header.Set("Authorization", tc.auth)
@@ -56,7 +56,7 @@ func TestStageManagementAuthorizationAndPayload(t *testing.T) {
 	}{
 		{"online", "", 401}, {"local", "Bearer " + token, 403}, {"online", "Bearer " + token, 200},
 	} {
-		r := httptest.NewRequest("POST", "/gm/api", strings.NewReader(`{"operation":"stages_save","environment":"`+tc.env+`","stage_access":{"revision":7,"disabled_maps":[8110]}}`))
+		r := httptest.NewRequest("POST", "/gm/api", strings.NewReader(`{"gm_version":"1.1.0","operation":"stages_save","environment":"`+tc.env+`","stage_access":{"revision":7,"disabled_maps":[8110]}}`))
 		r.Header.Set("Authorization", tc.auth)
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, r)
@@ -85,7 +85,7 @@ func TestTrainingManagementAuthorizationAndPayload(t *testing.T) {
 	}{
 		{"online", "", 401}, {"local", "Bearer " + token, 403}, {"online", "Bearer " + token, 200},
 	} {
-		r := httptest.NewRequest("POST", "/gm/api", strings.NewReader(`{"operation":"training_save","environment":"`+tc.env+`","training":{"revision":7,"rules":{"enabled":false,"levels":[{"level":0,"xp_per_hour":50,"xp_cap":300}]}}}`))
+		r := httptest.NewRequest("POST", "/gm/api", strings.NewReader(`{"gm_version":"1.1.0","operation":"training_save","environment":"`+tc.env+`","training":{"revision":7,"rules":{"enabled":false,"levels":[{"level":0,"xp_per_hour":50,"xp_cap":300}]}}}`))
 		r.Header.Set("Authorization", tc.auth)
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, r)
@@ -114,7 +114,7 @@ func TestTaskManagementAuthorizationAndPayload(t *testing.T) {
 	}{
 		{"online", "", 401}, {"local", "Bearer " + token, 403}, {"online", "Bearer " + token, 200},
 	} {
-		r := httptest.NewRequest("POST", "/gm/api", strings.NewReader(`{"operation":"tasks_save","environment":"`+tc.env+`","tasks":{"revision":7,"rules":{"enabled":false,"tasks":[{"id":1001,"matches":10,"counters":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}]}}}`))
+		r := httptest.NewRequest("POST", "/gm/api", strings.NewReader(`{"gm_version":"1.1.0","operation":"tasks_save","environment":"`+tc.env+`","tasks":{"revision":7,"rules":{"enabled":false,"tasks":[{"id":1001,"matches":10,"counters":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}]}}}`))
 		r.Header.Set("Authorization", tc.auth)
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, r)
@@ -143,7 +143,7 @@ func TestTitleManagementAuthorizationAndPayload(t *testing.T) {
 	}{
 		{"online", "", 401}, {"local", "Bearer " + token, 403}, {"online", "Bearer " + token, 200},
 	} {
-		r := httptest.NewRequest("POST", "/gm/api", strings.NewReader(`{"operation":"titles_save","environment":"`+tc.env+`","titles":{"revision":7,"rules":{"enabled":false,"titles":[{"level":1,"matches":10,"choices":[7]}]}}}`))
+		r := httptest.NewRequest("POST", "/gm/api", strings.NewReader(`{"gm_version":"1.1.0","operation":"titles_save","environment":"`+tc.env+`","titles":{"revision":7,"rules":{"enabled":false,"titles":[{"level":1,"matches":10,"choices":[7]}]}}}`))
 		r.Header.Set("Authorization", tc.auth)
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, r)
@@ -172,7 +172,7 @@ func TestWeaponSettingsManagementAuthorizationAndPayload(t *testing.T) {
 	}{
 		{"online", "", 401}, {"local", "Bearer " + token, 403}, {"online", "Bearer " + token, 200},
 	} {
-		r := httptest.NewRequest("POST", "/gm/api", strings.NewReader(`{"operation":"weapon_settings_save","environment":"`+tc.env+`","weapon_settings":{"revision":7,"rules":{"enabled":false,"levels":[{"level":0,"score_threshold":50,"gold":300}]}}}`))
+		r := httptest.NewRequest("POST", "/gm/api", strings.NewReader(`{"gm_version":"1.1.0","operation":"weapon_settings_save","environment":"`+tc.env+`","weapon_settings":{"revision":7,"rules":{"enabled":false,"levels":[{"level":0,"score_threshold":50,"gold":300}]}}}`))
 		r.Header.Set("Authorization", tc.auth)
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, r)
@@ -199,7 +199,7 @@ func TestVIPShopManagementAuthorization(t *testing.T) {
 		env, auth string
 		status    int
 	}{{"online", "", 401}, {"local", "Bearer " + token, 403}, {"online", "Bearer " + token, 200}} {
-		r := httptest.NewRequest("POST", "/gm/api", strings.NewReader(`{"operation":"vip_shop_settings_save","environment":"`+tc.env+`","vip_shop_settings":{"revision":4,"rules":{"enabled":true,"silver":90,"gold":80,"platinum":70}}}`))
+		r := httptest.NewRequest("POST", "/gm/api", strings.NewReader(`{"gm_version":"1.1.0","operation":"vip_shop_settings_save","environment":"`+tc.env+`","vip_shop_settings":{"revision":4,"rules":{"enabled":true,"silver":90,"gold":80,"platinum":70}}}`))
 		r.Header.Set("Authorization", tc.auth)
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)
@@ -228,7 +228,7 @@ func TestTalismanSettingsManagementAuthorizationAndPayload(t *testing.T) {
 	}{
 		{"online", "", 401}, {"local", "Bearer " + token, 403}, {"online", "Bearer " + token, 200},
 	} {
-		r := httptest.NewRequest("POST", "/gm/api", strings.NewReader(`{"operation":"talisman_settings_save","environment":"`+tc.env+`","talisman_settings":{"revision":7,"rules":{"enabled":false,"uses":[{"item":303002,"active_cost":50,"passive_cost":300}]}}}`))
+		r := httptest.NewRequest("POST", "/gm/api", strings.NewReader(`{"gm_version":"1.1.0","operation":"talisman_settings_save","environment":"`+tc.env+`","talisman_settings":{"revision":7,"rules":{"enabled":false,"uses":[{"item":303002,"active_cost":50,"passive_cost":300}]}}}`))
 		r.Header.Set("Authorization", tc.auth)
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, r)
@@ -238,5 +238,34 @@ func TestTalismanSettingsManagementAuthorizationAndPayload(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Fatalf("unauthorized weapon save: %d calls", calls)
+	}
+}
+
+func TestGMVersionRejectsBeforeExecution(t *testing.T) {
+	token := strings.Repeat("v", 32)
+	calls := 0
+	handler := New(token, func(r desktop.Request) (any, error) { calls++; return nil, nil })
+	for _, version := range []string{"", "1.0.0", "1.1.0"} {
+		r := httptest.NewRequest("POST", "/gm/api", strings.NewReader(`{"environment":"online","operation":"rewards_save","gm_version":"`+version+`"}`))
+		r.Header.Set("Authorization", "Bearer "+token)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		want := 409
+		if version == "1.1.0" {
+			want = 200
+		}
+		if w.Code != want {
+			t.Fatalf("version %q status %d", version, w.Code)
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("invalid versions executed: %d", calls)
+	}
+	r := httptest.NewRequest("POST", "/gm/api", strings.NewReader(`{"environment":"online","operation":"gm_version"}`))
+	r.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"version":"1.1.0"`) || calls != 1 {
+		t.Fatal(w.Body.String())
 	}
 }

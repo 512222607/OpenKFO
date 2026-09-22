@@ -33,7 +33,7 @@ void main() {
     expect(saved,isNull);expect(find.text('请输入1–3650的整数'),findsOneWidget);
     await tester.enterText(input, '2');
     await tester.tap(find.text('保存期限'));await tester.pumpAndSettle();
-    expect(saved?['uid'],1002);expect(saved?['instance'],42);expect(saved?['environment'],'local');
+    expect(saved?['uid'],1002);expect(saved?['instance'],42);expect(saved?['environment'],'online');
     final deadline=saved!['expires_at'] as int;
     expect(deadline-DateTime.now().millisecondsSinceEpoch~/1000,inInclusiveRange(172790,172800));
     expect(tester.takeException(),isNull);

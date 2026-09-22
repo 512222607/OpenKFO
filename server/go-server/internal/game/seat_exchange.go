@@ -46,7 +46,7 @@ func (h *Hub) exchangeSeat(s *Session, m protocol.Message) error {
 	if len(r.Request) == 81 && !r.Type().IsTeam() {
 		positionLimit = uint32(r.Request[37])
 	}
-	if source == nil || source.Session.Room != r || sourceID == targetID || len(r.Request) != 81 || from >= 8 || to >= positionLimit || from == to || uint32(source.Spawn) != from || source.Ready {
+	if source == nil || source.Spectator || source.Session.Room != r || sourceID == targetID || len(r.Request) != 81 || from >= 8 || to >= positionLimit || from == to || uint32(source.Spawn) != from || source.Ready {
 		reject()
 		return nil
 	}

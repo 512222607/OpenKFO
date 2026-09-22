@@ -27,8 +27,8 @@ internal static class Program
             using var mutex = new Mutex(false, "Local\\OpenKFOUpdate-" + UpdateEngine.Hash(System.Text.Encoding.UTF8.GetBytes(target.ToLowerInvariant())));
             if (!mutex.WaitOne(0)) { throw new IOException("另一个更新程序正在运行。"); }
             string? offlineManifest = args.Contains("--offline-manifest") ? Path.GetFullPath(Get("--offline-manifest")) : null;
-            try { using var form = new UpdateForm(kind, target, uri, bridge, launcher, restartRoot, offlineManifest); Application.Run(form); Environment.ExitCode = form.Completed ? 0 : 2; } finally { mutex.ReleaseMutex(); }
+            try { using var form = new UpdateForm(kind, target, uri, bridge, launcher, restartRoot, offlineManifest, args.Contains("--auto-check")); Application.Run(form); Environment.ExitCode = form.Completed || form.Skipped ? 0 : 2; } finally { mutex.ReleaseMutex(); }
         }
-        catch (Exception e) { Environment.ExitCode = 1; MessageBox.Show(e.Message, "更新失败", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        catch (Exception e) { Environment.ExitCode = 1; DiagnosticDialog.Show(null, "更新失败", DiagnosticDialog.Details(e)); }
     }
 }

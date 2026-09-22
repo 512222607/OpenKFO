@@ -13,6 +13,7 @@ const (
 	NewPlayerGuide  RoomType = 4   // 新手引导
 	FreePractice    RoomType = 5   // 自由练习
 	FosterMode      RoomType = 10  // 地图脚本PVE；98C1B0创建CFosterMode。
+	RebornMode      RoomType = 16  // Native points-based revival mode; opt-in server configuration.
 	StageAssault    RoomType = 21  // 波次PVE；98C1B0创建CStageAssaultMode。
 	UnknownRoomType RoomType = 255 // 缺失或无法读取房间请求
 )
@@ -33,6 +34,8 @@ func (t RoomType) String() string {
 		return "自由练习"
 	case FosterMode:
 		return "地图脚本PVE（尚未开放）"
+	case RebornMode:
+		return "复活模式"
 	case StageAssault:
 		return "波次PVE（尚未开放）"
 	default:
@@ -70,6 +73,7 @@ const (
 	ItemHair            = 15
 	ItemPants           = 16
 	ItemGloves          = 17
+	ItemSuit            = 18
 	InventoryKindOffset = 4
 	InventorySlotOffset = 17
 	// A19AE0 tests this DWORD before selecting the live clothing model part.
@@ -133,6 +137,7 @@ const (
 	MsgWatchGameAck         = 3072 // A_WATCH_GAME_ACK; result layout not yet confirmed
 	MsgRoomEntered          = 3100 // 进入房间数据
 	MsgRoomMemberUpdated    = 3090 // 房间成员及装备外观
+	MsgRoomRoster           = 3105 // 已有房间成员与装备刷新，不触发新成员进入通知
 	MsgLeaveRoom            = 3110
 	MsgRoomLeft             = 3115
 	MsgPlayerLeftRoom       = 3130
@@ -172,3 +177,6 @@ const (
 
 // Native rbpRecommend (852760) requests 9070 category 255, variant weapon.
 const ShopCategoryRecommended = 255
+
+// MsgBattleReportRequest invokes the native end-of-round report producer (987E40).
+const MsgBattleReportRequest uint32 = 4100

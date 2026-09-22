@@ -8,12 +8,13 @@ import (
 )
 
 const (
-	inventoryDurationOffset        = 13
-	inventoryStateOffset           = 19
-	inventoryUnused         uint32 = 0
-	inventoryActive         uint32 = 1
-	inventoryExpired        uint32 = 2
-	permanentDisplayMinutes uint32 = 365 * 24 * 60
+	inventoryMenuCountOffset        = 23
+	inventoryDurationOffset         = 13
+	inventoryStateOffset            = 19
+	inventoryUnused          uint32 = 0
+	inventoryActive          uint32 = 1
+	inventoryExpired         uint32 = 2
+	permanentDisplayMinutes  uint32 = 365 * 24 * 60
 )
 
 // Slot assignment is an activation, including starter equipment and old records.
@@ -43,6 +44,7 @@ func projectItemMinutes(record []byte, deadline sql.NullInt64, now int64) {
 }
 
 func activateEquipmentInTransaction(tx *sql.Tx, uid uint64, record []byte, now int64) error {
+	normalizeClothingMenu(record)
 	if protocol.ReadUint16(record, protocol.InventorySlotOffset) == protocol.SlotUnequipped {
 		return nil
 	}
@@ -63,7 +65,7 @@ func activateEquipmentInTransaction(tx *sql.Tx, uid uint64, record []byte, now i
 func (s *Store) normalizeEquippedInventory(a *Account) error {
 	needed := false
 	for _, record := range a.Inventory {
-		if protocol.ReadUint16(record, protocol.InventorySlotOffset) != protocol.SlotUnequipped && protocol.ReadUint32(record, inventoryStateOffset) == inventoryUnused {
+		if suitPackageNeedsRepair(record) || clothingMenuNeedsRepair(record) || (protocol.ReadUint16(record, protocol.InventorySlotOffset) != protocol.SlotUnequipped && protocol.ReadUint32(record, inventoryStateOffset) == inventoryUnused) {
 			needed = true
 			break
 		}
@@ -81,7 +83,7 @@ func (s *Store) normalizeEquippedInventory(a *Account) error {
 		return err
 	}
 	for i, original := range a.Inventory {
-		if protocol.ReadUint16(original, protocol.InventorySlotOffset) == protocol.SlotUnequipped || protocol.ReadUint32(original, inventoryStateOffset) != inventoryUnused {
+		if !suitPackageNeedsRepair(original) && !clothingMenuNeedsRepair(original) && (protocol.ReadUint16(original, protocol.InventorySlotOffset) == protocol.SlotUnequipped || protocol.ReadUint32(original, inventoryStateOffset) != inventoryUnused) {
 			continue
 		}
 		var record []byte
@@ -104,4 +106,38 @@ func (s *Store) normalizeEquippedInventory(a *Account) error {
 		a.Inventory[i] = record
 	}
 	return tx.Commit()
+}
+
+// Native 8A3760 copies WORD record+23 to UI+20. 8B1700 selects the
+// Equip menu only when that count is zero; nonzero enables Use instead.
+// Clothing is not stackable. Do not touch consumable counts or pet durability.
+func clothingMenuNeedsRepair(record []byte) bool {
+	return len(record) == protocol.InventoryRecordSize && record[protocol.InventoryKindOffset] >= protocol.ItemTop && record[protocol.InventoryKindOffset] <= protocol.ItemGloves && protocol.ReadUint16(record, inventoryMenuCountOffset) != 0
+}
+func suitPackageNeedsRepair(record []byte) bool {
+	return len(record) == protocol.InventoryRecordSize && record[protocol.InventoryKindOffset] == protocol.ItemSuit && protocol.ReadUint32(record, inventoryStateOffset) <= inventoryActive && (protocol.ReadUint16(record, inventoryMenuCountOffset) == 0 || protocol.ReadUint16(record, protocol.InventorySlotOffset) != 0)
+}
+func normalizeClothingMenu(record []byte) {
+	if suitPackageNeedsRepair(record) {
+		protocol.WriteUint16(record, protocol.InventorySlotOffset, 0)
+		if protocol.ReadUint16(record, inventoryMenuCountOffset) == 0 {
+			protocol.WriteUint16(record, inventoryMenuCountOffset, 1)
+		}
+		return
+	}
+
+	if !clothingMenuNeedsRepair(record) {
+		return
+	}
+	protocol.WriteUint16(record, inventoryMenuCountOffset, 0)
+	// Legacy starters used count=1 with no display lifetime. Preserve warehouse
+	// visibility using the existing permanent display convention, not a count.
+	if protocol.ReadUint32(record, inventoryDurationOffset) == 0 {
+		switch protocol.ReadUint32(record, inventoryStateOffset) {
+		case inventoryUnused:
+			protocol.WriteUint32(record, inventoryDurationOffset, permanentDisplayMinutes/60)
+		case inventoryActive:
+			protocol.WriteUint32(record, inventoryDurationOffset, permanentDisplayMinutes)
+		}
+	}
 }

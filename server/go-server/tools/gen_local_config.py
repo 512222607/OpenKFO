@@ -12,17 +12,28 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 from server.kk_local.maps import MapCatalog
+from server.kk_local.item_admin import catalog as item_catalog
 
 
 def main():
     client = Path(sys.argv[1]).resolve()
     output = Path(sys.argv[2])
+    if len(sys.argv) > 3 and sys.argv[3] == "--merge-weapon-types":
+        config = json.loads(output.read_text(encoding="utf-8-sig"))
+        actual_hash = hashlib.sha256((client / "Data/config.spf2").read_bytes()).hexdigest()
+        if config.get("config_hash") != actual_hash:
+            raise ValueError("Client config hash differs; refusing to mix weapon catalogs")
+        config["random_weapon_types"] = {str(item["id"]): int(item["fields"][2]) for item in item_catalog(client) if item["kind"] == 25 and 1 <= int(item["fields"][2]) <= 7}
+        output.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
+        print("Merged weapon categories:", len(config["random_weapon_types"]))
+        return
     catalog = MapCatalog.from_client(client)
     package = client / "Data" / "config.spf2"
     # Character choices mirror cmd/protocol-tester/character_tls_test.go,
     # whose seven-slot table passed the native naming flow end to end.
     items = [152002, 132002, 122001, 172002, 162003, 142002, 253002]
     config = {
+        "random_weapon_types": {str(item["id"]): int(item["fields"][2]) for item in item_catalog(client) if item["kind"] == 25 and 1 <= int(item["fields"][2]) <= 7},
         "config_hash": hashlib.sha256(package.read_bytes()).hexdigest(),
         "pools": {
             f"{mode}:{capacity}": list(catalog.eligible(mode, capacity))

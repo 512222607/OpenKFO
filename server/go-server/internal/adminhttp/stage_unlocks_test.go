@@ -21,7 +21,7 @@ func TestStageUnlockManagementAuthorization(t *testing.T) {
 		environment, auth string
 		status            int
 	}{{"online", "", 401}, {"local", "Bearer " + token, 403}, {"online", "Bearer " + token, 200}} {
-		body := `{"operation":"stage_unlocks_save","environment":"` + tc.environment + `","uid":17,"stage_unlocks":{"uid":17,"revision":4,"client_hash":"` + strings.Repeat("a", 64) + `","maps":[8110]}}`
+		body := `{"gm_version":"1.1.0","operation":"stage_unlocks_save","environment":"` + tc.environment + `","uid":17,"stage_unlocks":{"uid":17,"revision":4,"client_hash":"` + strings.Repeat("a", 64) + `","maps":[8110]}}`
 		r := httptest.NewRequest("POST", "/gm/api", strings.NewReader(body))
 		r.Header.Set("Authorization", tc.auth)
 		w := httptest.NewRecorder()

@@ -35,7 +35,12 @@ func TestFosterResultUsesNativeCommonPage(t *testing.T) {
 				if outcome == persistence.StageOutcomeFailed {
 					result = 2
 				}
-				if row[10] != result || protocol.ReadUint32(row, 34) != want.Experience || protocol.ReadUint32(row, 63) != want.Gold || !bytes.Equal(row[140:], want.Profile) {
+				if row[10] != result || protocol.ReadUint32(row, 34) != want.Experience || protocol.ReadUint32(row, 63) != want.Gold || !bytes.Equal(row[140:], func() []byte {
+					if want.UID == recipient {
+						return want.Profile
+					}
+					return make([]byte, protocol.RoleProfileSize)
+				}()) {
 					t.Fatal("reward/profile mismatch")
 				}
 				if !bytes.Equal(row[87:104], make([]byte, 17)) {

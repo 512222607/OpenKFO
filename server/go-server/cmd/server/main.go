@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"kungfu.local/server/internal/moderation"
 	"kungfu.local/server/internal/releases"
 	"log"
 	"net"
@@ -35,6 +36,7 @@ func main() {
 	udpAddress := flag.String("udp-listen", "", "authenticated UDP relay address; empty keeps TLS-only mode")
 	traceProtocol := flag.Bool("trace-protocol", false, "print every decoded protocol packet (sensitive login fields redacted)")
 	protocolLog := flag.String("protocol-log", "", "append console and protocol logs to this file")
+	bannedWordsPath := flag.String("banned-words", "", "optional UTF-8 seed word list; existing GM settings take precedence")
 	flag.Parse()
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
 	log.SetOutput(os.Stdout)
@@ -100,6 +102,20 @@ func main() {
 			}
 		}
 	case "serve":
+		words := moderation.DefaultWords()
+		if *bannedWordsPath != "" {
+			raw, e := os.ReadFile(*bannedWordsPath)
+			if e != nil {
+				log.Fatal(e)
+			}
+			if len(raw) > moderation.MaxFileBytes {
+				log.Fatal("banned words file too large")
+			}
+			words = moderation.Parse(string(raw))
+		}
+		if err = store.SeedBannedWords(words); err != nil {
+			log.Fatal(err)
+		}
 		var config game.Config
 		encoded, readErr := os.ReadFile(*configPath)
 		if readErr != nil {
@@ -109,6 +125,9 @@ func main() {
 			log.Fatal("invalid game configuration")
 		}
 		if err = config.ValidateLauncherCredentials(); err != nil {
+			log.Fatal(err)
+		}
+		if err = config.ValidateTeamSeries(); err != nil {
 			log.Fatal(err)
 		}
 		if err = config.ValidateLobbies(); err != nil {
@@ -171,7 +190,10 @@ func main() {
 				log.Fatal(udpErr)
 			}
 			defer closeUDP()
-			go func() { <-ctx.Done(); closeUDP() }()
+			go func() {
+				<-ctx.Done()
+				closeUDP()
+			}()
 			log.Printf("kungfu-go authenticated UDP listening on %s", *udpAddress)
 		}
 		if *tlsAddress != "" {
@@ -179,7 +201,10 @@ func main() {
 			if listenErr != nil {
 				log.Fatal(listenErr)
 			}
-			go func() { <-ctx.Done(); listener.Close() }()
+			go func() {
+				<-ctx.Done()
+				listener.Close()
+			}()
 			go func() {
 				if serveErr := gameServer.ServeTLS(listener); serveErr != nil && ctx.Err() == nil {
 					log.Printf("direct TLS listener failed: %v", serveErr)
@@ -190,6 +215,7 @@ func main() {
 		}
 		go func() {
 			<-ctx.Done()
+			log.Printf("server_shutdown reason=%v", ctx.Err())
 			hub.Mutex.Lock()
 			for _, session := range hub.Sessions {
 				session.Close()

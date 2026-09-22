@@ -21,14 +21,16 @@ import (
 // Hub serializes room transitions. Network writes run outside this lock so a
 // slow player cannot block the other players. Split by room if scale requires it.
 type Hub struct {
-	Trace      *log.Logger
-	Mutex      sync.Mutex
-	Store      *persistence.Store
-	Config     Config
-	Rooms      map[uint16]*Room
-	Sessions   map[uint64]*Session
-	NextPlayer uint32
-	PeerKey    []byte
+	Invites              map[uint64]roomInvitation
+	SecurityLogDirectory string
+	Trace                *log.Logger
+	Mutex                sync.Mutex
+	Store                *persistence.Store
+	Config               Config
+	Rooms                map[uint16]*Room
+	Sessions             map[uint64]*Session
+	NextPlayer           uint32
+	PeerKey              []byte
 }
 
 type Channel struct {
@@ -41,6 +43,7 @@ type Channel struct {
 }
 
 type Session struct {
+	RandomWeaponMode     uint32
 	StageViewRequested   bool
 	StageViewDigest      [32]byte
 	TitleOffer           byte              // Server-announced title; retained after claim to bind retries.
@@ -94,6 +97,14 @@ func NewHub(store *persistence.Store, config Config) *Hub {
 func (hub *Hub) Attach(account persistence.Account, port uint16, peerReceipt ...string) (*Session, error) {
 	hub.Mutex.Lock()
 	defer hub.Mutex.Unlock()
+	if previous := hub.Sessions[account.UID]; previous != nil {
+		select {
+		case <-previous.Done:
+			hub.leave(previous, false)
+			delete(hub.Sessions, account.UID)
+		default:
+		}
+	}
 	if hub.Sessions[account.UID] != nil || len(hub.Sessions) >= 64 || port == 0 {
 		return nil, persistence.ErrDenied
 	}
@@ -117,22 +128,24 @@ func (hub *Hub) Attach(account persistence.Account, port uint16, peerReceipt ...
 }
 
 func (session *Session) Close() { session.closeOnce.Do(func() { close(session.Done) }) }
-func (session *Session) emit(frame tunnel.Frame) {
+func (session *Session) emit(frame tunnel.Frame) bool {
 	select {
 	case <-session.Done:
-		return
+		return false
 	default:
 	}
 	if session.queuedBytes.Add(int64(len(frame.Data)+128)) > 2*1024*1024 {
 		session.Close()
-		return
+		return false
 	}
 	select {
 	case session.Output <- frame:
 		session.traceFrame("S->C queued", frame)
+		return true
 	default:
 		session.Close()
 	}
+	return false
 }
 func (session *Session) game() *Channel { return session.Channels[session.GameChannel] }
 func (session *Session) send(channelID uint32, message protocol.Message) {
@@ -177,9 +190,18 @@ func (hub *Hub) profileReady(session *Session) error {
 		session.send(channel.ID, protocol.Message{ID: protocol.MsgCharacterOptions, Payload: options})
 		return nil
 	}
+	state, err := hub.Store.RandomWeapon(session.UID)
+	if err != nil {
+		return err
+	}
+	session.RandomWeaponMode = protocol.RandomWeaponOff
+	if randomWeaponsEnabled {
+		session.RandomWeaponMode = state.Mode
+	}
 	channel.Phase = "profile_sent"
 	session.rememberInventory(account.Inventory)
 	session.send(channel.ID, protocol.Message{ID: protocol.MsgCharacterCreated, Payload: append(account.Profile, account.InventoryBytes()...)})
+	session.send(channel.ID, protocol.RandomWeaponPreferences(session.UID, session.RandomWeaponMode))
 	return nil
 }
 
@@ -254,6 +276,11 @@ func (hub *Hub) Handle(session *Session, frame tunnel.Frame) error {
 			session.tracePacket("C->S", channel.ID, "game", message.ID, message.Payload, false)
 			channel.Sequence++
 			if err = hub.route(session, channel, message); err != nil {
+				var rejection *securityRejection
+				if errors.As(err, &rejection) {
+					hub.recordSecurityRejection(session, channel, message, err)
+					continue
+				}
 				log.Printf("packet_rejected uid=%d channel=%d phase=%s message=%d reason=%v", session.UID, channel.ID, channel.Phase, message.ID, err)
 				return err
 			}
@@ -449,6 +476,9 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 	if message.ID == protocol.MsgWeaponSwitchRequest {
 		return hub.switchWeapon(session, channel, payload)
 	}
+	if session.Room != nil && session.Room.isObserver(session) && (message.ID == 4201 || message.ID == protocol.MsgBattleEvent) {
+		return nil
+	}
 	if message.ID == 4201 || (message.ID == protocol.MsgBattleEvent && len(payload) >= 4 && (protocol.ReadUint32(payload, 0) == 8291 || protocol.ReadUint32(payload, 0) == 8292)) {
 		return hub.useTalisman(session, channel, message)
 	}
@@ -476,6 +506,11 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		return hub.stageSelection(session, payload)
 	case protocol.MsgClaimTitleReward:
 		return hub.claimTitleReward(session, payload)
+	case 6001, 6002:
+		if len(payload) != 0 {
+			return protocol.ErrFrame
+		}
+		return hub.extendedTaskList(session, message.ID+40)
 	case 6000, 6050, 6080:
 		return hub.tasks(session, message)
 	case 6051, 6052, 6081, 6082, 6311, 6312:
@@ -505,6 +540,8 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		return hub.upgradeWeapon(session, channel, payload)
 	case protocol.MsgPlayerListRequest:
 		return hub.playerDirectory(session, payload)
+	case protocol.MsgPlayerEquipmentRequest:
+		return hub.inspectEquipment(session, payload)
 	case 2420:
 		if len(payload) != 8 {
 			return protocol.ErrFrame
@@ -566,6 +603,9 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 			rejected := make([]byte, 54)
 			protocol.WriteUint32(rejected, 0, 130)
 			session.sendGame(protocol.Message{ID: 9008, Payload: rejected})
+			if errors.Is(err, persistence.ErrBannedWord) {
+				session.sendGame(notice(moderationNotice(err)))
+			}
 			return nil
 		}
 		reply := make([]byte, 54)
@@ -631,7 +671,16 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		}
 		session.sendGame(protocol.Message{ID: message.ID + 10, Payload: records})
 	case protocol.MsgRenewItem:
+		if len(payload) == 173 {
+			instance := protocol.ReadUint32(payload, 0)
+			if record := session.Inventory[instance]; len(record) == protocol.InventoryRecordSize && record[protocol.InventoryKindOffset] == protocol.ItemSuit {
+				return hub.openSuit(session, payload)
+			}
+		}
 		return hub.renewItem(session, payload)
+	case 9091:
+		// Native ticket-only gift error; this alternative purchase path is not implemented.
+		session.sendGame(protocol.Message{ID: 9110, Payload: []byte{56, 0}})
 	case 9090:
 		if err := hub.refreshVIPShop(session); err != nil {
 			session.sendGame(notice("VIP价格读取失败，请稍后重试。"))
@@ -701,6 +750,11 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		}
 		session.sendGame(protocol.Message{ID: 9050, Payload: catalog})
 		log.Printf("purchase uid=%d instance=%d", session.UID, protocol.ReadUint32(item, 0))
+	case protocol.MsgExpiredItemsRequest:
+		if len(payload) != 0 {
+			return protocol.ErrFrame
+		}
+		return hub.expiredItems(session)
 	case 2130:
 		if len(payload) != 4 {
 			return protocol.ErrFrame
@@ -722,6 +776,8 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		session.sendGame(protocol.Message{ID: 2162, Payload: protocol.Uint32Bytes(instance)})
 		delete(session.Inventory, instance)
 		log.Printf("discard uid=%d instance=%d", session.UID, instance)
+	case protocol.MsgRandomWeaponSet, protocol.MsgRandomWeaponQuery, protocol.MsgRandomWeaponEquipmentQuery, protocol.MsgRandomWeaponCancelAck:
+		return hub.randomWeapon(session, message)
 	case protocol.MsgEquipItem, protocol.MsgUnequipItem:
 		if (message.ID == protocol.MsgEquipItem && len(payload) != 16) || (message.ID == protocol.MsgUnequipItem && len(payload) != 4) {
 			return protocol.ErrFrame
@@ -736,6 +792,9 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 				session.sendGame(protocol.Message{ID: protocol.MsgEquipError, Payload: []byte{38, 0}})
 				return nil
 			}
+		}
+		if record := session.Inventory[protocol.ReadUint32(payload, 0)]; message.ID == protocol.MsgEquipItem && len(record) == protocol.InventoryRecordSize && record[protocol.InventoryKindOffset] == protocol.ItemSuit {
+			return hub.consumeSuit(session, protocol.ReadUint32(payload, 0), false)
 		}
 		equip := hub.Store.EquipmentManager().Equip
 		if message.ID == protocol.MsgEquipItem {
@@ -764,6 +823,10 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 			return err
 		}
 		session.syncEquipmentChange(message, changed, account.Inventory)
+		if session.RandomWeaponMode != protocol.RandomWeaponOff {
+			session.RandomWeaponMode = protocol.RandomWeaponOff
+			session.sendRandomWeaponOff()
+		}
 		hub.broadcastEquipment(session, account)
 	case 1232, 20546:
 		if len(payload) != 0 {
@@ -914,6 +977,11 @@ func (hub *Hub) relayDatagram(session *Session, frame tunnel.Frame) error {
 	if room == nil {
 		return nil
 	}
+	// Observers may echo latency probes, never submit opaque combat traffic.
+	if room.isObserver(session) && !observerProbe(packet[24+extra:], session.UID) {
+		return nil
+	}
+	recipients := map[uint64]bool{}
 	seen := map[uint32]bool{}
 	for offset := 24; offset < 24+extra; offset += 4 {
 		targetID := protocol.ReadUint32(packet, offset)
@@ -933,11 +1001,16 @@ func (hub *Hub) relayDatagram(session *Session, frame tunnel.Frame) error {
 			protocol.WriteUint32(reply, 16, peer.P2P)
 			reply[23] = 0
 			reply = append(reply, packet[24+extra:]...)
-			peer.emit(tunnel.Frame{Op: "udp", Port: peer.UDPPort, Data: reply})
+			if !peer.emit(tunnel.Frame{Op: "udp", Port: peer.UDPPort, Data: reply}) {
+				continue
+			}
 			hub.observePeerProbe(session, peer, packet[24+extra:], time.Now())
+			room.observeRelayedPairSelection(session, peer, packet[24+extra:])
+			recipients[peer.UID] = true
 			session.UDPRelayed++
 		}
 	}
+	hub.observeRelayedBattle(session, packet[24+extra:], recipients)
 	if time.Since(session.LastUDPNotice) >= 5*time.Second {
 		log.Printf("udp_relay uid=%d room=%d stage=%s bytes=%d recipients=%d forwarded_total=%d", session.UID, room.ID, room.Stage, len(packet), extra/4, session.UDPRelayed)
 		session.LastUDPNotice = time.Now()
@@ -990,6 +1063,9 @@ func (hub *Hub) chat(session *Session, message protocol.Message) error {
 		if padding != 0 {
 			return protocol.ErrFrame
 		}
+	}
+	if hub.rejectText(session, decoded) {
+		return nil
 	}
 	reply := make([]byte, 256)
 	protocol.WriteUint64(reply, 0, session.UID)

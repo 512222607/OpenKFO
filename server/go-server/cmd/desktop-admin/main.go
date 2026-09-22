@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"kungfu.local/server/internal/desktop"
+	"kungfu.local/server/internal/gmversion"
 	"os"
 	"path/filepath"
 )
@@ -28,6 +29,11 @@ func run() (any, error) {
 	var request desktop.Request
 	if err = json.Unmarshal(input, &request); err != nil {
 		return nil, err
+	}
+	if request.Operation != "gm_version" {
+		if err := gmversion.Check(request.GMVersion); err != nil {
+			return nil, err
+		}
 	}
 	admin := desktop.New(absolute)
 	admin.LocalSettings = *localSettings

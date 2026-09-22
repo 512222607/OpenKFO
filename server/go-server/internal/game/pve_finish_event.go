@@ -9,6 +9,9 @@ import (
 // accepts only the current controller and room context. This synchronizes a
 // client mode flag, not a verified victory or permission to grant rewards.
 func (h *Hub) pveFinishEvent(s *Session, message protocol.Message) error {
+	return h.applyPVEFinish(s, message, false)
+}
+func (h *Hub) applyPVEFinish(s *Session, message protocol.Message, observed bool) error {
 	r := s.Room
 	if r.Type() != protocol.FosterMode || r.Owner != s.UID {
 		return nil
@@ -27,6 +30,8 @@ func (h *Hub) pveFinishEvent(s *Session, message protocol.Message) error {
 	log.Printf("关卡结束标记 room=%d serial=%d 接收进度一致=%t（尚非发奖凭据）", r.ID, r.Serial, r.fosterReceiptsComplete())
 	// The controller set its flag before sending; peers need the same event.
 	// Replays are safe: the native consumer assigns true, it does not toggle.
-	h.broadcast(r, message, s.UID)
+	if !observed {
+		h.broadcast(r, message, s.UID)
+	}
 	return nil
 }

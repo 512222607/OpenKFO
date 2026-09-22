@@ -9,6 +9,7 @@ import (
 // A policy projection, not proof that the server implements each PVE mode.
 // Callers must still filter their supported map pools before game admission.
 type StagePlayerView struct {
+	Access                       StageAccess `json:"-"`
 	Configured                   bool
 	RuleRevision, UnlockRevision uint64
 	Maps                         []uint32
@@ -53,6 +54,7 @@ func (s *Store) StagePlayerView(uid uint64, clientHash string) (StagePlayerView,
 	if access.ClientHash != clientHash {
 		return out, ErrDenied
 	}
+	out.Access = access
 	out.Catalogue = append([]uint32(nil), access.PVEMaps...)
 	var raw []byte
 	grants := StagePlayerUnlocks{UID: uid, ClientHash: clientHash}

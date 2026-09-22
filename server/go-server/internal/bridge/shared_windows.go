@@ -13,14 +13,15 @@ import (
 )
 
 type ownedClient struct {
-	process  *os.Process
-	identity Identity
-	done     chan struct{}
+	process    *os.Process
+	identity   Identity
+	fpsCounter uintptr
+	done       chan struct{}
 }
 
 // Only the verified client executable created here is modified, before its first
 // instruction. The executable on disk and all game assets remain shared.
-func startSharedClient(image string) (*ownedClient, error) {
+func startSharedClient(image string, options PerformanceOptions) (*ownedClient, error) {
 	app, err := syscall.UTF16PtrFromString(image)
 	if err != nil {
 		return nil, err
@@ -57,6 +58,10 @@ func startSharedClient(image string) (*ownedClient, error) {
 	if err = patchGPKCompatibility(pi.Process); err != nil {
 		return nil, err
 	}
+	counter, err := patchPerformance(pi.Process, options)
+	if err != nil {
+		return nil, err
+	}
 	identity, err := processIdentity(pi.ProcessId, image)
 	if err != nil {
 		return nil, err
@@ -70,9 +75,10 @@ func startSharedClient(image string) (*ownedClient, error) {
 		p.Release()
 		return nil, err
 	}
-	child := &ownedClient{process: p, identity: identity, done: make(chan struct{})}
+	child := &ownedClient{process: p, identity: identity, fpsCounter: counter, done: make(chan struct{})}
 	go func() { p.Wait(); close(child.done) }()
 	ok = true
+	log.Printf("client_performance pid=%d high_frame_rate=%t show_fps=%t", identity.PID, options.HighFrameRate, options.ShowFPS)
 	log.Printf("shared_client_started pid=%d mutex=%q", identity.PID, replacement[:9])
 	log.Printf("client_loading_thread_cleanup pid=%d mode=natural_exit", identity.PID)
 	log.Printf("client_gpk_compatibility pid=%d mode=factory_and_callbacks_disabled", identity.PID)
@@ -100,12 +106,25 @@ func (b *Bridge) runShared(ctx context.Context) error {
 	}()
 	statePath := func(n int) string { return filepath.Join(b.Config.ControlDirectory, fmt.Sprintf("window-%d.json", n)) }
 	start := func(n int) error {
-		child, err := startSharedClient(b.Image)
+		var options PerformanceOptions
+		raw, err := os.ReadFile(filepath.Join(b.Config.ControlDirectory, fmt.Sprintf("performance-%d.json", n)))
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		if err == nil {
+			if err = json.Unmarshal(raw, &options); err != nil {
+				return fmt.Errorf("invalid performance options: %w", err)
+			}
+		}
+		child, err := startSharedClient(b.Image, options)
 		if err != nil {
 			return err
 		}
 		children[n] = child
-		data, _ := json.Marshal(child.identity)
+		data, _ := json.Marshal(struct {
+			Identity
+			FPSCounter uintptr `json:"fps_counter"`
+		}{child.identity, child.fpsCounter})
 		if err = os.WriteFile(statePath(n), data, 0600); err != nil {
 			child.process.Kill()
 			return err

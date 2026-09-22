@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$Config = (Join-Path (Split-Path $PSScriptRoot -Parent) 'config/network.json'),
     [string]$Root = (Split-Path $PSScriptRoot -Parent),
@@ -21,7 +21,6 @@ $changes = @()
 $bridges = if ($ConfigPaths) { $ConfigPaths } else { $network.bridge_paths }
 $groups = @{ bridge = $bridges }
 if (-not $ConfigPaths) {
-    $groups.gm = $network.gm_updater_paths
     $groups.admin = $network.admin_paths
     $groups.manifest = $network.launcher_manifest_paths
 }
@@ -40,7 +39,6 @@ foreach ($kind in $groups.Keys) {
                 # Preserve update enablement: an absent field disables updates for direct TLS.
                 if ($settings.update_base_url) { Set-Field $settings update_base_url $updates.AbsoluteUri }
             }
-            gm { Set-Field $settings manifest ([uri]::new($updates, 'gm.json').AbsoluteUri) }
             admin { Set-Field $settings host $network.ssh_host; Set-Field $settings port $network.ssh_port }
             manifest {
                 if ($settings.kind -ne 'launcher' -or $uri.Scheme -ne 'tls') { throw 'Launcher route manifests require direct TLS.' }

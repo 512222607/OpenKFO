@@ -3,6 +3,7 @@ package game
 import (
 	"bytes"
 	"testing"
+	"time"
 
 	"kungfu.local/server/internal/persistence"
 	"kungfu.local/server/internal/protocol"
@@ -80,7 +81,7 @@ func TestRoomThirdMemberRosterAndNativeFields(t *testing.T) {
 	if newcomer.Room != room || newcomer.game().Phase != "room" || len(room.Members) != 3 {
 		t.Fatal("join did not commit membership")
 	}
-	outputs := roomOutputs(t, newcomer, 3100, 3160, 3105, 4070)
+	outputs := roomOutputs(t, newcomer, 3100, 3160, 3105, 4050)
 	entry := outputs[0].Payload
 	if len(entry) != 245 || entry[10] != 2 || entry[11] != 3 || entry[66] != 1 || !bytes.Equal(entry[96:], own[:149]) {
 		t.Fatal("native 3100 member fields incorrect")
@@ -90,14 +91,17 @@ func TestRoomThirdMemberRosterAndNativeFields(t *testing.T) {
 		t.Fatal("3105 variable record stride or slot ordering incorrect")
 	}
 	for _, existing := range []*Session{host, peer} {
-		messages := roomOutputs(t, existing, 3090, 4070)
+		messages := roomOutputs(t, existing, 3090, 4050)
+		if protocol.ReadUint64(messages[1].Payload, 0) != peer.UID {
+			t.Fatal("wrong ready player restored")
+		}
 		record := messages[0].Payload
 		if len(record) != 217 || record[8] != 2 || record[9] != 3 || record[10] != 1 || record[64] != 1 {
 			t.Fatal("3090 slot/spawn/team or equipment tail incorrect")
 		}
 	}
-	if room.Members[peer.UID].Ready {
-		t.Fatal("join must invalidate existing readiness")
+	if !room.Members[peer.UID].Ready || member.Ready {
+		t.Fatal("join must preserve peers readiness and leave newcomer unready")
 	}
 }
 
@@ -187,6 +191,9 @@ func TestRoomOwnerDepartureAndLeaveRetry(t *testing.T) {
 	if room.Owner != peer.UID || protocol.ReadUint64(messages[1].Payload, 0) != peer.UID || host.Room != nil || host.game().Phase != "lobby" {
 		t.Fatal("owner transfer or departure incorrect")
 	}
+	if room.Members[peer.UID].Ready {
+		t.Fatal("new owner retained readiness")
+	}
 	roomRequest(t, hub, host, 3110, nil)
 	roomOutputs(t, host, 3115)
 	roomOutputs(t, peer)
@@ -227,10 +234,10 @@ func TestRoomKickRequiresOwnerAndRemovesOnlyTarget(t *testing.T) {
 	payload = append(protocol.Uint64Bytes(peer.UID), 0)
 	roomRequest(t, hub, host, 3140, payload)
 	roomOutputs(t, peer, 3150)
-	roomOutputs(t, host, 3150, 3130, 4070)
-	roomOutputs(t, newcomer, 3150, 3130, 4070)
-	if len(room.Members) != 2 || room.Owner != host.UID || peer.Room != nil || peer.game().Phase != "lobby" || room.Members[newcomer.UID].Ready {
-		t.Fatal("kick did not isolate target and reset remaining readiness")
+	roomOutputs(t, host, 3150, 3130)
+	roomOutputs(t, newcomer, 3150, 3130)
+	if len(room.Members) != 2 || room.Owner != host.UID || peer.Room != nil || peer.game().Phase != "lobby" || !room.Members[newcomer.UID].Ready {
+		t.Fatal("kick did not isolate target and preserve remaining readiness")
 	}
 }
 
@@ -242,4 +249,61 @@ func TestRoomFirstMemberReceivesNoEmptyRoster(t *testing.T) {
 	account := persistence.Account{UID: host.UID, Profile: make([]byte, 125)}
 	hub.completeRoomJoin(room, member, fighter(account, member), nil)
 	roomOutputs(t, host, 3100, 3160)
+}
+
+func TestWaitingMemberDeparturePreservesReadiness(t *testing.T) {
+	for _, spectator := range []bool{false, true} {
+		hub, host, peer, leaving := waitingRoomFixture()
+		room := host.Room
+		leaving.Room = room
+		leaving.game().Phase = "room"
+		room.Members[leaving.UID] = &Member{Session: leaving, Slot: 2, Spectator: spectator}
+		room.Members[host.UID].Ready = true
+		room.Members[peer.UID].Ready = true
+		hub.beginNetworkProbe(room)
+		// A fighter who has not prepared blocks the probe; an observer does not.
+		if spectator {
+			for _, s := range []*Session{host, peer} {
+				roomOutputs(t, s, protocol.MsgNetworkDelayProbe)
+			}
+			roomOutputs(t, leaving)
+		}
+		hub.leave(leaving, true)
+		roomOutputs(t, leaving, protocol.MsgRoomLeft)
+		for _, s := range []*Session{host, peer} {
+			roomOutputs(t, s, protocol.MsgPlayerLeftRoom, protocol.MsgPlayerNotReady)
+			if room.Members[s.UID].Ready != (s != host) {
+				t.Fatal("departure cancelled another member's readiness")
+			}
+		}
+		if room.NetworkProbe != nil || room.Stage != "room" {
+			t.Fatal("departure retained pending start or started battle")
+		}
+	}
+}
+
+func TestJoinBeforeTransportBindingDoesNotDisconnect(t *testing.T) {
+	for _, bound := range []bool{false, true} {
+		hub, host, peer, newcomer := waitingRoomFixture()
+		newcomer.Bound = bound
+		newcomer.P2PUntil = time.Now().Add(-time.Second)
+		host.Room.Members[peer.UID].Ready = true
+		join := make([]byte, 14)
+		protocol.WriteUint16(join, 0, host.Room.ID)
+		roomRequest(t, hub, newcomer, protocol.MsgJoinRoom, join)
+		replies := roomOutputs(t, newcomer, 3080, 20150)
+		if !bytes.Equal(replies[0].Payload[:14], join) {
+			t.Fatal("join response lost request")
+		}
+		if newcomer.Room != nil || newcomer.game().Phase != "lobby" || !host.Room.Members[peer.UID].Ready {
+			t.Fatal("failed admission changed room state")
+		}
+		select {
+		case <-newcomer.Done:
+			t.Fatal("login disconnected")
+		default:
+		}
+		roomOutputs(t, host)
+		roomOutputs(t, peer)
+	}
 }

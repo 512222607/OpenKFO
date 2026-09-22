@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Net.Security;
@@ -133,7 +133,7 @@ internal sealed class InstanceManager
         string folder = Path.Combine(root, "launcher-components", "updater", Hash(bytes)[..16]);
         Directory.CreateDirectory(folder);
         string helper = Path.Combine(folder, "OpenKFO.Updater.exe");
-        if (!File.Exists(helper) || FileHash(helper) != Hash(bytes)) File.WriteAllBytes(helper, bytes);
+        helper = PrepareUpdaterFile(helper, bytes);
         string executable = Environment.ProcessPath!;
         var uri = UpdateManifest("launcher");
         var start = new ProcessStartInfo(helper) { WorkingDirectory = folder, UseShellExecute = false };
@@ -143,12 +143,45 @@ internal sealed class InstanceManager
         return process.ExitCode == 0;
     }
 
+
+    // Publish a verified file atomically: never truncate an executable in use.
+    internal static string PrepareUpdaterFile(string helper, byte[] bytes)
+    {
+        string digest = Hash(bytes);
+        try { if (File.Exists(helper) && FileHash(helper) == digest) return helper; }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { /* A locked incomplete file will use a private copy below. */ }
+        string temporary = helper + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            File.WriteAllBytes(temporary, bytes);
+            if (FileHash(temporary) != digest) throw new IOException("更新助手校验失败，请重新下载启动器。");
+            try { File.Move(temporary, helper, true); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                // Another helper may still be mapped into a running process.
+                // A private copy avoids killing an update in the middle of Apply.
+                string recovery = Path.Combine(Path.GetDirectoryName(helper)!, "run-" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(recovery);
+                helper = Path.Combine(recovery, Path.GetFileName(helper));
+                File.Move(temporary, helper);
+            }
+            return helper;
+        }
+        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+    }
+
+    internal void ValidateGameDirectory()
+    {
+        if (!File.Exists(Path.Combine(SourceDirectory, "Data", "config.spf2")))
+            throw new GameDirectoryException();
+    }
+
     internal string UsageInstructions => $"1. 将启动器.exe 放进完整游戏目录，与 Data 文件夹同级（自动释放老登客户端 gfld.dat）。\n2. 双击启动器，连接配置、证书和所需组件会自动准备，无需手动复制 DLL。\n3. 选择窗口、填写账号密码，点击“启动游戏”。可创建桌面快捷方式。\n\n不要在压缩包内直接运行。游戏启动前会检查客户端更新；已有自定义连接配置会保留。\n\n游戏目录：{SourceDirectory}\n启动器配置目录：{root}";
 
     internal void PrepareClientImage()
     {
         if (!Directory.Exists(Path.Combine(SourceDirectory, "Data")))
-            throw new IOException("请将启动器放到完整游戏目录，与 Data 文件夹同级。启动器内置 gfld.dat，但不包含完整游戏资源。");
+            throw new GameDirectoryException();
         string target = Path.Combine(SourceDirectory, "gfld.dat");
         if (File.Exists(target))
         {
@@ -294,9 +327,10 @@ internal sealed class InstanceManager
         if (window != IntPtr.Zero) { ShowWindow(window, 9); SetForegroundWindow(window); }
     }
 
-    internal async Task LaunchAsync(int number, IProgress<string> progress)
+    internal async Task LaunchAsync(int number, IProgress<string> progress, bool highFrameRate = false, bool showFPS = true)
     {
         if (number < 1 || number > WindowCount) throw new ArgumentOutOfRangeException(nameof(number));
+        ValidateGameDirectory();
         if (SharedClient) CheckSharedBridgeDirectory();
         await RestoreLoginCertificateAsync(progress);
         PrepareClientImage();
@@ -310,7 +344,13 @@ internal sealed class InstanceManager
         string config = await Task.Run(() => Prepare(number, progress));
         using (var existing = FindGame(number))
         {
-            if (existing != null) { await PrepareLoginAsync(number, existing, progress); Activate(number); return; }
+            if (existing != null) { StartFpsOverlay(number, existing); await PrepareLoginAsync(number, existing, progress); Activate(number); return; }
+        }
+        if (SharedClient) {
+            string optionsPath = Path.Combine(SharedDirectory, $"performance-{number}.json");
+            string pending = optionsPath + ".tmp";
+            File.WriteAllText(pending, JsonSerializer.Serialize(new { high_frame_rate = highFrameRate, show_fps = showFPS }));
+            File.Move(pending, optionsPath, true);
         }
         if (!SharedClient) CheckAvailablePorts(number);
         string bridge = Path.Combine(SharedClient ? SharedDirectory : InstanceDirectory(number), "OnlineBridge.exe");
@@ -323,10 +363,21 @@ internal sealed class InstanceManager
         {
             await Task.Delay(500);
             using var game = FindGame(number);
-            if (game != null) { await PrepareLoginAsync(number, game, progress); return; }
+            if (game != null) { StartFpsOverlay(number, game); await PrepareLoginAsync(number, game, progress); return; }
             if (helper.HasExited && (!SharedClient || helper.ExitCode != 0)) throw new IOException($"网络组件已退出，请查看窗口 {number} 的日志。");
         }
         throw new IOException($"窗口 {number} 启动超时，请查看日志；不要重复点击启动。");
+    }
+
+    private void StartFpsOverlay(int number, Process game)
+    {
+        if (!SharedClient) return;
+        var state = JsonNode.Parse(File.ReadAllText(Path.Combine(SharedDirectory, $"window-{number}.json")))!;
+        uint counter = state["fps_counter"]?.GetValue<uint>() ?? 0;
+        if (counter == 0 || state["PID"]!.GetValue<int>() != game.Id || state["Created"]!.GetValue<ulong>() != (ulong)game.StartTime.ToFileTimeUtc()) return;
+        var start = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false, CreateNoWindow = true };
+        foreach (string arg in new[] { "--fps-overlay", game.Id.ToString(), game.StartTime.ToFileTimeUtc().ToString(), counter.ToString() }) start.ArgumentList.Add(arg);
+        using var overlay = Process.Start(start);
     }
 
     private void CheckSharedBridgeDirectory()
@@ -480,6 +531,7 @@ internal sealed class InstanceManager
         foreach (string key in new[] { "server_certificate", "login_certificate", "login_key" }) config[key] = Resolve(baseline[key]!.GetValue<string>());
         string path = Path.Combine(InstanceDirectory(number), "bridge.json");
         File.WriteAllText(path, config.ToJsonString(new() { WriteIndented = true }));
+
         using var resource = Assembly.GetExecutingAssembly().GetManifestResourceStream("OnlineBridge.exe") ?? throw new IOException("缺少网络组件。");
         using var buffer = new MemoryStream(); resource.CopyTo(buffer);
         string helper = Path.Combine(SharedClient ? SharedDirectory : InstanceDirectory(number), "OnlineBridge.exe");

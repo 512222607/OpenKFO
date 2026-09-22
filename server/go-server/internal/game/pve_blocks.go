@@ -15,6 +15,9 @@ type pveBlock struct {
 }
 
 func (h *Hub) pveBlockMessage(s *Session, ch *Channel, message protocol.Message) error {
+	return h.applyPVEBlock(s, ch, message, false)
+}
+func (h *Hub) applyPVEBlock(s *Session, ch *Channel, message protocol.Message, observed bool) error {
 	r, p := s.Room, message.Payload
 	if r == nil || (r.Type() != protocol.FosterMode && r.Type() != protocol.StageAssault) || r.Owner != s.UID {
 		return nil
@@ -66,7 +69,9 @@ func (h *Hub) pveBlockMessage(s *Session, ch *Channel, message protocol.Message)
 	}
 	r.PVEBlocks[id] = next
 	if !loading {
-		h.broadcast(r, message, s.UID)
+		if !observed {
+			h.broadcast(r, message, s.UID)
+		}
 	}
 	return nil
 }

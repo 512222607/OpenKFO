@@ -1,0 +1,201 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/material.dart';
+import 'package:openkfo_launcher/main.dart';
+import 'package:openkfo_launcher/launcher_service.dart';
+import 'package:openkfo_launcher/update_service.dart';
+import 'package:openkfo_launcher/log_export.dart';
+import 'package:openkfo_launcher/update_progress_view.dart';
+
+class FakeUpdates extends UpdateService {
+  final Map<String, List<int>> payloads;
+  final fetched = <String>[];
+  FakeUpdates(super.launcher, this.payloads, {super.onProgress});
+  @override
+  Future<List<int>?> download(Uri url, int max, {bool missing = false, void Function(int)? onBytes}) async {
+    fetched.add(url.path);
+    final bytes=payloads[url.pathSegments.last];
+    onBytes?.call(0);
+    if(bytes!=null)onBytes?.call(bytes.length);
+    return bytes;
+  }
+}
+
+void main() {
+  test('client selection defaults to gfld and supports gfxz', () {
+    final service = LauncherService('.');
+    service.config = {};
+    expect(service.clientExecutable, 'gfld.dat');
+    service.config['client_executable'] = 'gfxz.dat';
+    expect(service.clientExecutable, 'gfxz.dat');
+    service.config['client_executable'] = '../gfxz.dat';
+    expect(() => service.clientExecutable, throwsException);
+  });
+  test('TXT export includes full Chinese log and hides network endpoints',()async {
+    final dir=await Directory.systemTemp.createTemp('log-export-');addTearDown(()=>dir.delete(recursive:true));
+    final source=File('${dir.path}/online-client.log');await source.writeAsString('开始日志\n${List.filled(4000,"玩家动作 中文\n").join()}https://example.invalid:443/test\n结束日志');
+    final path='${dir.path}/日志.txt';await exportLog(source,path);final bytes=await File(path).readAsBytes();expect(bytes.take(3),[0xef,0xbb,0xbf]);final text=utf8.decode(bytes.skip(3).toList());expect(text,contains('开始日志'));expect(text,contains('结束日志'));expect(text,contains('[NET_ENDPOINT]'));expect(text, isNot(contains('example.invalid')));expect(bytes.length,greaterThan(32768));
+  });
+  testWidgets('update details show both progress bars and byte counts',(tester)async {
+    await tester.pumpWidget(const MaterialApp(home:Scaffold(body:UpdateProgressView(UpdateProgress('下载更新文件','Weapon/test.dat',2,4,512,1024,1536,4096)))));
+    expect(find.text('文件 2 / 4'),findsOneWidget);expect(find.text('Weapon/test.dat'),findsOneWidget);expect(find.byType(LinearProgressIndicator),findsNWidgets(2));
+    final bars=tester.widgetList<LinearProgressIndicator>(find.byType(LinearProgressIndicator)).toList();expect(bars[0].value,.5);expect(bars[1].value,.375);expect(tester.takeException(),isNull);
+  });
+
+  testWidgets('small window keeps registration hint and controls visible', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(760, 660);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      const MaterialApp(home: LauncherPage(preview: true)),
+    );
+    await tester.pump();
+    expect(find.textContaining('账号不存在时'), findsOneWidget);
+    expect(find.text('启动游戏'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+  test(
+    'only changed logic downloads; corrupt component never changes live files',
+    () async {
+      final root = await Directory.systemTemp.createTemp('update-test-');
+      addTearDown(() => root.delete(recursive: true));
+      final stage = await Directory('${root.path}/staged').create();
+      final service = LauncherService(root.path)
+        ..config = {
+          'url': 'tls://example.invalid:19091',
+          'update_base_url': 'https://example.invalid/updates/',
+        };
+      final files = <String, dynamic>{};
+      for (final name in [
+        '启动器.exe',
+        'LauncherSupport.exe',
+        'data/app.so',
+        'flutter_windows.dll',
+      ]) {
+        final old = File('${root.path}/$name');
+        await old.parent.create(recursive: true);
+        await old.writeAsBytes([1]);
+        final next = name == 'data/app.so' ? [2] : [1];
+        files[name] = {'sha256': hashBytes(next), 'size': 1};
+      }
+      final manifest = <String, dynamic>{
+        'kind': 'launcher-flutter',
+        'version': 'test',
+        'notes': 'test',
+        'files': files,
+      };
+      final events=<UpdateProgress>[];
+      final update = FakeUpdates(service, {
+        '${hashBytes([2])}.bin': [2],
+      },onProgress:events.add);
+      final changed = await update.stageChanges(manifest, stage, (_) {});
+      expect(changed.length, 1);
+      expect(changed.single['Name'], 'data/app.so');
+      expect(events.first.received,0);
+      expect(events.last.phase,'校验更新文件');
+      expect(events.last.overallFraction,1);
+      expect(events.every((v)=>v.count==1 && v.file=='data/app.so'),true);
+      expect(update.fetched.length, 1);
+      expect(await File('${root.path}/data/app.so').readAsBytes(), [1]);
+      final corrupt = FakeUpdates(service, {
+        '${hashBytes([2])}.bin': [3],
+      });
+      await expectLater(
+        corrupt.stageChanges(manifest, stage, (_) {}),
+        throwsException,
+      );
+      expect(await File('${root.path}/data/app.so').readAsBytes(), [1]);
+    },
+  );
+  test(
+    'component preparation repairs login files and preserves other settings',
+    () async {
+      final dir = await Directory.systemTemp.createTemp('launcher-test-');
+      addTearDown(() => dir.delete(recursive: true));
+      final payload = Directory('${dir.path}/launcher-files');
+      await payload.create();
+      final contents = <String, List<int>>{
+        'gfld.dat': [1, 2, 3],
+        'SDError.dll': [4],
+        'libssl-1_1.dll': [5],
+        'libcrypto-1_1.dll': [6],
+        'runtime-x86/vcruntime140.dll': [11],
+        'runtime-x86/ucrtbase.dll': [12],
+        'OnlineBridge.exe': [7],
+        'client-config.xml': utf8.encode('<LoginServer Port="18000"/>'),
+        'bridge.json': utf8.encode(
+          jsonEncode({
+            'client_directory': '.',
+            'url': 'tls://example.invalid:19091',
+            'shared_client': true,
+            'login_certificate': 'launcher-certificates/online/login.crt',
+          }),
+        ),
+        'launcher-certificates/online/origin.crt': [8],
+        'launcher-certificates/online/login.crt': [9],
+        'launcher-certificates/online/login.key': [10],
+      };
+      for (final e in contents.entries) {
+        final f = File('${payload.path}/${e.key}');
+        await f.parent.create(recursive: true);
+        await f.writeAsBytes(e.value);
+      }
+      await File('${payload.path}/files.json').writeAsString(
+        jsonEncode(contents.map((k, v) => MapEntry(k, hashBytes(v)))),
+      );
+      await Directory('${dir.path}/Data').create();
+      await File('${dir.path}/Data/config.spf2').writeAsBytes([42]);
+      await File('${dir.path}/Settings.xml').writeAsString(
+        '<Settings><LoginServer Index="2"/><Audio Volume="17"/></Settings>',
+      );
+      final service = LauncherService(dir.path);
+      await service.init();
+      await service.prepare();
+      expect(await File('${dir.path}/SDError.dll').readAsBytes(), [4]);
+      expect(await File('${dir.path}/zz.crt').readAsBytes(), [9]);
+      expect(await File('${dir.path}/vcruntime140.dll').readAsBytes(), [11]);
+      expect(await File('${dir.path}/ucrtbase.dll').readAsBytes(), [12]);
+      expect(
+        await File('${dir.path}/Settings.xml').readAsString(),
+        contains('Index="0"'),
+      );
+      expect(
+        await File('${dir.path}/Settings.xml').readAsString(),
+        contains('Volume="17"'),
+      );
+      await File('${dir.path}/SDError.dll').writeAsBytes([99]);
+      await service.prepare();
+      expect(await File('${dir.path}/SDError.dll').readAsBytes(), [4]);
+      await File('${payload.path}/SDError.dll').writeAsBytes([99]);
+      await expectLater(service.prepare(), throwsException);
+    },
+  );
+  test('update paths reject configuration replacement and traversal', () {
+    for (final path in [
+      '../x.dll',
+      'data/../x',
+      'C:/x.dll',
+      'bridge.json',
+      'a\\b.dll',
+      'data/x. /y',
+    ]) {
+      expect(allowedLauncher(path), false, reason: path);
+    }
+    expect(allowedLauncher('data/app.so'), true);
+    expect(allowedLauncher('launcher-files/LoginSkin.dll'), true);
+    expect(allowedClient('Data/config.spf2'), true);
+    expect(allowedClient('gfld.dat'), false);
+  });
+  test('wrong directory has a friendly message', () async {
+    final d = await Directory.systemTemp.createTemp();
+    addTearDown(() => d.delete());
+    final s = LauncherService(d.path)..game = d.path;
+    await expectLater(s.validate(), throwsA(isA<GameDirectoryError>()));
+    expect(GameDirectoryError().toString(), isNot(contains('Exception')));
+  });
+}

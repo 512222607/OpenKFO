@@ -31,6 +31,7 @@ void main() {
       final requests = <Map<String, dynamic>>[];
       Future<dynamic> api(Map<String, dynamic> r) async {
         requests.add(r);
+        if (r['operation'] == 'gm_version') return {'version': '1.1.0'};
         if (r['operation'] == 'catalog')
           return {'root': '', 'items': <dynamic>[]};
         return <dynamic>[];

@@ -20,34 +20,36 @@ type AdminOffer struct {
 	Enabled bool `json:"enabled"`
 }
 type AdminRequest struct {
-	Definition       *ItemDefinition     `json:"definition,omitempty"`
-	StageUnlocks     *StagePlayerUnlocks `json:"stage_unlocks,omitempty"`
-	WeaponSettings   *WeaponSettings     `json:"weapon_settings,omitempty"`
-	VIPShopSettings  *VIPShopSettings    `json:"vip_shop_settings,omitempty"`
-	TalismanSettings *TalismanSettings   `json:"talisman_settings,omitempty"`
-	Titles           *TitleSettings      `json:"titles,omitempty"`
-	Tasks            *TaskSettings       `json:"tasks,omitempty"`
-	Training         *TrainingSettings   `json:"training,omitempty"`
-	VIPKind          uint32              `json:"vip_kind,omitempty"`
-	Honour           *HonourSettings     `json:"honour,omitempty"`
-	StageAccess      *StageAccess        `json:"stage_access,omitempty"`
-	Instance         uint32              `json:"instance"`
-	ExpiresAt        *int64              `json:"expires_at,omitempty"`
-	Keys             []string            `json:"keys,omitempty"`
-	Currency         string              `json:"currency,omitempty"`
-	Price            int64               `json:"price,omitempty"`
-	Rewards          *RewardRules        `json:"rewards,omitempty"`
-	RewardRevision   uint64              `json:"reward_revision"`
-	Operation        string              `json:"operation"`
-	ID               string              `json:"id"`
-	UID              uint64              `json:"uid"`
-	Mode             string              `json:"mode"`
-	Amount           uint32              `json:"amount"`
-	Records          [][]byte            `json:"records"`
-	Offers           []AdminOffer        `json:"offers"`
-	Enabled          bool                `json:"enabled"`
-	All              bool                `json:"all"`
-	Preserve         bool                `json:"preserve"`
+	BannedWords      *BannedWordsSettings `json:"banned_words,omitempty"`
+	GMVersion        string               `json:"gm_version"`
+	Definition       *ItemDefinition      `json:"definition,omitempty"`
+	StageUnlocks     *StagePlayerUnlocks  `json:"stage_unlocks,omitempty"`
+	WeaponSettings   *WeaponSettings      `json:"weapon_settings,omitempty"`
+	VIPShopSettings  *VIPShopSettings     `json:"vip_shop_settings,omitempty"`
+	TalismanSettings *TalismanSettings    `json:"talisman_settings,omitempty"`
+	Titles           *TitleSettings       `json:"titles,omitempty"`
+	Tasks            *TaskSettings        `json:"tasks,omitempty"`
+	Training         *TrainingSettings    `json:"training,omitempty"`
+	VIPKind          uint32               `json:"vip_kind,omitempty"`
+	Honour           *HonourSettings      `json:"honour,omitempty"`
+	StageAccess      *StageAccess         `json:"stage_access,omitempty"`
+	Instance         uint32               `json:"instance"`
+	ExpiresAt        *int64               `json:"expires_at,omitempty"`
+	Keys             []string             `json:"keys,omitempty"`
+	Currency         string               `json:"currency,omitempty"`
+	Price            int64                `json:"price,omitempty"`
+	Rewards          *RewardRules         `json:"rewards,omitempty"`
+	RewardRevision   uint64               `json:"reward_revision"`
+	Operation        string               `json:"operation"`
+	ID               string               `json:"id"`
+	UID              uint64               `json:"uid"`
+	Mode             string               `json:"mode"`
+	Amount           uint32               `json:"amount"`
+	Records          [][]byte             `json:"records"`
+	Offers           []AdminOffer         `json:"offers"`
+	Enabled          bool                 `json:"enabled"`
+	All              bool                 `json:"all"`
+	Preserve         bool                 `json:"preserve"`
 }
 
 func itemKey(record []byte) string {
@@ -71,6 +73,13 @@ func (store *Store) adminOffers() ([]AdminOffer, error) {
 }
 func (store *Store) Admin(request AdminRequest) (any, error) {
 	switch request.Operation {
+	case "banned_words_get":
+		return store.BannedWords()
+	case "banned_words_save":
+		if request.BannedWords == nil {
+			return nil, ErrDenied
+		}
+		return store.SaveBannedWords(*request.BannedWords)
 	case "definitions_get":
 		return store.ItemManager().Definitions()
 	case "definition_save":

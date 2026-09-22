@@ -199,7 +199,9 @@ func (server *Server) serveConnection(connection *tls.Conn) {
 	}
 	session, err := server.Hub.Attach(account, auth.Port, auth.PeerReceipt)
 	if err != nil {
-		if errors.Is(err, errPeerReceipt) {
+		if errors.Is(err, errPeerOccupied) {
+			deny("peer_receipt_occupied_restart_game")
+		} else if errors.Is(err, errPeerReceipt) {
 			deny("peer_receipt_invalid_restart_game")
 		} else {
 			deny("account_already_online")

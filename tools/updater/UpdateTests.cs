@@ -8,6 +8,17 @@ internal static class UpdateTests
     {
         string root = Path.Combine(Path.GetTempPath(), "openkfo-updater-test-" + Guid.NewGuid()); Directory.CreateDirectory(Path.Combine(root, "Data")); try
         {
+            var gm = new Manifest("gm", "startup-test", "GM startup test", new string('a', 64), 1, new string('a', 64) + ".zip", null);
+            var gmManifest = Path.Combine(root, "gm-startup.json");
+            File.WriteAllText(gmManifest, System.Text.Json.JsonSerializer.Serialize(gm));
+            File.Copy(gmManifest, Path.Combine(root, "gm-installed.json"));
+            using (var form = new UpdateForm("gm", root, new Uri("https://example.com/gm.json"), null, offlineManifest: gmManifest, autoCheck: true) { Opacity = 0, ShowInTaskbar = false }) {
+                using var timeout = new System.Windows.Forms.Timer { Interval = 3000 };
+                bool timedOut = false;
+                timeout.Tick += (_, _) => { timedOut = true; form.Close(); }; timeout.Start();
+                Application.Run(form);
+                if (timedOut || !form.Completed) throw new Exception("current GM startup check did not complete and close");
+            }
             var old = Encoding.UTF8.GetBytes("old"); var next = Encoding.UTF8.GetBytes("new"); var bridge = Path.Combine(root, "bridge.json"); File.WriteAllBytes(Path.Combine(root, "Data/config.spf2"), old); File.WriteAllText(bridge, "{\"config_hash\":\"old\",\"url\":\"keep\"}");
             byte[] Zip(string name) { using var buffer = new MemoryStream(); using (var z = new ZipArchive(buffer, ZipArchiveMode.Create, true)) { using var f = z.CreateEntry(name).Open(); f.Write(next); } return buffer.ToArray(); }
             var bytes = Zip("Data/config.spf2"); var m = new Manifest("weapons", "test", "冰冻持续时间调整", UpdateEngine.Hash(bytes), bytes.Length, UpdateEngine.Hash(bytes) + ".zip", UpdateEngine.Hash(next)); UpdateEngine.Validate(m, "weapons"); var files = UpdateEngine.Unpack(m, bytes);
@@ -39,6 +50,20 @@ internal static class UpdateTests
             localBytes[0] ^= 1;
             try { UpdateEngine.Unpack(launcherRelease, localBytes); throw new Exception("tampered local package accepted"); } catch (InvalidDataException) { }
             string launcherPath = Path.Combine(root, "功夫小子线上登录器.exe"); File.WriteAllBytes(launcherPath, old);
+            string skipManifest = Path.Combine(root, "skip-launcher.json");
+            File.WriteAllText(skipManifest, System.Text.Json.JsonSerializer.Serialize(launcherRelease));
+            using (var form = new UpdateForm("launcher", root, new Uri("https://example.invalid/launcher.json"), null, launcherPath, root, skipManifest) { Opacity = 0, ShowInTaskbar = false }) {
+                using var timer = new System.Windows.Forms.Timer { Interval = 50 };
+                var deadline = DateTime.UtcNow.AddSeconds(5);
+                timer.Tick += (_, _) => {
+                    var skip = (Button)form.Controls.Find("skipUpdate", true).Single();
+                    if (skip.Visible && skip.Enabled) skip.PerformClick();
+                    else if (DateTime.UtcNow > deadline) form.Close();
+                };
+                timer.Start(); Application.Run(form);
+                if (!form.Skipped || form.Completed || !File.ReadAllBytes(launcherPath).SequenceEqual(old)) throw new Exception("skip must continue without installing or marking updated");
+                if (UpdateEngine.Current(launcherRelease, root, launcherPath)) throw new Exception("skip must offer update again next launch");
+            }
             try { UpdateEngine.Apply(launcherRelease, files, root, null, n => { if(n == 1) throw new IOException("injected"); }, launcherPath); throw new Exception("launcher rollback not invoked"); } catch(IOException e) when(e.Message == "injected") { }
             if (!File.ReadAllBytes(launcherPath).SequenceEqual(old)) throw new Exception("launcher rollback failed");
             UpdateEngine.Apply(launcherRelease, files, root, null, launcher: launcherPath);

@@ -4,6 +4,68 @@ import 'package:kungfu_item_manager/stage_reward_config.dart';
 import 'package:kungfu_item_manager/reward_table.dart';
 
 void main() {
+  testWidgets('single map save preserves siblings and retains failed draft', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final other = <String, dynamic>{
+      'map_id': 9170,
+      'clear': {'gold': 30},
+      'failed': {'gold': 5},
+    };
+    List<Map<String, dynamic>>? saved;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StageRewardDialog(
+          mapId: 8110,
+          rows: [other],
+          api: (r) async {
+            switch (r['operation']) {
+              case 'stages_get':
+                return {
+                  'pve_maps': [8110, 9170],
+                  'requirements': [
+                    {'map_id': 8110, 'name': '森林'},
+                    {'map_id': 9170, 'name': '城堡'},
+                  ],
+                };
+              case 'catalog':
+                return {'items': []};
+              case 'definitions_get':
+                return [];
+            }
+            throw StateError('unexpected request');
+          },
+          onSave: (rows) async {
+            saved = rows;
+            throw StateError('revision conflict');
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('城堡'), findsNothing);
+    await tester.enterText(
+      find.byKey(const ValueKey('8110-clear-gold')),
+      '789',
+    );
+    await tester.tap(find.text('保存地图奖励'));
+    await tester.pumpAndSettle();
+    expect(saved!.first, other);
+    expect(saved!.last['clear']['gold'], 789);
+    expect(find.textContaining('revision conflict'), findsOneWidget);
+    expect(
+      tester
+          .widget<TextFormField>(find.byKey(const ValueKey('8110-clear-gold')))
+          .initialValue,
+      '789',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('map names, draft isolation and validation', (tester) async {
     tester.view.physicalSize = const Size(1200, 900);
     tester.view.devicePixelRatio = 1;

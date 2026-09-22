@@ -1,3 +1,5 @@
+import 'banned_words_config.dart';
+import 'gm_version.dart';
 import 'talisman_config.dart';
 import 'reward_config.dart';
 import 'stage_config.dart';
@@ -69,29 +71,6 @@ class Backend {
   }
 
   Future<dynamic> call(Map<String, dynamic> input) async {
-    if (input['operation'] == 'gm_update') {
-      if (!Platform.isWindows) throw Exception('独立更新 EXE 适用于 Windows。');
-      final directory = File(Platform.resolvedExecutable).parent.path;
-      final config = jsonDecode(
-        await File('$directory/updater-settings.json').readAsString(),
-      );
-      final url = Uri.parse(config['manifest']);
-      if (url.scheme != 'https' || url.userInfo.isNotEmpty) {
-        throw Exception('更新地址必须使用 HTTPS。');
-      }
-      final temporary = await Directory.systemTemp.createTemp(
-        'OpenKFOUpdater-',
-      );
-      final updater = await File('$directory/OpenKFO.Updater.exe')
-          .copy('${temporary.path}/OpenKFO.Updater.exe');
-      await Process.start(
-        updater.path,
-        ['--kind', 'gm', '--target', directory, '--manifest', url.toString()],
-        workingDirectory: directory,
-        mode: ProcessStartMode.detached,
-      );
-      return {'message': '更新程序已打开'};
-    }
     resolvePaths();
     if (root == null) throw Exception('找不到服务器目录，请勿单独移动 EXE。');
     final executable = File(Platform.resolvedExecutable).parent;
@@ -109,7 +88,7 @@ class Backend {
     );
     final out = p.stdout.transform(utf8.decoder).join(),
         err = p.stderr.transform(utf8.decoder).join();
-    p.stdin.add(utf8.encode(jsonEncode(input)));
+    p.stdin.add(utf8.encode(jsonEncode({...input, 'gm_version': gmVersion})));
     await p.stdin.close();
     final code = await p.exitCode, text = await out, error = await err;
     if (code != 0) throw Exception(error);
@@ -119,7 +98,8 @@ class Backend {
   }
 }
 
-void main(List<String> args) {
+Future<void> main(List<String> args) async {
+  WidgetsFlutterBinding.ensureInitialized();
   final index = args.indexOf('--root');
   final root = index >= 0 && index + 1 < args.length
       ? Directory(args[index + 1]).absolute.path
@@ -128,17 +108,15 @@ void main(List<String> args) {
   final localSettings = localIndex >= 0 && localIndex + 1 < args.length
       ? args[localIndex + 1]
       : null;
-  runApp(
-    ItemManager(
-      api: Backend(root: root, localSettings: localSettings).call,
-    ),
-  );
+  final backend = Backend(root: root, localSettings: localSettings);
+  runApp(ItemManager(api: backend.call));
 }
 
 const teal = Color(0xFF087E83), ink = Color(0xFF172B3A);
 
 class ItemManager extends StatelessWidget {
-  const ItemManager({super.key, required this.api});
+  const ItemManager({super.key, required this.api, this.startupNotice = ''});
+  final String startupNotice;
   final Api api;
   @override
   Widget build(BuildContext context) => MaterialApp(
@@ -158,12 +136,18 @@ class ItemManager extends StatelessWidget {
         ),
       ),
     ),
-    home: Manager(api: api),
+    home: Manager(api: api, startupNotice: startupNotice),
   );
 }
 
 class Manager extends StatefulWidget {
-  const Manager({super.key, required this.api, this.onlineOnly = false});
+  const Manager({
+    super.key,
+    required this.api,
+    this.onlineOnly = false,
+    this.startupNotice = '',
+  });
+  final String startupNotice;
   final bool onlineOnly;
   final Api api;
   @override
@@ -171,11 +155,15 @@ class Manager extends StatefulWidget {
 }
 
 class _ManagerState extends State<Manager> {
-  String environment = 'local';
+  late String environment;
   String get environmentLabel => environment == 'local' ? '本地测试服' : '线上服务器';
   Api get api {
     final target = environment;
-    return (request) => widget.api({...request, 'environment': target});
+    return (request) => widget.api({
+      ...request,
+      'environment': target,
+      'gm_version': gmVersion,
+    });
   }
 
   void switchEnvironment(String value) {
@@ -205,12 +193,20 @@ class _ManagerState extends State<Manager> {
       root = '',
       status = '正在读取完整物品表…';
   int? kind, uid;
+  bool versionVerified = false;
   bool loading = true, busy = false, backpack = false, supportedOnly = false;
   String? failure, pendingGrantSignature, pendingGrantId;
   @override
   void initState() {
     super.initState();
-    if (widget.onlineOnly) environment = 'online';
+    environment = widget.onlineOnly ? 'online' : 'local';
+    if (widget.startupNotice.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted)
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(widget.startupNotice)));
+      });
+    }
     load();
   }
 
@@ -228,8 +224,12 @@ class _ManagerState extends State<Manager> {
     setState(() {
       loading = true;
       failure = null;
+      versionVerified = false;
     });
     try {
+      final version = await api({'operation': 'gm_version'});
+      if (version['version'] != gmVersion) throw StateError(gmVersionError);
+      if (mounted) setState(() => versionVerified = true);
       final data = await api({'operation': 'catalog'}),
           people = maps(await api({'operation': 'accounts'}));
       if (!mounted) return;
@@ -487,6 +487,37 @@ class _ManagerState extends State<Manager> {
   );
   @override
   Widget build(BuildContext context) {
+    if (!versionVerified) {
+      return Scaffold(
+        appBar: AppBar(title: Text('GM管理器 $gmVersion · $environmentLabel')),
+        body: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (loading) const CircularProgressIndicator(),
+                SelectableText(failure ?? '正在检查管理版本…'),
+                const SizedBox(height: 16),
+                TextButton(
+                  onPressed: loading ? null : load,
+                  child: const Text('重新检查版本'),
+                ),
+                if (!widget.onlineOnly)
+                  TextButton(
+                    onPressed: loading
+                        ? null
+                        : () => switchEnvironment(
+                            environment == 'local' ? 'online' : 'local',
+                          ),
+                    child: Text(environment == 'local' ? '切换线上服务器' : '切换本地测试服'),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     final list = filtered,
         have = owned,
         groups = items.map((i) => i['group'] as String).toSet().toList();
@@ -521,31 +552,10 @@ class _ManagerState extends State<Manager> {
                     const Padding(
                       padding: EdgeInsets.fromLTRB(23, 0, 16, 27),
                       child: Text(
-                        'GM管理器',
+                        'GM管理器 $gmVersion',
                         style: TextStyle(color: Color(0xFF9AB1C1)),
                       ),
                     ),
-                    if (!widget.onlineOnly)
-                      ListTile(
-                        leading: const Icon(
-                          Icons.system_update_alt,
-                          color: Colors.white,
-                        ),
-                        title: const Text(
-                          '检查 GM 更新',
-                          style: TextStyle(color: Colors.white),
-                        ),
-                        onTap: () async {
-                          try {
-                            await widget.api({'operation': 'gm_update'});
-                          } catch (e) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context)
-                                  .showSnackBar(SnackBar(content: Text('$e')));
-                            }
-                          }
-                        },
-                      ),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       child: DropdownButtonFormField<String>(
@@ -683,8 +693,25 @@ class _ManagerState extends State<Manager> {
                     ListTile(
                       textColor: Colors.white,
                       iconColor: Colors.white,
+                      leading: const Icon(Icons.block),
+                      title: const Text('违禁词管理'),
+                      onTap: busy
+                          ? null
+                          : () => Navigator.push(
+                              context,
+                              MaterialPageRoute<void>(
+                                builder: (_) => BannedWordsPage(
+                                  api: api,
+                                  environment: environmentLabel,
+                                ),
+                              ),
+                            ),
+                    ),
+                    ListTile(
+                      textColor: Colors.white,
+                      iconColor: Colors.white,
                       leading: const Icon(Icons.map),
-                      title: const Text('关卡开关'),
+                      title: const Text('关卡配置'),
                       onTap: busy
                           ? null
                           : () => Navigator.push(

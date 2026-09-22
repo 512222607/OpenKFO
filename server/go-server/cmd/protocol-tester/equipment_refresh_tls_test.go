@@ -28,7 +28,7 @@ func checkEquipmentRefreshTLS(t *testing.T, host, peer *client, uid uint64, send
 			if m.ID == protocol.MsgInventoryList {
 				t.Fatal("live equip sent login inventory")
 			}
-			if m.ID == protocol.MsgRoomMemberUpdated {
+			if m.ID == protocol.MsgRoomRoster {
 				selfRoom = m.Payload
 			}
 			if m.ID == protocol.MsgEquipmentChanged {
@@ -45,7 +45,7 @@ func checkEquipmentRefreshTLS(t *testing.T, host, peer *client, uid uint64, send
 			t.Fatal("equipment request not acknowledged", own)
 		}
 		remote := drain(peer)
-		if len(remote) != 1 || remote[0].ID != 3090 {
+		if len(remote) != 1 || remote[0].ID != protocol.MsgRoomRoster {
 			t.Fatal("missing peer equipment refresh", remote)
 		}
 		r := remote[0].Payload

@@ -17,6 +17,9 @@ import (
 func settlementReport(room *Room) []byte {
 	p := make([]byte, 696)
 	for uid, m := range room.Members {
+		if m.Spectator {
+			continue
+		}
 		r := p[int(m.Slot)*87 : int(m.Slot+1)*87]
 		protocol.WriteUint64(r, 29, uid)
 		protocol.WriteUint32(r, 67, uint32(room.ID))
@@ -74,7 +77,12 @@ func TestSettlementWireValidation(t *testing.T) {
 		if record == nil {
 			t.Fatal("missing player result")
 		}
-		if protocol.ReadUint64(record, 0) != r.UID || record[10] != 1 || protocol.ReadUint32(record, 34) != 10 || protocol.ReadUint32(record, 63) != 20 || !bytes.Equal(record[140:], r.Profile) || protocol.ReadUint32(record, 21) != 0 {
+		if protocol.ReadUint64(record, 0) != r.UID || record[10] != 1 || protocol.ReadUint32(record, 34) != 10 || protocol.ReadUint32(record, 63) != 20 || !bytes.Equal(record[140:], func() []byte {
+			if r.UID == host.UID {
+				return r.Profile
+			}
+			return make([]byte, 360)
+		}()) || protocol.ReadUint32(record, 21) != 0 {
 			t.Fatal("result record layout")
 		}
 	}
@@ -201,6 +209,10 @@ func TestSettlementMySQLLifecycle(t *testing.T) {
 		}(uid)
 		s := &Session{UID: uid, Room: room, Bound: true, GameChannel: 1, Channels: map[uint32]*Channel{1: {ID: 1, Kind: "game", Phase: "battle"}}, Output: make(chan tunnel.Frame, 64), Done: make(chan struct{})}
 		s.Inventory = map[uint32][]byte{}
+		a, err = store.RoleManager().Snapshot(uid)
+		if err != nil {
+			t.Fatal(err)
+		}
 		for _, item := range a.Inventory {
 			s.Inventory[protocol.ReadUint32(item, 0)] = bytes.Clone(item)
 		}

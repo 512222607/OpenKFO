@@ -13,7 +13,7 @@ Push-Location $repoRoot
 try {
     Push-Location 'server/go-server'
     try {
-        & $Go build -o "$components/OnlineBridge.exe" ./cmd/bridge
+        & (Join-Path $PSScriptRoot 'Build-BridgeGo120.ps1') -Output "$components/OnlineBridge.exe"
         if ($LASTEXITCODE) { throw 'Go bridge build failed' }
         New-Item -ItemType Directory -Force "$dist/server" | Out-Null
         & $Go build -o "$dist/server/latency-probe.exe" ./cmd/latency

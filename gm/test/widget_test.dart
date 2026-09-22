@@ -3,6 +3,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kungfu_item_manager/main.dart';
 
 void main() {
+  testWidgets('version mismatch blocks initial catalogue and grant', (tester) async {
+    final calls = <String>[];
+    await tester.pumpWidget(ItemManager(api: (r) async {
+      calls.add(r['operation'] as String);
+      return {'version': 'old'};
+    }));
+    await tester.pumpAndSettle();
+    expect(calls, ['gm_version']);
+    expect(find.textContaining('版本不符合'), findsOneWidget);
+  });
   testWidgets('catalog searches and adds to selected character', (
     tester,
   ) async {
@@ -13,6 +23,7 @@ void main() {
     Map<String, dynamic>? grant;
     Future<dynamic> api(Map<String, dynamic> r) async {
       switch (r['operation']) {
+        case 'gm_version': return {'version': '1.1.0'};
         case 'catalog':
           return {
             'root': 'X:/fixture',
@@ -67,11 +78,16 @@ void main() {
     expect(grant?['days'], 365);
     expect(grant?['quantity'], 1);
     expect(grant?['uid'], 1002);
+    expect(grant?['environment'], 'local');
+    expect(grant?['gm_version'], '1.1.0');
     expect(grant?['keys'], ['12:121001']);
     expect(find.text('背包已更新'), findsOneWidget);
     await tester.tap(find.text('知道了'));
     await tester.pumpAndSettle();
-    await tester.drag(find.byKey(const ValueKey('gm-sidebar-scroll')), const Offset(0, -1600));
+    await tester.drag(
+      find.byKey(const ValueKey('gm-sidebar-scroll')),
+      const Offset(0, -1600),
+    );
     await tester.pumpAndSettle();
     expect(find.text('VIP管理').hitTestable(), findsOneWidget);
     expect(tester.takeException(), isNull);

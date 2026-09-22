@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"kungfu.local/server/internal/gmversion"
 	"kungfu.local/server/internal/persistence"
 	"kungfu.local/server/internal/releases"
 )
@@ -16,6 +17,13 @@ func main() {
 	var request persistence.AdminRequest
 	var result any
 	err := json.NewDecoder(io.LimitReader(os.Stdin, 4<<20)).Decode(&request)
+	if err == nil && request.Operation == "gm_version" {
+		json.NewEncoder(os.Stdout).Encode(map[string]any{"ok": true, "result": gmversion.Info()})
+		return
+	}
+	if err == nil {
+		err = gmversion.Check(request.GMVersion)
+	}
 	if err == nil {
 		var store *persistence.Store
 		store, err = persistence.Open(os.Getenv("KK_MYSQL_DSN"))

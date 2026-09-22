@@ -47,6 +47,82 @@ class RewardCatalog {
     return RewardCatalog(api, result);
   }
 
+  final _images = <String, Future<Uint8List?>>{};
+  Widget preview(Map<String, dynamic>? item) {
+    final key = item?['key'];
+    if (key is! String)
+      return const SizedBox(
+        width: 48,
+        height: 48,
+        child: Icon(Icons.image_not_supported_outlined),
+      );
+    if (_images.length >= 256 && !_images.containsKey(key))
+      _images.remove(_images.keys.first);
+    final image = _images.putIfAbsent(key, () async {
+      final result = await api({
+        'operation': 'shop_images',
+        'keys': [key],
+      });
+      return result[key] is String ? base64Decode(result[key]) : null;
+    });
+    return SizedBox(
+      width: 48,
+      height: 48,
+      child: FutureBuilder<Uint8List?>(
+        future: image,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done)
+            return const Center(
+              child: CircularProgressIndicator(strokeWidth: 2),
+            );
+          final bytes = snapshot.data;
+          if (bytes == null)
+            return const Tooltip(
+              message: '暂无可用图片',
+              child: Icon(Icons.image_not_supported_outlined),
+            );
+          return InkWell(
+            onTap: () => showDialog<void>(
+              context: context,
+              builder: (c) => AlertDialog(
+                title: Text('${item?['name'] ?? '奖励预览'}'),
+                content: SizedBox(
+                  width: 280,
+                  height: 280,
+                  child: Image.memory(
+                    bytes,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, e, s) =>
+                        const Icon(Icons.broken_image_outlined),
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(c),
+                    child: const Text('关闭'),
+                  ),
+                ],
+              ),
+            ),
+            child: Image.memory(
+              bytes,
+              fit: BoxFit.contain,
+              errorBuilder: (_, e, s) =>
+                  const Icon(Icons.broken_image_outlined),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget definitionPreview(int key) {
+    for (final item in options) {
+      if (item['definition'] == key) return preview(item);
+    }
+    return preview(null);
+  }
+
   String name(int key) {
     for (final o in options) {
       if (o['definition'] == key) return o['label'] as String;
@@ -92,6 +168,7 @@ class RewardCatalog {
                       itemBuilder: (_, i) {
                         final o = visible[i];
                         return ListTile(
+                          leading: preview(o),
                           title: Text(o['name'] as String),
                           subtitle: Text(o['label'] as String),
                           onTap: busy
@@ -163,6 +240,7 @@ class RewardItemsField extends StatelessWidget {
         children: [
           for (var i = 0; i < items.length; i++)
             ListTile(
+              leading: data.definitionPreview(items[i]),
               dense: true,
               title: Text(data.name(items[i])),
               trailing: IconButton(

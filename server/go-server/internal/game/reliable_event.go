@@ -55,7 +55,7 @@ func (h *Hub) reliableBattleEvent(s *Session, m protocol.Message) error {
 		x = &reliableExchange{}
 	}
 	seq := protocol.ReadUint32(m.Payload, 19)
-	if x.Seen[phase] && (int32(seq-x.Last[phase].Sequence) < 0 || (seq == x.Last[phase].Sequence && string(m.Payload) == x.Last[phase].Payload)) {
+	if x.Seen[phase] && int32(seq-x.Last[phase].Sequence) <= 0 {
 		return nil
 	}
 	switch phase {
@@ -66,10 +66,16 @@ func (h *Hub) reliableBattleEvent(s *Session, m protocol.Message) error {
 			}
 			x.Pending, x.Approved = false, false
 		} else {
+			if x.Pending {
+				return nil
+			} // Never replace an outstanding reservation.
 			x.Object, x.Pending, x.Approved = r.ObjectKey, true, false
 		}
 	case 1:
 		if !x.Pending || x.Object != r.ObjectKey || x.Approved {
+			return nil
+		}
+		if r.Flag51 == 1 && room.pickupReservedByOther(key, r.ObjectKey) {
 			return nil
 		}
 		x.Approved = r.Flag51 == 1
@@ -85,11 +91,31 @@ func (h *Hub) reliableBattleEvent(s *Session, m protocol.Message) error {
 		if s.UID != room.Owner && (!x.Pending || !x.Approved || x.Object != r.ObjectKey) {
 			return nil
 		}
+		if room.pickupReservedByOther(key, r.ObjectKey) {
+			return nil
+		}
 		x.Object, x.Pending, x.Approved = r.ObjectKey, false, false
 	}
 	x.Seen[phase] = true
 	x.Last[phase] = battleSequence{Sequence: seq, Payload: string(m.Payload)}
 	room.Reliable[key] = x
-	h.broadcast(room, m, s.UID)
+	if phase == 0 {
+		if owner := room.Members[room.Owner]; owner != nil && owner.Session != s {
+			owner.Session.sendGame(m)
+		}
+	} else {
+		h.broadcast(room, m, s.UID)
+	}
 	return nil
+}
+
+// Item and chest namespaces are independent. A controller response must not
+// reserve one object for two actors, including its own native fast path.
+func (r *Room) pickupReservedByOther(actor reliableActor, object uint32) bool {
+	for key, pending := range r.Reliable {
+		if key != actor && key.Family == actor.Family && pending.Pending && pending.Approved && pending.Object == object {
+			return true
+		}
+	}
+	return false
 }

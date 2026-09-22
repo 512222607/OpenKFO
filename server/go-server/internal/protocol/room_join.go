@@ -23,3 +23,7 @@ func ParseRoomJoinRequest(p []byte) (r RoomJoinRequest, err error) {
 	copy(r.Password[:], p[3:14])
 	return r, nil
 }
+
+// Native waiting-room identity toggle, distinct from the unused WATCH_GAME enum.
+const MsgToggleSpectator uint32 = 3091
+const MsgSpectatorChanged uint32 = 3092

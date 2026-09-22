@@ -34,6 +34,9 @@ func (r *Room) stalePVEEvent(s *Session, uid uint64, sequence uint32) bool {
 // phase. Owner-only control is server policy, not a claim about native trust.
 // This does not enable PVE room admission or turn removals into rewards.
 func (h *Hub) pveActorMessage(s *Session, message protocol.Message) error {
+	return h.applyPVEActor(s, message, false)
+}
+func (h *Hub) applyPVEActor(s *Session, message protocol.Message, observed bool) error {
 	r, p := s.Room, message.Payload
 	if (r.Type() != protocol.StageAssault && r.Type() != protocol.FosterMode) || r.Owner != s.UID {
 		return nil
@@ -114,8 +117,15 @@ func (h *Hub) pveActorMessage(s *Session, message protocol.Message) error {
 			}
 		}
 	}
+	for key := range r.HealthReceipts {
+		if key[1] == actor {
+			delete(r.HealthReceipts, key)
+		}
+	}
 	delete(r.Reliable, reliableActor{actor, 9000})
 	delete(r.Reliable, reliableActor{actor, 9500})
-	h.broadcast(r, message, s.UID)
+	if !observed {
+		h.broadcast(r, message, s.UID)
+	}
 	return nil
 }

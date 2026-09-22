@@ -7,6 +7,11 @@ import (
 )
 
 func (h *Hub) extendedTaskLists(s *Session) error {
+	return h.extendedTaskList(s, 0)
+}
+
+// selected=0 refreshes both lists; 6001/6002 refresh only their own native container.
+func (h *Hub) extendedTaskList(s *Session, selected uint32) error {
 	// Extended catalogues require a known client version; legacy unbound
 	// servers cannot safely publish these native template keys.
 	if h.Config.ConfigHash == "" {
@@ -19,6 +24,10 @@ func (h *Hub) extendedTaskLists(s *Session) error {
 	if states == nil {
 		return nil
 	}
+	return sendExtendedTaskLists(s, states, selected)
+}
+
+func sendExtendedTaskLists(s *Session, states []persistence.ExtendedTaskState, selected uint32) error {
 	lists := map[uint32][]protocol.ExtendedTaskProgress{6041: {}, 6042: {}}
 	for _, state := range states {
 		id := uint32(6041)
@@ -47,10 +56,25 @@ func (h *Hub) extendedTaskLists(s *Session) error {
 		messages = append(messages, protocol.Message{ID: id, Payload: p})
 	}
 	for _, m := range messages {
-		s.sendGame(m)
+		if selected == 0 || m.ID == selected {
+			s.sendGame(m)
+		}
 	}
 	if s.ExtendedTaskNotified == nil {
 		s.ExtendedTaskNotified = map[uint16]string{}
+	}
+	if selected != 0 {
+		filtered := states[:0]
+		for _, state := range states {
+			id := uint32(6041)
+			if state.Snapshot.Rule.Kind == "newbie" {
+				id = 6042
+			}
+			if id == selected {
+				filtered = append(filtered, state)
+			}
+		}
+		states = filtered
 	}
 	for _, m := range extendedTaskCompletionMessages(states, s.ExtendedTaskNotified) {
 		s.sendGame(m)

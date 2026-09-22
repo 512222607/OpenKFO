@@ -60,3 +60,55 @@ func TestReliableBattleExchange(t *testing.T) {
 		send(owner, packet(family+1, owner, 44, 1, 4), nil)
 	}
 }
+
+func TestPickupReservationIsolation(t *testing.T) {
+	for _, family := range []uint32{9000, 9500} {
+		h, host, a, b := combatFixture()
+		b.Room = host.Room
+		host.Room.Members[b.UID] = &Member{Session: b, Slot: 2}
+		size, context := 55, 0
+		if family == 9000 {
+			size, context = 63, 55
+		}
+		packet := func(kind uint32, s, actor *Session, object, sequence uint32) protocol.Message {
+			m := combatPacket(kind, size, s.UID, actor.UID, context)
+			protocol.WriteUint32(m.Payload, 47, object)
+			protocol.WriteUint32(m.Payload, 51, 1)
+			protocol.WriteUint32(m.Payload, 19, sequence)
+			return m
+		}
+		send := func(s *Session, m protocol.Message) {
+			t.Helper()
+			if err := h.battleMessage(s, s.game(), m); err != nil {
+				t.Fatal(err)
+			}
+		}
+		send(a, packet(family, a, a, 42, 1))
+		roomOutputs(t, host, 8071)
+		roomOutputs(t, b)
+		send(a, packet(family, a, a, 43, 2))
+		roomOutputs(t, host) // Cannot replace a pending request.
+		send(b, packet(family, b, b, 42, 1))
+		roomOutputs(t, host, 8071)
+		roomOutputs(t, a)
+		send(host, packet(family+1, host, a, 42, 1))
+		roomOutputs(t, a, 8071)
+		roomOutputs(t, b, 8071)
+		send(host, packet(family+1, host, b, 42, 2))
+		roomOutputs(t, a)
+		roomOutputs(t, b)
+		send(host, packet(family+2, host, host, 42, 1))
+		roomOutputs(t, a)
+		roomOutputs(t, b) // Host cannot steal a reservation.
+		send(b, packet(family+2, b, b, 42, 1))
+		roomOutputs(t, host)
+		roomOutputs(t, a)
+		send(a, packet(family+2, a, a, 42, 1))
+		roomOutputs(t, host, 8071)
+		roomOutputs(t, b, 8071)
+		key := reliableActor{a.UID, family}
+		if host.Room.Reliable[key].Pending {
+			t.Fatal("completion left reservation")
+		}
+	}
+}

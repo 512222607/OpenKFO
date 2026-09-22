@@ -1,3 +1,5 @@
+import 'stage_reward_config.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 
@@ -22,6 +24,56 @@ class _StageConfigPageState extends State<StageConfigPage> {
   Map<String, dynamic> preserved = {};
   List<Map<String, dynamic>> requirements = [];
   bool showRequirements = false;
+  String search = '';
+  final selected = <int>{};
+  List<Map<String, dynamic>> get visibleMaps => requirements
+      .where(
+        (r) => '${r['name']} ${r['map_id']}'.toLowerCase().contains(search),
+      )
+      .toList();
+
+  void setMapMode(Iterable<int> ids, String mode) {
+    if (openAll) {
+      opened = requirements
+          .map((r) => r['map_id'] as int)
+          .where((id) => !disabled.contains(id))
+          .toList();
+      openAll = false;
+    }
+    for (final id in ids) {
+      opened.remove(id);
+      disabled.remove(id);
+      if (mode == '开放') opened.add(id);
+      if (mode == '关闭') disabled.add(id);
+    }
+    status = '有未保存的修改';
+  }
+
+  Future<void> editMapRewards(int id) => run(() async {
+    final snapshot = await widget.api({'operation': 'rewards_get'});
+    final rules = Map<String, dynamic>.from(snapshot['rules'] as Map);
+    final rows = (rules['stage_rewards'] as List? ?? [])
+        .map((r) => Map<String, dynamic>.from(r as Map))
+        .toList();
+    if (!mounted) return;
+    await showDialog<List<Map<String, dynamic>>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => StageRewardDialog(
+        rows: rows,
+        api: widget.api,
+        mapId: id,
+        onSave: (updated) async {
+          await widget.api({
+            'operation': 'rewards_save',
+            'reward_revision': snapshot['revision'],
+            'rewards': {...rules, 'stage_rewards': updated},
+          });
+          if (mounted) setState(() => status = '地图 $id 奖励已保存；下一次结算生效');
+        },
+      ),
+    );
+  });
   int? revision;
   bool busy = false;
   String status = '';
@@ -30,6 +82,22 @@ class _StageConfigPageState extends State<StageConfigPage> {
       serverHash.isNotEmpty &&
       (preserved['client_hash'] as String? ?? '').isNotEmpty &&
       preserved['client_hash'] != serverHash;
+  String planStatus(int id) {
+    final pve = (preserved['pve_maps'] as List? ?? []).contains(id);
+    if (!pve) return '地图 $id';
+    final foster = (preserved['foster_plans'] as List? ?? []).any(
+      (p) => p['map_id'] == id,
+    );
+    final wave = (preserved['wave_plans'] as List? ?? []).any(
+      (p) => p['map_id'] == id,
+    );
+    return '地图 $id · ${foster
+        ? "已配置事件计划"
+        : wave
+        ? "已配置波次计划"
+        : "缺少闯关计划"}';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -51,6 +119,7 @@ class _StageConfigPageState extends State<StageConfigPage> {
   void apply(dynamic result) {
     if (!mounted) return;
     setState(() {
+      selected.clear();
       revision = result['revision'] as int;
       preserved = Map<String, dynamic>.from(result as Map);
       serverHash = preserved.remove('server_client_hash') as String? ?? '';
@@ -284,14 +353,14 @@ class _StageConfigPageState extends State<StageConfigPage> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text('关卡开关 · ${widget.environment}')),
+    appBar: AppBar(title: Text('关卡配置 · ${widget.environment}')),
     body: Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            '开放：跳过称号和个人解锁条件。原规则：恢复默认准入。只控制地图准入，不增加未实现的关卡玩法；进行中的战斗不强制中断。',
+            '开放：跳过称号和个人解锁条件。闯关还需要有效事件/波次计划及通关、失败奖励；仅切换开放不会补齐这些配置。进行中的战斗不强制中断。',
           ),
           const SizedBox(height: 12),
           Text(
@@ -358,13 +427,51 @@ class _StageConfigPageState extends State<StageConfigPage> {
                 ),
             ],
           ),
+          TextField(
+            decoration: const InputDecoration(
+              labelText: '搜索地图名称或编号',
+              prefixIcon: Icon(Icons.search),
+            ),
+            onChanged: (v) => setState(() {
+              search = v.trim().toLowerCase();
+              selected.clear();
+            }),
+          ),
+          Wrap(
+            spacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              TextButton(
+                onPressed: busy
+                    ? null
+                    : () => setState(
+                        () => selected.addAll(
+                          visibleMaps.map((r) => r['map_id'] as int),
+                        ),
+                      ),
+                child: const Text('选择搜索结果'),
+              ),
+              TextButton(
+                onPressed: busy ? null : () => setState(selected.clear),
+                child: const Text('清空选择'),
+              ),
+              Text('已选 ${selected.length} 张'),
+              for (final mode in ['开放', '关闭'])
+                OutlinedButton(
+                  onPressed: busy || selected.isEmpty
+                      ? null
+                      : () => setState(() => setMapMode(selected, mode)),
+                  child: Text('批量$mode'),
+                ),
+            ],
+          ),
           if (requirements.isEmpty) const Text('请先读取客户端地图条件，保存后可按地图名称设置。'),
           Expanded(
             child: showRequirements
                 ? ListView.builder(
-                    itemCount: requirements.length,
+                    itemCount: visibleMaps.length,
                     itemBuilder: (context, i) {
-                      final r = requirements[i];
+                      final r = visibleMaps[i];
                       return ListTile(
                         title: Text('${r['name']} · ${r['map_id']}'),
                         subtitle: Text('最低称号 ${r['title_level']}'),
@@ -375,7 +482,7 @@ class _StageConfigPageState extends State<StageConfigPage> {
                             onChanged: busy || revision == null
                                 ? null
                                 : (value) => setState(() {
-                                    requirements[i] = {
+                                    requirements[requirements.indexOf(r)] = {
                                       ...r,
                                       'unlock_required': value == true,
                                     };
@@ -385,14 +492,14 @@ class _StageConfigPageState extends State<StageConfigPage> {
                         ),
                         onTap: busy || revision == null
                             ? null
-                            : () => editRequirement(i),
+                            : () => editRequirement(requirements.indexOf(r)),
                       );
                     },
                   )
                 : ListView.builder(
-                    itemCount: requirements.length,
+                    itemCount: visibleMaps.length,
                     itemBuilder: (context, i) {
-                      final r = requirements[i];
+                      final r = visibleMaps[i];
                       final id = r['map_id'] as int;
                       final mode = disabled.contains(id)
                           ? '关闭'
@@ -400,31 +507,46 @@ class _StageConfigPageState extends State<StageConfigPage> {
                           ? '开放'
                           : '原规则';
                       return ListTile(
-                        title: Text('${r['name']}'),
-                        trailing: DropdownButton<String>(
-                          value: mode,
-                          items: ['原规则', '开放', '关闭']
-                              .map(
-                                (v) =>
-                                    DropdownMenuItem(value: v, child: Text(v)),
-                              )
-                              .toList(),
-                          onChanged: busy || revision == null
+                        leading: Checkbox(
+                          value: selected.contains(id),
+                          onChanged: busy
                               ? null
                               : (v) => setState(() {
-                                  if (openAll) {
-                                    opened = requirements
-                                        .map((r) => r['map_id'] as int)
-                                        .where((id) => !disabled.contains(id))
-                                        .toList();
-                                    openAll = false;
+                                  if (v == true) {
+                                    selected.add(id);
+                                  } else {
+                                    selected.remove(id);
                                   }
-                                  opened.remove(id);
-                                  disabled.remove(id);
-                                  if (v == '开放') opened.add(id);
-                                  if (v == '关闭') disabled.add(id);
-                                  status = '有未保存的修改';
                                 }),
+                        ),
+                        title: Text('${r['name']}'),
+                        subtitle: Text(planStatus(id)),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            TextButton(
+                              onPressed: busy || revision == null
+                                  ? null
+                                  : () => editMapRewards(id),
+                              child: const Text('配置奖励'),
+                            ),
+                            DropdownButton<String>(
+                              value: mode,
+                              items: ['原规则', '开放', '关闭']
+                                  .map(
+                                    (v) => DropdownMenuItem(
+                                      value: v,
+                                      child: Text(v),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: busy || revision == null
+                                  ? null
+                                  : (v) => setState(() {
+                                      if (v != null) setMapMode([id], v);
+                                    }),
+                            ),
+                          ],
                         ),
                       );
                     },

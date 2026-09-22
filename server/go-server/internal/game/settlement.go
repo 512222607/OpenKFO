@@ -31,10 +31,19 @@ func validateBattleReport(room *Room, payload []byte) (map[uint64]uint16, error)
 			continue
 		}
 		member := room.Members[uid]
-		if member == nil {
+		departedSlot, departed := room.DepartedSlots[uid]
+		if member == nil && !departed {
 			return nil, fmt.Errorf("%w: battle report slot=%d unknown uid=%d", protocol.ErrFrame, slot, uid)
 		}
-		if int(member.Slot) != slot {
+		if member == nil {
+			// Some clients retain the removed actor until the result screen.
+			// Validate its identity/context, but exclude it from quorum and rewards.
+			if int(departedSlot) != slot || r.RoomID != uint32(room.ID) || r.Serial != room.Serial {
+				return nil, protocol.ErrFrame
+			}
+			continue
+		}
+		if member.Spectator || int(member.Slot) != slot {
 			return nil, fmt.Errorf("%w: battle report uid=%d slot=%d want=%d", protocol.ErrFrame, uid, slot, member.Slot)
 		}
 		// Native 987E40 copies the room context pair to +67/+71.
@@ -49,7 +58,7 @@ func validateBattleReport(room *Room, payload []byte) (map[uint64]uint16, error)
 		}
 		health[uid] = r.Health
 	}
-	if len(health) != len(room.Members) {
+	if len(health) != room.fighterCount() {
 		return nil, protocol.ErrFrame
 	}
 	return health, nil
@@ -57,7 +66,13 @@ func validateBattleReport(room *Room, payload []byte) (map[uint64]uint16, error)
 
 func (hub *Hub) settleReport(session *Session, payload []byte) error {
 	room := session.Room
+	if room != nil && room.Series != nil {
+		return nil
+	}
 	if room == nil || (room.Stage != "battle" && room.Stage != "finishing" && room.Stage != "settlement") {
+		return nil
+	}
+	if room.isObserver(session) {
 		return nil
 	}
 	if room.Type() == protocol.StageAssault || room.Type() == protocol.FosterMode {
@@ -84,34 +99,16 @@ func (hub *Hub) settleReport(session *Session, payload []byte) error {
 		room.Stage = "finishing"
 		// 4100 invokes the native report producer (987E40). Do not guess an
 		// end-screen packet or wait indefinitely for a surviving player's timer.
-		hub.broadcast(room, protocol.Message{ID: 4100}, session.UID)
-	}
-	if len(room.Reports) < len(room.Members) {
-		return nil
-	}
-	base, _ := validateBattleReport(room, payload)
-	agree := true
-	for _, report := range room.Reports {
-		other, _ := validateBattleReport(room, report)
-		for uid, hp := range base {
-			if (hp == 0) != (other[uid] == 0) {
-				agree = false
+		for uid, m := range room.Members {
+			if !m.Spectator && uid != session.UID {
+				m.Session.sendGame(protocol.Message{ID: protocol.MsgBattleReportRequest})
 			}
 		}
 	}
-	alive := map[uint64]bool{}
-	teamMode := room.Type() == protocol.TeamSurvival || room.Type() == protocol.TeamDeathmatch
-	group := func(uid uint64) uint64 {
-		if teamMode {
-			return uint64(room.Members[uid].Team)
-		}
-		return uid
+	if len(room.Reports) < room.fighterCount() {
+		return nil
 	}
-	for uid, hp := range base {
-		if hp > 0 {
-			alive[group(uid)] = true
-		}
-	}
+	outcomes := battleOutcomes(room)
 	var rewards []persistence.BattleReward
 	settings, err := hub.Store.RewardManager().BattleRewards(hub.Config.Settlement)
 	if err != nil {
@@ -122,22 +119,21 @@ func (hub *Hub) settleReport(session *Session, payload []byte) error {
 		return fmt.Errorf("honour rules: %w", err)
 	}
 	for uid, member := range room.Members {
+		if member.Spectator {
+			continue
+		}
 		rules := settings.Rules.AtLevel(member.BattleLevel)
-		outcome, gold := "draw", rules.DrawGold
-		experience := rules.DrawExperience
-		if agree && len(alive) == 1 {
-			outcome, gold = "loss", rules.LossGold
-			experience = rules.LossExperience
-			if alive[group(uid)] {
-				outcome, gold = "win", rules.WinGold
-				experience = rules.WinExperience
-			}
+		outcome := outcomes[uid]
+		gold, experience := rules.DrawGold, rules.DrawExperience
+		switch outcome {
+		case "win":
+			gold, experience = rules.WinGold, rules.WinExperience
+		case "loss":
+			gold, experience = rules.LossGold, rules.LossExperience
+		case "unconfirmed":
+			gold, experience = 0, 0
 		}
-		if !agree {
-			outcome, gold = "unconfirmed", 0
-			experience = 0
-		}
-		period, points := honour.Award(byte(room.Type()), outcome, len(room.Members))
+		period, points := honour.Award(byte(room.Type()), outcome, room.fighterCount())
 		mode := byte(room.Type())
 		rewards = append(rewards, persistence.BattleReward{TaskClientHash: hub.Config.ConfigHash, BattleMode: &mode, UID: uid, Outcome: outcome, Gold: gold, Experience: experience, StartLevel: member.BattleLevel, HonourPeriod: period, HonourPoints: points})
 	}
@@ -173,6 +169,11 @@ func (hub *Hub) settleReport(session *Session, payload []byte) error {
 		s.sendGame(settlementPacket(room, rewards, r.UID))
 		log.Printf("battle_settled serial=%d room=%d uid=%d outcome=%s gold=%d experience=%d start_level=%d level=%d drops=%d titles=disabled", room.Serial, room.ID, r.UID, r.Outcome, r.Gold, r.Experience, room.Members[r.UID].BattleLevel, persistence.ProfileLevel(r.Profile), len(r.Items))
 	}
+	for uid, m := range room.Members {
+		if m.Spectator {
+			m.Session.sendGame(settlementPacket(room, rewards, uid))
+		}
+	}
 	return nil
 }
 
@@ -189,6 +190,11 @@ func settlementPacket(room *Room, rewards []persistence.BattleReward, recipient 
 		}
 		return room.Members[rewards[i].UID].Slot < room.Members[rewards[j].UID].Slot
 	})
+	var rebornRows map[uint64]protocol.BattleReportRecord
+	var rebornRanks map[uint64]uint32
+	if room.Type() == protocol.RebornMode {
+		rebornRows, rebornRanks = rebornResultRows(room)
+	}
 	payload := make([]byte, 500*len(rewards))
 	for i, r := range rewards {
 		record := payload[i*500 : (i+1)*500]
@@ -204,9 +210,19 @@ func settlementPacket(room *Room, rewards []persistence.BattleReward, recipient 
 		protocol.WriteUint32(record, 16, protocol.ReadUint32(r.Profile, persistence.ExperienceOffset))
 		protocol.WriteUint32(record, 34, r.Experience) // txtScore0, native 812DAB
 		protocol.WriteUint32(record, 63, r.Gold)       // txtGold0, native 812EA6
+		if row, ok := rebornRows[r.UID]; ok {
+			protocol.WriteUint32(record, 67, uint32(row.RebornPoints))
+			protocol.WriteUint16(record, 71, row.RebornCounts[0])
+			protocol.WriteUint16(record, 73, row.RebornCounts[1])
+			protocol.WriteUint32(record, 75, uint32(protocol.ReadUint16(row.Raw[:], 4)))
+			protocol.WriteUint32(record, 79, uint32(protocol.ReadUint16(row.Raw[:], 6)))
+			protocol.WriteUint32(record, 83, rebornRanks[r.UID])
+		}
 		// 82C970 reads a 140-byte header then a full 360-byte persisted profile.
 		// Header +21 is an unverified counter delta, NOT a safe XP field.
-		copy(record[140:], r.Profile)
+		if r.UID == recipient {
+			copy(record[140:], r.Profile)
+		}
 	}
 	return protocol.Message{ID: 4120, Payload: payload}
 }
@@ -236,4 +252,37 @@ func (hub *Hub) returnFromSettlement(session *Session) error {
 	}
 	session.syncUnequippedInventory(account.Inventory)
 	return nil
+}
+
+// teamBattleMemberLeft runs under the same hub lock as leave/settleReport.
+func (hub *Hub) teamBattleMemberLeft(room *Room, uid uint64) {
+	log.Printf("team_battle_member_left room=%d serial=%d uid=%d remaining=%d stage=%s", room.ID, room.Serial, uid, len(room.Members), room.Stage)
+	if room.Stage == "settlement" {
+		return
+	}
+	teams := map[byte]bool{}
+	for _, member := range room.Members {
+		if !member.Spectator {
+			teams[member.Team] = true
+		}
+	}
+	if room.Stage == "battle" && len(teams) > 1 {
+		return
+	}
+	// An empty opposing team ends the round through the existing native
+	// report/settlement flow, not recoverRoom's forced leave/rejoin flow.
+	room.Stage = "finishing"
+	if len(room.Reports) == room.fighterCount() {
+		for memberUID, report := range room.Reports {
+			if err := hub.settleReport(room.Members[memberUID].Session, report); err != nil {
+				log.Printf("team_departure_settlement_failed room=%d serial=%d error=%v", room.ID, room.Serial, err)
+			}
+			return
+		}
+	}
+	for memberUID, member := range room.Members {
+		if _, reported := room.Reports[memberUID]; !reported && !member.Spectator {
+			member.Session.sendGame(protocol.Message{ID: protocol.MsgBattleReportRequest})
+		}
+	}
 }

@@ -4,6 +4,57 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kungfu_item_manager/stage_config.dart';
 
 void main() {
+  testWidgets('filtered bulk changes preserve other maps and plans', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    Map<String, dynamic>? saved;
+    final initial = <String, dynamic>{
+      'revision': 9,
+      'disabled_maps': [9170],
+      'force_open_all': true,
+      'requirements': [
+        {'map_id': 8110, 'name': '试炼森林', 'title_level': 0},
+        {'map_id': 9170, 'name': '守护城堡', 'title_level': 0},
+      ],
+      'wave_plans': [
+        {'map_id': 9170, 'variants': []},
+      ],
+    };
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StageConfigPage(
+          environment: '线下',
+          api: (r) async {
+            if (r['operation'] == 'stages_save') {
+              saved = r['stage_access'];
+              return {...saved!, 'revision': 10};
+            }
+            return initial;
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '森林');
+    await tester.pumpAndSettle();
+    expect(find.text('守护城堡'), findsNothing);
+    await tester.tap(find.text('选择搜索结果'));
+    await tester.pump();
+    await tester.tap(find.text('批量开放'));
+    await tester.pump();
+    await tester.tap(find.text('保存关卡开关'));
+    await tester.pumpAndSettle();
+    expect(saved?['disabled_maps'], [9170]);
+    expect(saved?['force_open_maps'], [8110]);
+    expect(saved?['wave_plans'], initial['wave_plans']);
+    expect(saved?['revision'], 9);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('stage gates preserve revision and selected environment page', (
     tester,
   ) async {
@@ -34,7 +85,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('关卡开关 · 本地测试服'), findsOneWidget);
+    expect(find.text('关卡配置 · 本地测试服'), findsOneWidget);
     await tester.tap(find.byType(DropdownButton<String>));
     await tester.pumpAndSettle();
     await tester.tap(find.text('关闭').last);

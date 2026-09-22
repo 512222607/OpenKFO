@@ -284,11 +284,14 @@ func TestMySQLTransactionsAndTwoPlayers(t *testing.T) {
 	}
 	protocol.WriteUint64(attack, 39, second.UID)
 	encoded, _ := protocol.Encode(protocol.Message{ID: 8071, Payload: attack})
-	if hub.Handle(owner, tunnel.Frame{Op: "data", Channel: 1, Data: encoded}) == nil {
-		t.Fatal("spoofed actor admitted")
+	if err := hub.Handle(owner, tunnel.Frame{Op: "data", Channel: 1, Data: encoded}); err != nil {
+		t.Fatal("audit-only policy disconnected sender", err)
+	}
+	if len(peer.Output) != 0 {
+		t.Fatal("spoofed actor forwarded")
 	}
 	hub.Detach(owner)
-	if peer.Room != nil || peer.game().Phase != "lobby" || len(hub.Rooms) != 0 {
-		t.Fatal("battle disconnect did not clean up")
+	if peer.Room == nil || peer.Room.Stage != "room" || peer.game().Phase != "room" || len(peer.Room.Members) != 1 {
+		t.Fatal("survival departure did not recover remaining player to room")
 	}
 }

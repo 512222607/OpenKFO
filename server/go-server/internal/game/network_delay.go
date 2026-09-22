@@ -20,7 +20,7 @@ func (h *Hub) beginNetworkProbe(r *Room) {
 		return
 	}
 	for _, m := range r.Members {
-		if !m.Ready || m.Session.Room != r || m.Session.game() == nil || m.Session.game().Phase != "room" {
+		if (!m.Spectator && !m.Ready) || m.Session.Room != r || m.Session.game() == nil || m.Session.game().Phase != "room" {
 			return
 		}
 	}
@@ -28,6 +28,9 @@ func (h *Hub) beginNetworkProbe(r *Room) {
 	r.NetworkProbe = p
 	for uid, m := range r.Members {
 		m.NetworkDelay = 0
+		if m.Spectator {
+			continue
+		}
 		p.pending[uid] = m.Session
 		m.Session.sendGame(protocol.Message{ID: protocol.MsgNetworkDelayProbe})
 	}
@@ -51,6 +54,9 @@ func (h *Hub) expireNetworkProbe(r *Room, p *roomNetworkProbe) {
 	if h.Rooms[r.ID] != r || r.NetworkProbe != p {
 		return
 	}
+	for uid, session := range p.pending {
+		log.Printf("network_probe_timeout room=%d uid=%d account=%q elapsed_ms=%d", r.ID, uid, session.Account, time.Since(p.started).Milliseconds())
+	}
 	h.clearRoomReady(r)
 	h.broadcast(r, notice("开战前网络检测超时，请重新准备。"), 0)
 }
@@ -65,7 +71,7 @@ func (h *Hub) networkDelayReply(s *Session, payload []byte) error {
 	}
 	p := r.NetworkProbe
 	m := r.Members[s.UID]
-	if m == nil || m.Session != s || !m.Ready || p.pending[s.UID] != s {
+	if m == nil || m.Session != s || (!m.Spectator && !m.Ready) || p.pending[s.UID] != s {
 		return nil
 	}
 	elapsed := time.Since(p.started)
@@ -84,7 +90,7 @@ func (h *Hub) networkDelayReply(s *Session, payload []byte) error {
 	}
 	h.cancelNetworkProbe(r)
 	for _, peer := range r.Members {
-		if !peer.Ready || peer.Session.game().Phase != "room" || time.Now().After(peer.Session.P2PUntil) {
+		if (!peer.Spectator && !peer.Ready) || peer.Session.game().Phase != "room" || time.Now().After(peer.Session.P2PUntil) {
 			h.clearRoomReady(r)
 			return nil
 		}

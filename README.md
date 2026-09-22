@@ -250,3 +250,10 @@ dotnet publish tools/updater/Updater.csproj -c Release -o dist/GM管理器
 - GM 验证：在 `gm` 目录运行 `flutter analyze`、`flutter test`。Windows/Linux 构建结果不代表 macOS/Android 实机验证。
 - 源码、测试、构建描述提交 Git；真实连接配置、密钥、日志、数据库、游戏资源及 `dist/` 不提交。
 - [实现清单](protocol/ImplementationBacklog.md) 记录缺口；[好友](protocol/FriendProtocol.md)、[背包校验](protocol/InventoryOwnershipChecks.md)、[练习 NPC](protocol/PracticeNPCProtocol.md)、[切换卡](protocol/WeaponSwitchCardProtocol.md) 说明近期实现边界。部分玩法仍待实现，不要把兼容服务器描述为原版完整复刻。
+
+
+### 违禁词配置
+
+服务器统一检查角色取名、改名、房间名称及公开/私聊发言，命中提示“违禁词！”。独立初始词库位于 `config/banned-words.txt`；GM 的“违禁词管理”支持搜索、添加、删除、批量粘贴和导入 UTF-8 TXT。保存到当前环境数据库后约 1 秒内生效，重启不会覆盖 GM 配置。
+
+首次导入、数据库结构、词库匹配方式和来源见 [违禁词管理说明](docs/banned-words.md)。需要部署新版服务器及 GM 才能使用，旧运行进程不会自动获得这些改动。

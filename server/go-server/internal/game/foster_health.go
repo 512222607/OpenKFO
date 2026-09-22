@@ -23,6 +23,16 @@ func (r *Room) trackFosterHealth(payload []byte) {
 	if !actor.active || actor.maximumHP <= 0 {
 		return
 	}
+	// Shared across TCP and observed UDP: one native health event applies once.
+	key := [2]uint64{event.Sender, event.Target}
+	sequence := protocol.ReadUint32(payload, 19)
+	if old, ok := r.HealthReceipts[key]; ok && int32(sequence-old) <= 0 {
+		return
+	}
+	if r.HealthReceipts == nil {
+		r.HealthReceipts = map[[2]uint64]uint32{}
+	}
+	r.HealthReceipts[key] = sequence
 	before := actor.reportedHP
 	actor.reportedHP = min(actor.maximumHP, max(float32(0), before-event.Damage))
 	r.PVEActors[event.Target] = actor

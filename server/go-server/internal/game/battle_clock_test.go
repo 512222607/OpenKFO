@@ -1,39 +1,52 @@
 package game
 
 import (
-	"testing"
-
 	"kungfu.local/server/internal/protocol"
+	"testing"
+	"time"
 )
 
-func TestBattleClockStartsAfterAllPlayersReadyOnce(t *testing.T) {
-	hub, owner, peer, outsider := combatFixture()
-	room := owner.Room
-	room.Stage = "wait_ready"
-	for _, player := range []*Session{owner, peer} {
-		player.game().Phase = "wait_ready"
-	}
-	ready := func(player *Session) {
-		payload := make([]byte, 14)
-		protocol.WriteUint16(payload, 0, room.ID)
-		protocol.WriteUint64(payload, 2, player.UID)
-		roomRequest(t, hub, player, 8040, payload)
-	}
-	ready(owner)
-	ready(owner)
-	if len(owner.Output) != 0 || len(peer.Output) != 0 || room.Stage != "wait_ready" {
-		t.Fatal("clock started before all players were ready")
-	}
-	ready(peer)
-	for _, player := range []*Session{owner, peer} {
-		packets := roomOutputs(t, player, 8070, 8090)
-		if len(packets[0].Payload) != 12 || len(packets[1].Payload) != 4 || protocol.ReadUint32(packets[1].Payload, 0) != 1 {
-			t.Fatal("missing battle context or native clock enable flag")
+func TestBattleClockPeersAndLifecycle(t *testing.T) {
+	h, owner, peer, _ := waitingRoomFixture()
+	r := owner.Room
+	r.Stage = "battle"
+	r.Serial = 7
+	r.BattleClock = 1
+	r.BattleStartedAt = time.Now()
+	started := r.BattleStartedAt
+	for _, seconds := range []int{1, 2, 5} {
+		if !h.tickBattleClock(r, 7, started, started.Add(time.Duration(seconds)*time.Second)) {
+			t.Fatal("clock stopped")
+		}
+		for _, s := range []*Session{owner, peer} {
+			messages := roomOutputs(t, s, protocol.MsgBattleClock)
+			if protocol.ReadUint32(messages[0].Payload, 0) != uint32(seconds+1) {
+				t.Fatal("incorrect shared counter")
+			}
 		}
 	}
-	ready(owner)
-	ready(peer)
-	if room.Stage != "battle" || len(owner.Output) != 0 || len(peer.Output) != 0 || len(outsider.Output) != 0 {
-		t.Fatal("duplicate start or notification outside the room")
+	h.tickBattleClock(r, 7, started, started.Add(5*time.Second))
+	roomOutputs(t, owner)
+	roomOutputs(t, peer)
+	r.Stage = "settlement"
+	if h.tickBattleClock(r, 7, started, started.Add(6*time.Second)) {
+		t.Fatal("settlement clock running")
 	}
+	r.Stage = "battle"
+	r.Serial++
+	if h.tickBattleClock(r, 7, started, started.Add(6*time.Second)) {
+		t.Fatal("old round sent")
+	}
+	r.Serial = 7
+	r.BattleStartedAt = started.Add(time.Second)
+	if h.tickBattleClock(r, 7, started, started.Add(6*time.Second)) {
+		t.Fatal("old start sent")
+	}
+	r.BattleStartedAt = started
+	delete(h.Rooms, r.ID)
+	if h.tickBattleClock(r, 7, started, started.Add(6*time.Second)) {
+		t.Fatal("deleted room sent")
+	}
+	roomOutputs(t, owner)
+	roomOutputs(t, peer)
 }
