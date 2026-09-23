@@ -564,6 +564,11 @@ func inspect(a *archive, items []Item) (*inspection, error) {
 						buff = attr.Value
 					}
 				}
+				for _, key := range []string{"UStateLevel", "UStateLastCycle"} {
+					if value := node.get(key); value != "" {
+						values[key] = value
+					}
+				}
 				hits = append(hits, Hit{ref, values, buff})
 			}
 			labels := []string{}

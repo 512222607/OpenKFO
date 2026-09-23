@@ -226,6 +226,114 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
     }
   }
 
+  String buffName(dynamic id) {
+    final value = int.tryParse('$id') ?? 0;
+    if (value == 0) return '无';
+    for (final b in (data?['buffs'] as List? ?? [])) {
+      if (b['id'] == value) return '${b['name']}';
+    }
+    return '异常状态 $value（名称未收录）';
+  }
+
+  String reactionChoice(dynamic hit, Map<String, dynamic> rule) {
+    final original = Map<String, dynamic>.from(hit['values']);
+    final current = {...original, ...?rule['properties']?[hit['id']] as Map?};
+    final fields = (data?['fields'] as List? ?? []).where(
+      (f) => f['key'] != 'SkillDamage' && f['key'] != 'SkillEnhanceDamage',
+    );
+    if (fields.every((f) => '${current[f['key']]}' == '${original[f['key']]}')) {
+      return 'original';
+    }
+    for (final e in (data?['effects'] as List? ?? [])) {
+      if ((e['values'] as Map).entries.every(
+        (v) => '${current[v.key]}' == '${v.value}',
+      )) {
+        return e['id'];
+      }
+    }
+    return 'custom';
+  }
+
+  String originalReaction(dynamic hit) {
+    final v = hit['values'];
+    if ('${v['TripTarget']}' == '1') return '击倒';
+    if ('${v['TargetFlurr']}' == '1' && '${v['StandHurtFly']}' == '11') {
+      return '上升 / 悬浮';
+    }
+    if ('${v['RepulseTarget']}' == '1') return '击退';
+    return '原受击动作';
+  }
+
+  String originalDebuff(dynamic stage) {
+    final names = <String>{
+      for (final h in (stage['hits'] as List? ?? [])) buffName(h['buff']),
+    };
+    return names.isEmpty ? '无' : names.join(' / ');
+  }
+
+  Widget numberEditors(
+    dynamic hit,
+    Map<String, dynamic> rule,
+    bool enabled, {
+    required bool damage,
+  }) => Padding(
+    padding: const EdgeInsets.all(8),
+    child: Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: [
+        for (final field in (data?['fields'] as List? ?? []).where(
+          (f) =>
+              damage ==
+              ['SkillDamage', 'SkillEnhanceDamage'].contains(f['key']),
+        ))
+          SizedBox(
+            width: 170,
+            child: TextFormField(
+              key: ValueKey(
+                '$editorVersion-${rule['stage']}-${hit['id']}-${field['key']}',
+              ),
+              initialValue:
+                  '${rule['properties']?[hit['id']]?[field['key']] ?? hit['values'][field['key']]}',
+              enabled: enabled,
+              decoration: InputDecoration(
+                labelText: field['name'],
+                helperText: '默认 ${hit['values'][field['key']]}',
+              ),
+              keyboardType: TextInputType.number,
+              validator: (text) {
+                final v = num.tryParse(text ?? '');
+                return v == null ||
+                        !v.isFinite ||
+                        v < field['min'] ||
+                        v > field['max'] ||
+                        (!damage &&
+                            (v != v.roundToDouble() ||
+                                ((weapon?['allowed_values']?[field['key']]
+                                            as List?)
+                                        ?.contains(v.toInt()) ==
+                                    false)))
+                    ? '数值超出范围'
+                    : null;
+              },
+              onChanged: (text) => setState(() {
+                final changes = rule.putIfAbsent(
+                  'properties',
+                  () => <String, dynamic>{},
+                ) as Map;
+                final values = changes.putIfAbsent(
+                  hit['id'],
+                  () => <String, dynamic>{},
+                ) as Map;
+                values[field['key']] = num.tryParse(text) ?? -1;
+                dirty = true;
+              }),
+            ),
+          ),
+      ],
+    ),
+  );
+
   List<Widget> hitEditors(
     dynamic stage,
     Map<String, dynamic> rule,
@@ -233,27 +341,37 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
   ) {
     return [
       for (final hit in (stage['hits'] as List? ?? []))
-        ExpansionTile(
-          title: Text(
-            '命中 ${hit['id']} · 基础伤害 ${rule['properties']?[hit['id']]?['SkillDamage'] ?? hit['values']['SkillDamage']}',
-          ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if ((stage['hits'] as List).length > 1)
+              Text('命中 ${(stage['hits'] as List).indexOf(hit) + 1}'),
             Padding(
               padding: const EdgeInsets.all(8),
               child: DropdownButtonFormField<String>(
                 key: ValueKey(
-                  '$editorVersion-${rule['stage']}-${hit['id']}-effect',
+                  '$editorVersion-${rule['stage']}-${hit['id']}-${reactionChoice(hit, rule)}-effect',
                 ),
-                decoration: const InputDecoration(labelText: '搭配攻击效果'),
+                isExpanded: true,
+                initialValue: reactionChoice(hit, rule),
+                decoration: const InputDecoration(labelText: '受击动作'),
                 items: [
-                  const DropdownMenuItem(
+                  DropdownMenuItem(
                     value: 'original',
-                    child: Text('恢复该命中的原攻击效果'),
+                    child: Text('默认（${originalReaction(hit)}）'),
                   ),
+                  if (reactionChoice(hit, rule) == 'custom')
+                    const DropdownMenuItem(
+                      value: 'custom',
+                      enabled: false,
+                      child: Text('自定义受击动作'),
+                    ),
                   for (final effect in (data?['effects'] as List? ?? []))
                     DropdownMenuItem(
                       value: effect['id'] as String,
-                      child: Text(effect['name']),
+                      child: Text(
+                        effect['id'] == 'float' ? '上升 / 悬浮' : effect['name'],
+                      ),
                     ),
                 ],
                 onChanged: !enabled
@@ -286,53 +404,10 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                       }),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.all(8),
-              child: Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  for (final field in (data?['fields'] as List? ?? []))
-                    SizedBox(
-                      width: 170,
-                      child: TextFormField(
-                        key: ValueKey(
-                          '$editorVersion-${rule['stage']}-${hit['id']}-${field['key']}',
-                        ),
-                        initialValue:
-                            '${rule['properties']?[hit['id']]?[field['key']] ?? hit['values'][field['key']]}',
-                        enabled: enabled,
-                        decoration: InputDecoration(
-                          labelText: field['name'],
-                          helperText:
-                              '${field['min']}–${field['max']}；原值 ${hit['values'][field['key']]}',
-                        ),
-                        keyboardType: TextInputType.number,
-                        validator: (text) {
-                          final v = num.tryParse(text ?? '');
-                          return v == null ||
-                                  !v.isFinite ||
-                                  v < field['min'] ||
-                                  v > field['max']
-                              ? '数值超出范围'
-                              : null;
-                        },
-                        onChanged: (text) => setState(() {
-                          final changes = rule.putIfAbsent(
-                            'properties',
-                            () => <String, dynamic>{},
-                          ) as Map;
-                          final values = changes.putIfAbsent(
-                            hit['id'],
-                            () => <String, dynamic>{},
-                          ) as Map;
-                          values[field['key']] = num.tryParse(text) ?? -1;
-                          dirty = true;
-                        }),
-                      ),
-                    ),
-                ],
-              ),
+            numberEditors(hit, rule, enabled, damage: true),
+            ExpansionTile(
+              title: const Text('击飞参数 / 高级设置'),
+              children: [numberEditors(hit, rule, enabled, damage: false)],
             ),
           ],
         ),
@@ -353,21 +428,12 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
               stage['label'] ?? '动作说明缺失（按键待核实）',
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
             ),
-            ExpansionTile(
-              title: const Text('技术详情（状态、动作编号）'),
-              children: [
-                SelectableText(
-                  '状态 ${stage['state'] ?? rule['stage']} · 动作 ${stage['action']} · ${stage['property_ids'].length} 个命中属性',
-                ),
-              ],
-            ),
             if (stage['supported'] != true)
               Text(
                 stage['reason'],
                 style: const TextStyle(color: Colors.deepOrange),
               ),
-            ...hitEditors(stage, rule, enabled),
-            const SizedBox(height: 10),
+            const SizedBox(height: 16),
             Row(
               children: [
                 Expanded(
@@ -378,12 +444,16 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                       '${weapon!['id']}-${rule['stage']}-buff-${rule['buff']}',
                     ),
                     initialValue: rule['buff'],
-                    decoration: const InputDecoration(labelText: '命中效果'),
+                    decoration: const InputDecoration(labelText: 'DEBUFF'),
                     items: (data!['buffs'] as List)
                         .map(
                           (b) => DropdownMenuItem<int>(
                             value: b['id'],
-                            child: Text(b['name']),
+                            child: Text(
+                              b['id'] == 0
+                                  ? '默认（${originalDebuff(stage)}）'
+                                  : b['name'],
+                            ),
                           ),
                         )
                         .toList(),
@@ -440,6 +510,8 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                 ),
               ],
             ),
+            const SizedBox(height: 12),
+            ...hitEditors(stage, rule, enabled),
           ],
         ),
       ),
@@ -702,13 +774,9 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                                       : '当前游戏配置：已写入 ${applied.length} 段效果；需重启游戏加载',
                                 ),
                                 const SizedBox(height: 8),
-                                const Text(
-                                  '展开按键路线，选择动作段设置伤害和 BUFF。同一个动作被多条连招引用时，共用一份配置。\n默认操作：C 普通攻击 · X 特殊攻击 · V 跳跃 · Z 瞄准。连招按键以各武器提示为准。',
-                                ),
+                                const Text('选择招式，设置 DEBUFF、受击动作和伤害。'),
                                 if ((weapon!['combos'] as List? ?? []).isEmpty)
-                                  const Text(
-                                    '该武器没有独立连招提示，下方按动画说明列出全部动作；说明可能来自共享动画，不代表完整按键路线。',
-                                  ),
+                                  const Text('未收录按键提示，按动作名称选择。'),
                                 if (weapon!['id'] == 253013)
                                   Align(
                                     alignment: Alignment.centerLeft,
@@ -762,7 +830,7 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                                           title: Text(title),
                                           subtitle: Text(
                                             other
-                                                ? '按动画说明选择；编号在技术详情中'
+                                                ? '按动作名称选择'
                                                 : '${combo['name']} · ${nodes.length} 个动作段',
                                           ),
                                           children: [

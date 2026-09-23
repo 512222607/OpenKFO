@@ -52,6 +52,7 @@ void main() {
                     {
                       'id': '8081$i',
                       'values': {'SkillDamage': '3'},
+                      'buff': '0',
                     },
                   ],
                   'supported': true,
@@ -86,12 +87,29 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('填入示例：第一下中毒，第二下燃烧'));
     await tester.pumpAndSettle();
+    expect(find.text('DEBUFF'), findsWidgets);
+    expect(find.text('受击动作'), findsWidgets);
+    expect(find.text('默认（原受击动作）'), findsWidgets);
+    expect(find.text('击飞参数 / 高级设置'), findsWidgets);
+    expect(
+      find.byWidgetPredicate(
+        (w) => w is SelectableText && (w.data ?? '').contains('原配置：'),
+      ),
+      findsNothing,
+    );
+    expect(find.widgetWithText(TextFormField, '基础伤害'), findsWidgets);
+    await tester.enterText(
+      find.widgetWithText(TextFormField, '基础伤害').first,
+      '7',
+    );
+    await tester.pumpAndSettle();
     final durations = find.widgetWithText(TextFormField, '持续周期（原生值）');
     await tester.enterText(durations.first, '4500');
     await tester.pumpAndSettle();
     await tester.tap(find.text('保存方案'));
     await tester.pumpAndSettle();
     expect(draft[0]['buff'], 1);
+    expect(draft[0]['properties']['80810']['SkillDamage'], 7);
     expect(draft[0]['duration'], 4500);
     expect(draft[1]['buff'], 37);
     expect(draft[2]['buff'], 0);
