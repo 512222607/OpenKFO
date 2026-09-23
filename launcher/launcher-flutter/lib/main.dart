@@ -13,6 +13,8 @@ import 'update_progress_view.dart';
 import 'log_export.dart';
 import 'package:file_selector/file_selector.dart';
 
+const launcherVersion = String.fromEnvironment('LAUNCHER_VERSION', defaultValue: 'development');
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const LauncherApp());
@@ -23,7 +25,7 @@ class LauncherApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
     debugShowCheckedModeBanner: false,
-    title: '启动器 2026.09.22-oss.3',
+    title: '启动器 $launcherVersion',
     theme: ThemeData(
       useMaterial3: true,
       colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff23645c)),
@@ -72,6 +74,21 @@ class _LauncherPageState extends State<LauncherPage> {
   FrameMode frameMode = FrameMode.normal;
   String status = '正在准备启动器…', health = '正在检查服务器…';
   Map<String, dynamic>? release;
+  String announcement = '暂无公告';
+  bool readingAnnouncement = false;
+
+  Future<void> refreshAnnouncement() async {
+    if (!ready || readingAnnouncement) return;
+    setState(() => readingAnnouncement = true);
+    try {
+      final text = await updates.announcement();
+      if (mounted) setState(() => announcement = text);
+    } catch (_) {
+      if (mounted) setState(() => announcement = '公告暂时无法加载，请稍后刷新。');
+    } finally {
+      if (mounted) setState(() => readingAnnouncement = false);
+    }
+  }
   File get preferences => File(
     p.join(
       Platform.environment['LOCALAPPDATA']!,
@@ -106,6 +123,7 @@ class _LauncherPageState extends State<LauncherPage> {
       }
       loadFields();
       ready = true;
+      unawaited(refreshAnnouncement());
       await refreshRunning();
       stateTimer = Timer.periodic(const Duration(seconds: 2), (_) {
         if (!busy) unawaited(refreshRunning());
@@ -202,11 +220,25 @@ class _LauncherPageState extends State<LauncherPage> {
         ),
       ) ??
       false;
-  Future<void> checkUpdate() async {
+  Future<void> checkUpdate({bool manual = false}) async {
+    if (ready && service.config['update_enabled'] == false) {
+      report('本地测试模式：已暂停在线更新。');
+      return;
+    }
     final previousBusy=busy;
     if(mounted)setState(()=>busy=true);
     try {
+      if (manual && service.local) {
+        report('线下版本不检查在线更新。');
+        return;
+      }
       release = await updates.check();
+      if (release == null && manual && mounted) {
+        report('已是最新版！');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('已是最新版！')),
+        );
+      }
       if (release != null && mounted) {
         if (await confirm('启动器有新版本', release!['notes'], no: '跳过本次更新')) {
           await save();
@@ -223,7 +255,7 @@ class _LauncherPageState extends State<LauncherPage> {
     try {
       await save();
       await service.validate();
-      final client = await updates.clientCheck();
+      final client = service.config['update_enabled'] == false ? null : await updates.clientCheck();
       if (client != null) {
         if (!await confirm('客户端更新', client['notes'] ?? '发现客户端更新，更新前需要关闭游戏。')) {
           return;
@@ -304,22 +336,41 @@ class _LauncherPageState extends State<LauncherPage> {
               children: [
                 const Icon(Icons.sports_martial_arts, size: 28),
                 const SizedBox(width: 12),
-                Expanded(child: Text('启动器 2026.09.22-oss.3', maxLines: 2, style: Theme.of(context).textTheme.headlineSmall)),
+                Expanded(child: Text('启动器 $launcherVersion', maxLines: 2, style: Theme.of(context).textTheme.headlineSmall)),
                 TextButton(
-                  onPressed: busy ? null : checkUpdate,
+                  onPressed: busy ? null : () => checkUpdate(manual: true),
                   child: const Text('检查更新'),
                 ),
                 TextButton(
                   onPressed: () => confirm(
                     '使用说明',
-                    '将整个 ZIP 解压到完整游戏目录，与 Data 文件夹同级。\n只点击启动器.exe；登录组件、证书与 gfld.dat 会自动准备。\n\n账号不存在时登录即注册；已有账号需输入正确密码。\n账号密码保存在本机用户目录，使用 AES 加密。\n高帧模式切换后需重新启动游戏。\n更新只下载变化的文件。',
+                    '将整个 ZIP 解压到完整游戏目录，与 Data 文件夹同级。',
                     yes: '知道了',
                   ),
                   child: const Text('使用说明'),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 4),
+            Text(ready
+                ? '${service.local ? '线下环境' : '线上环境'} · ${service.clientExecutable}${service.config['update_enabled'] == false ? ' · 本地测试（暂停更新）' : ''}'
+                : '正在读取运行环境…'),
+            const SizedBox(height: 8),
+            Card(
+              child: SizedBox(
+                height: 86,
+                child: Row(children: [
+                  const Padding(padding: EdgeInsets.all(12), child: Icon(Icons.campaign_outlined)),
+                  Expanded(child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: SelectableText(announcement),
+                  )),
+                  IconButton(onPressed: ready && !readingAnnouncement ? refreshAnnouncement : null,
+                    tooltip: '刷新公告', icon: const Icon(Icons.refresh)),
+                ]),
+              ),
+            ),
+            const SizedBox(height: 8),
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -485,10 +536,6 @@ class _LauncherPageState extends State<LauncherPage> {
                       ? () => service.show(selected)
                       : null,
                   child: const Text('显示游戏窗口'),
-                ),
-                OutlinedButton(
-                  onPressed: ready ? logs : null,
-                  child: const Text('查看窗口日志'),
                 ),
               ],
             ),

@@ -5,6 +5,7 @@
 #include <cstdlib>
 
 static HWND loginWindow;
+static HWND gameWindow;
 static BOOL CALLBACK findLogin(HWND window, LPARAM) {
     wchar_t name[64]; GetClassNameW(window, name, 64);
     if (!wcscmp(name, L"LoginChildWndClass")) { loginWindow = window; return FALSE; }
@@ -14,6 +15,7 @@ static BOOL CALLBACK findGame(HWND window, LPARAM processId) {
     DWORD owner; GetWindowThreadProcessId(window, &owner);
     wchar_t name[64]; GetClassNameW(window, name, 64);
     if (owner == (DWORD)processId && !wcscmp(name, L"GAMECLIENT")) {
+        gameWindow = window;
         EnumChildWindows(window, findLogin, 0);
         return loginWindow ? FALSE : TRUE;
     }
@@ -37,15 +39,18 @@ int wmain(int count, wchar_t** args) {
     HWND attached = nullptr;
     while (WaitForSingleObject(process, 0) == WAIT_TIMEOUT) {
         loginWindow = nullptr;
+        gameWindow = nullptr;
         EnumWindows(findGame, processId);
-        if (loginWindow != attached || (attached && !IsWindow(attached))) {
+        // Bootstrap SDK compatibility before it creates its login child.
+        HWND target = loginWindow ? loginWindow : gameWindow;
+        if (target != attached || (attached && !IsWindow(attached))) {
             if (hook) UnhookWindowsHookEx(hook);
             hook = nullptr;
             attached = nullptr;
         }
-        if (loginWindow && !hook) {
-            hook = SetWindowsHookExW(WH_CALLWNDPROC, hookFunction, module, GetWindowThreadProcessId(loginWindow, nullptr));
-            if (hook) attached = loginWindow;
+        if (target && !hook) {
+            hook = SetWindowsHookExW(WH_CALLWNDPROC, hookFunction, module, GetWindowThreadProcessId(target, nullptr));
+            if (hook) attached = target;
         }
         if (hook && attached) {
             DWORD_PTR ignored;

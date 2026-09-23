@@ -71,6 +71,23 @@ class UpdateService {
     return url;
   }
 
+  Future<String> announcement() async {
+    final configured = launcher.config['announcement_url'] as String?;
+    final url = configured != null && configured.isNotEmpty
+        ? httpsUrl(configured)
+        : httpsUrl(launcher.config['update_version_url'] as String).resolve('../announcement.json');
+    final bytes = await download(url, 65536, missing: true);
+    if (bytes == null) return '暂无公告';
+    final value = jsonDecode(utf8.decode(bytes));
+    if (value is! Map || value['content'] is! String ||
+        (value['title'] != null && value['title'] is! String)) {
+      throw const FormatException('公告格式无效');
+    }
+    final title = (value['title'] as String? ?? '').trim();
+    final content = (value['content'] as String).trim();
+    return [title, content].where((text) => text.isNotEmpty).join('\n');
+  }
+
   Future<Map<String, dynamic>?> ossManifest({bool client = false}) async {
     final endpoint = httpsUrl(launcher.config['update_version_url'] as String);
     final version = jsonDecode(
@@ -234,7 +251,7 @@ class UpdateService {
         262144,
         missing: true,
       );
-      if (bytes == null) return null;
+      if (bytes == null) throw Exception('未找到启动器更新清单，无法确认是否为最新版。');
       m = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
     }
     validate(m);

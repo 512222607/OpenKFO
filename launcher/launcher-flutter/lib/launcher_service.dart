@@ -34,6 +34,8 @@ class GameDirectoryError implements Exception {
   String toString() => '请放到游戏目录下\n\n请将完整启动器文件夹中的文件放到游戏目录，与 Data 文件夹同级，然后重新打开。';
 }
 
+const legacyClientHash = '98c43be72ac7600b368d4e185d75205376f79e938ea42e4b16ce8f8c4bae827b';
+
 class LauncherService {
   final String root;
   late Map<String, dynamic> config;
@@ -44,12 +46,13 @@ class LauncherService {
   String get payload => p.join(root, 'launcher-files');
   String get support => p.join(root, 'LauncherSupport.exe');
   String get shared => p.join(game, 'launcher-components', 'shared');
+  String get bridgeExecutable => p.join(
+    shared, 'versions', components['OnlineBridge.exe'] as String, 'OnlineBridge.exe',
+  );
   String get clientExecutable {
-    final name = config['client_executable'] ?? 'gfld.dat';
-    if (name != 'gfld.dat' && name != 'gfxz.dat') {
-      throw Exception('不支持的游戏客户端，请选择 gfld.dat 或 gfxz.dat');
-    }
-    return name as String;
+    // Select from the actual game directory, including installations with an
+    // older bridge.json that still pins gfld.dat. Hash validation stays in prepare.
+    return File(p.join(game, 'gfxz.dat')).existsSync() ? 'gfxz.dat' : 'gfld.dat';
   }
   Uri get endpoint => Uri.parse(config['url'] as String);
   bool get local => ['127.0.0.1', 'localhost', '::1'].contains(endpoint.host);
@@ -256,10 +259,15 @@ class LauncherService {
     }
   }
 
-  Future<void> prepare() async {
-    await validate();
+  Future<void> validateClientExecutable() async {
     if (clientExecutable == 'gfld.dat') {
-      await install('gfld.dat', p.join(game, clientExecutable));
+      final image = File(p.join(game, clientExecutable));
+      if (!await image.exists()) {
+        throw Exception('游戏目录缺少 gfxz.dat 或 gfld.dat，请将启动器放到完整游戏目录。');
+      }
+      if (await fileHash(image.path) != legacyClientHash) {
+        throw Exception('gfld.dat 版本尚未适配，原文件未修改。');
+      }
     } else {
       final image = File(p.join(game, clientExecutable));
       if (!await image.exists()) {
@@ -270,6 +278,11 @@ class LauncherService {
         throw Exception('gfxz.dat 版本尚未适配，原文件未修改。');
       }
     }
+  }
+
+  Future<void> prepare() async {
+    await validate();
+    await validateClientExecutable();
     for (final name in ['SDError.dll', 'libssl-1_1.dll', 'libcrypto-1_1.dll']) {
       await install(name, p.join(game, name));
     }
@@ -304,7 +317,7 @@ class LauncherService {
       }
     }
     await Directory(shared).create(recursive: true);
-    await install('OnlineBridge.exe', p.join(shared, 'OnlineBridge.exe'));
+    await install('OnlineBridge.exe', bridgeExecutable);
   }
 
   Future<void> launch(
@@ -355,7 +368,7 @@ class LauncherService {
           utf8.encode(jsonEncode({'high_frame_rate': frameMode == FrameMode.high125, 'show_fps': fps})),
         );
         await Process.start(
-          p.join(shared, 'OnlineBridge.exe'),
+          bridgeExecutable,
           ['-config', path, '-window', '$n'],
           mode: ProcessStartMode.detached,
           workingDirectory: shared,
@@ -395,6 +408,14 @@ class LauncherService {
         ], mode: ProcessStartMode.detached);
       }
       final account = await loadAccount(n);
+      final savedAccounts = <Map<String, dynamic>>[];
+      for (var number = 1; number <= 8; number++) {
+        final saved = number == n ? account : await loadAccount(number);
+        if ((saved['Account'] as String? ?? '').isEmpty) continue;
+        if (!savedAccounts.any((old) => old['Account'] == saved['Account'] && old['Password'] == saved['Password'])) {
+          savedAccounts.add(saved);
+        }
+      }
       for (var i = 0; i < 60; i++) {
         final filled = await native({
           ...s,
@@ -402,6 +423,7 @@ class LauncherService {
           'Action': 'fill',
           'Image': p.join(game, clientExecutable),
           ...account,
+          'Accounts': savedAccounts,
         });
         if (filled == true) {
           status('窗口 $n 已填写账号密码，请在游戏内点击登录。');

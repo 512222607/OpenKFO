@@ -23,15 +23,55 @@ class FakeUpdates extends UpdateService {
   }
 }
 
+class ComponentTestLauncher extends LauncherService {
+  ComponentTestLauncher(super.root);
+  @override
+  Future<void> validateClientExecutable() async {
+    if (!await File('$game/gfld.dat').exists()) throw StateError('missing test client');
+  }
+}
+
 void main() {
-  test('client selection defaults to gfld and supports gfxz', () {
-    final service = LauncherService('.');
-    service.config = {};
+  test('announcement is independent of update manifest and tolerates missing file', () async {
+    final service = LauncherService('.')..config = {
+      'update_version_url': 'https://example.invalid/version/version.json',
+    };
+    final updates = FakeUpdates(service, {'announcement.json': utf8.encode(jsonEncode({
+      'title': '维护公告', 'content': '今晚测试更新',
+    }))});
+    expect(await updates.announcement(), '维护公告\n今晚测试更新');
+    expect(updates.fetched, ['/announcement.json']);
+    expect(await FakeUpdates(service, {}).announcement(), '暂无公告');
+    await expectLater(FakeUpdates(service, {'announcement.json': utf8.encode('{"content":42}')}).announcement(), throwsFormatException);
+  });
+
+  test('missing or unknown native client is rejected without installing one', () async {
+    final dir = await Directory.systemTemp.createTemp('native-client-');
+    addTearDown(() => dir.delete(recursive: true));
+    final service = LauncherService(dir.path)..game = dir.path;
+    await expectLater(service.validateClientExecutable(), throwsException);
+    expect(await File('${dir.path}/gfld.dat').exists(), false);
+    await File('${dir.path}/gfld.dat').writeAsBytes([1]);
+    await expectLater(service.validateClientExecutable(), throwsException);
+    expect(await File('${dir.path}/gfld.dat').readAsBytes(), [1]);
+  });
+
+  test('client selection prefers existing gfxz and falls back to gfld', () async {
+    final dir = await Directory.systemTemp.createTemp('client-selection-');
+    addTearDown(() => dir.delete(recursive: true));
+    final service = LauncherService(dir.path);
+    service.game = dir.path;
+    service.config = {'client_executable': 'gfld.dat'};
     expect(service.clientExecutable, 'gfld.dat');
-    service.config['client_executable'] = 'gfxz.dat';
+    await File('${dir.path}/gfld.dat').writeAsBytes([1]);
+    final gfxz = File('${dir.path}/gfxz.dat');
+    await gfxz.writeAsBytes([2]);
     expect(service.clientExecutable, 'gfxz.dat');
-    service.config['client_executable'] = '../gfxz.dat';
-    expect(() => service.clientExecutable, throwsException);
+    await gfxz.delete();
+    service.config['client_executable'] = 'gfxz.dat';
+    expect(service.clientExecutable, 'gfld.dat');
+    await Directory('${dir.path}/gfxz.dat').create();
+    expect(service.clientExecutable, 'gfld.dat');
   });
   test('TXT export includes full Chinese log and hides network endpoints',()async {
     final dir=await Directory.systemTemp.createTemp('log-export-');addTearDown(()=>dir.delete(recursive:true));
@@ -120,7 +160,6 @@ void main() {
       final payload = Directory('${dir.path}/launcher-files');
       await payload.create();
       final contents = <String, List<int>>{
-        'gfld.dat': [1, 2, 3],
         'SDError.dll': [4],
         'libssl-1_1.dll': [5],
         'libcrypto-1_1.dll': [6],
@@ -153,9 +192,23 @@ void main() {
       await File('${dir.path}/Settings.xml').writeAsString(
         '<Settings><LoginServer Index="2"/><Audio Volume="17"/></Settings>',
       );
-      final service = LauncherService(dir.path);
+      await File('${dir.path}/gfld.dat').writeAsBytes([1, 2, 3]);
+      final service = ComponentTestLauncher(dir.path);
       await service.init();
+      final legacyBridge = File('${service.shared}/OnlineBridge.exe');
+      await legacyBridge.parent.create(recursive: true);
+      await legacyBridge.writeAsBytes([90]);
       await service.prepare();
+      expect(await legacyBridge.readAsBytes(), [90]);
+      final firstBridge = service.bridgeExecutable;
+      expect(await File(firstBridge).readAsBytes(), [7]);
+      await File('${payload.path}/OnlineBridge.exe').writeAsBytes([70]);
+      service.components['OnlineBridge.exe'] = hashBytes([70]);
+      await service.prepare();
+      expect(service.bridgeExecutable, isNot(firstBridge));
+      expect(await File(firstBridge).readAsBytes(), [7]);
+      expect(await File(service.bridgeExecutable).readAsBytes(), [70]);
+      expect(await legacyBridge.readAsBytes(), [90]);
       expect(await File('${dir.path}/SDError.dll').readAsBytes(), [4]);
       expect(await File('${dir.path}/zz.crt').readAsBytes(), [9]);
       expect(await File('${dir.path}/vcruntime140.dll').readAsBytes(), [11]);

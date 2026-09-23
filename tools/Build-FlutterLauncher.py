@@ -17,7 +17,7 @@ assert version['frameworkVersion']=='3.16.9','Use Flutter 3.16.9 for Windows 7 c
 run([flutter,'pub','get'],stage)
 run([flutter,'analyze','--no-pub'],stage)
 run([flutter,'test','--no-pub'],stage)
-run([flutter,'build','windows','--release','--no-pub'],stage)
+run([flutter,'build','windows','--release','--no-pub',f'--dart-define=LAUNCHER_VERSION={args.version}'],stage)
 out=root/'dist'/('launcher-flutter-'+args.version)
 if out.exists():raise SystemExit('Use a new version: output already exists')
 release_dir=stage/'build/windows/x64/runner/Release'
@@ -32,7 +32,7 @@ run([go,'build','-mod=readonly','-modfile=bridge-go120.mod','-trimpath','-ldflag
 # Runner and plugins use the static CRT; inspect engine imports in release QA.
 run(['powershell.exe','-NoProfile','-ExecutionPolicy','Bypass','-File',root/'tools/Build-BridgeGo120.ps1'],root)
 payload=out/'launcher-files';payload.mkdir()
-for name in ['gfld.dat','LoginSkin.dll','LoginSkinHost.exe','SDError.dll','libssl-1_1.dll','libcrypto-1_1.dll','OnlineBridge.exe']:
+for name in ['LoginSkin.dll','LoginSkinHost.exe','SDError.dll','libssl-1_1.dll','libcrypto-1_1.dll','OnlineBridge.exe']:
     shutil.copy2(root/'dist/launcher-components'/name,payload/name)
 runtime=payload/'runtime-x86';runtime.mkdir()
 vc=root/'runtime-local/vc2019-minimum/vcruntime140.dll'
@@ -57,7 +57,7 @@ for f in out.rglob('*'):
     if not f.is_file():continue
     sha=digest(f);files[f.relative_to(out).as_posix()]={'sha256':sha,'size':f.stat().st_size}
     shutil.copy2(f,feed/'files'/(sha+'.bin'))
-(feed/'launcher-flutter.json').write_text(json.dumps({'kind':'launcher-flutter','version':args.version,'notes':'Flutter 独立启动器；自动准备登录组件、证书与老登客户端；按文件更新。','files':files},ensure_ascii=False,indent=2),encoding='utf-8')
+(feed/'launcher-flutter.json').write_text(json.dumps({'kind':'launcher-flutter','version':args.version,'notes':'Flutter 独立启动器；自动准备登录组件和证书；不包含游戏客户端；按文件更新。','files':files},ensure_ascii=False,indent=2),encoding='utf-8')
 zip_path=out.with_suffix('.zip')
 # Keep version dots in the directory name; with_suffix would truncate the version.
 zip_path=Path(str(out)+'.zip')

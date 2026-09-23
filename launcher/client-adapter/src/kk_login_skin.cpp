@@ -1,18 +1,62 @@
-// Presentation only: preserve the original login controls, IDs and window
-// procedure. Never read, store, send or replace account/password contents.
+// Preserve native authentication controls. Saved choices arrive in memory only
+// from the launcher; the native login procedure still performs authentication.
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <commctrl.h>
 #include <cwchar>
+#include <cstring>
+
+// Verified unpacked SDError build. Its title-based discovery waits forever for
+// gfxz's native title. Supply the selected, verified GAMECLIENT parent through
+// the SDK's existing parent slot; retain its login creation/authentication code.
+enum class LoginCompatibility : ULONG_PTR { MissingSdk = 1, Unreadable, UnknownCode, InvalidParent, Applied };
+static LoginCompatibility attachNativeParent(HWND window) {
+    static_assert(sizeof(HWND) == sizeof(LONG), "The verified SDK is x86 only");
+    constexpr size_t TitleTestRva = 0x428f, ParentCallbackRva = 0x4327;
+    constexpr size_t TargetProcessRva = 0x76964, ParentWindowRva = 0x795e8;
+    const BYTE titleTest[] = {0x85,0xf6,0x74,0x2b,0x68,0x00,0x01,0x00,0x00,0x8d,0x85,0xfc,0xfd,0xff};
+    const BYTE callback[] = {0xff,0x77,0x08,0x8b,0x57,0x04,0x8b,0xce,0xe8,0xfc,0xfe,0xff,0xff,0x83,0xc4,0x04,0x85,0xc0,0x74,0x17};
+    auto module = reinterpret_cast<BYTE*>(GetModuleHandleW(L"SDError.dll"));
+    if (!module) return LoginCompatibility::MissingSdk;
+    HWND parent = GetAncestor(window, GA_ROOT);
+    DWORD owner = 0; GetWindowThreadProcessId(parent, &owner);
+    wchar_t name[64] = {}; GetClassNameW(parent, name, 64);
+    if (owner != GetCurrentProcessId() || wcscmp(name, L"GAMECLIENT") ||
+        !IsWindowVisible(parent) || GetWindow(parent, GW_OWNER)) return LoginCompatibility::InvalidParent;
+    BYTE actualTitle[sizeof(titleTest)], actualCallback[sizeof(callback)];
+    DWORD targetProcess = 0;
+    SIZE_T read = 0;
+    HANDLE process = GetCurrentProcess();
+    if (!ReadProcessMemory(process, module + TitleTestRva, actualTitle, sizeof(actualTitle), &read) || read != sizeof(actualTitle) ||
+        !ReadProcessMemory(process, module + ParentCallbackRva, actualCallback, sizeof(actualCallback), &read) || read != sizeof(actualCallback) ||
+        !ReadProcessMemory(process, module + TargetProcessRva, &targetProcess, sizeof(targetProcess), &read) || read != sizeof(targetProcess)) return LoginCompatibility::Unreadable;
+    // Unknown or not-yet-unpacked SDKs are left untouched.
+    if (memcmp(actualTitle, titleTest, sizeof(titleTest)) || memcmp(actualCallback, callback, sizeof(callback))) return LoginCompatibility::UnknownCode;
+    if (targetProcess != owner) return LoginCompatibility::InvalidParent;
+    auto slot = reinterpret_cast<volatile LONG*>(module + ParentWindowRva);
+    MEMORY_BASIC_INFORMATION region = {};
+    if (!VirtualQuery(module + ParentWindowRva, &region, sizeof(region)) ||
+        region.State != MEM_COMMIT || region.Protect != PAGE_READWRITE) return LoginCompatibility::Unreadable;
+    // Do not replace an established parent; this only completes SDK discovery.
+    const LONG selected = static_cast<LONG>(reinterpret_cast<ULONG_PTR>(parent));
+    const LONG previous = InterlockedCompareExchange(slot, selected, 0);
+    return previous == 0 || previous == selected ? LoginCompatibility::Applied : LoginCompatibility::InvalidParent;
+}
 
 static const UINT SkinMessage = WM_APP + 0x3b7;
 static const UINT_PTR SkinId = 0x4b4b534b;
 static HBRUSH panelBrush, fieldBrush;
-static HFONT headingFont, titleFont, textFont, smallFont, emblemFont;
+static HFONT titleFont, textFont, smallFont;
 static const COLORREF Panel = RGB(23, 32, 47), Field = RGB(36, 48, 66);
 static const COLORREF Ink = RGB(239, 234, 219), Muted = RGB(157, 169, 185);
 static const COLORREF Gold = RGB(229, 186, 103);
-static constexpr int PanelWidth = 620, PanelHeight = 420;
+static constexpr int PanelWidth = 400, PanelHeight = 350;
+// Same bounded UTF-16 payload as launcher-support; never persisted to disk.
+static constexpr ULONG_PTR AccountsMessage = 0x4b4b4131;
+static constexpr int AccountChoicesId = 1101, MaxAccounts = 8, CredentialChars = 128;
+struct SavedAccount { wchar_t account[CredentialChars], password[CredentialChars]; };
+struct SavedAccounts { DWORD count; SavedAccount entries[MaxAccounts]; };
+static SavedAccounts savedAccounts = {};
 static void centerPanel(HWND window) {
     HWND parent = GetParent(window);
     RECT area = {};
@@ -34,9 +78,8 @@ static HFONT font(int height, int weight) {
 static void resources() {
     if (panelBrush) return;
     panelBrush = CreateSolidBrush(Panel); fieldBrush = CreateSolidBrush(Field);
-    headingFont = font(32, FW_BOLD); titleFont = font(25, FW_BOLD);
+    titleFont = font(25, FW_BOLD);
     textFont = font(17, FW_NORMAL); smallFont = font(13, FW_NORMAL);
-    emblemFont = font(80, FW_BOLD);
 }
 static void text(HDC dc, const wchar_t* value, RECT rect, HFONT type, COLORREF color, UINT flags = DT_LEFT | DT_VCENTER | DT_SINGLELINE) {
     auto previous = SelectObject(dc, type); SetBkMode(dc, TRANSPARENT);
@@ -47,21 +90,11 @@ static void fill(HDC dc, RECT rect, COLORREF color) {
 }
 static void paint(HWND window, HDC dc) {
     RECT client; GetClientRect(window, &client); FillRect(dc, &client, panelBrush);
-    fill(dc, {0, 0, 208, 420}, RGB(15, 23, 36));
-    fill(dc, {28, 31, 65, 34}, Gold);
-    text(dc, L"功夫小子", {27, 49, 204, 97}, headingFont, Ink);
-    HPEN pen = CreatePen(PS_SOLID, 1, RGB(104, 89, 66));
-    auto oldPen = SelectObject(dc, pen); auto oldBrush = SelectObject(dc, GetStockObject(NULL_BRUSH));
-    Ellipse(dc, 36, 179, 174, 317); Ellipse(dc, 43, 186, 167, 310);
-    SelectObject(dc, oldBrush); SelectObject(dc, oldPen); DeleteObject(pen);
-    text(dc, L"武", {36, 179, 174, 312}, emblemFont, Gold, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-    text(dc, L"登录，即刻开战", {28, 357, 200, 388}, smallFont, Muted);
-    text(dc, L"账号登录", {246, 37, 575, 77}, titleFont, Ink);
-    text(dc, L"欢迎回来", {247, 78, 575, 101}, smallFont, Muted);
-    text(dc, L"账号", {247, 108, 575, 130}, smallFont, Muted);
-    text(dc, L"密码", {247, 188, 575, 210}, smallFont, Muted);
-    fill(dc, {244, 134, 578, 176}, Field); fill(dc, {244, 214, 578, 256}, Field);
-    text(dc, L"请使用自己的账号登录", {246, 376, 578, 398}, smallFont, Muted, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    text(dc, L"账号登录", {32, 22, 368, 62}, titleFont, Ink);
+    text(dc, L"账号", {32, 76, 368, 98}, smallFont, Muted);
+    text(dc, L"密码", {32, 152, 368, 174}, smallFont, Muted);
+    fill(dc, {32, 102, 368, 140}, Field);
+    fill(dc, {32, 178, 368, 216}, Field);
 }
 static LRESULT CALLBACK editProcedure(HWND window, UINT message, WPARAM wparam, LPARAM lparam, UINT_PTR, DWORD_PTR) {
     if (message == WM_KEYDOWN && (wparam == VK_RETURN || wparam == VK_TAB)) {
@@ -80,6 +113,39 @@ static LRESULT CALLBACK editProcedure(HWND window, UINT message, WPARAM wparam, 
     return DefSubclassProc(window, message, wparam, lparam);
 }
 static LRESULT CALLBACK loginProcedure(HWND window, UINT message, WPARAM wparam, LPARAM lparam, UINT_PTR, DWORD_PTR) {
+    if (message == WM_COPYDATA) {
+        const auto packet = (const COPYDATASTRUCT*)lparam;
+        if (!packet || packet->dwData != AccountsMessage || packet->cbData != sizeof(SavedAccounts) || !packet->lpData) return FALSE;
+        const auto choices = (const SavedAccounts*)packet->lpData;
+        if (choices->count > MaxAccounts) return FALSE;
+        for (DWORD i = 0; i < choices->count; ++i)
+            if (!wmemchr(choices->entries[i].account, 0, CredentialChars) || !wmemchr(choices->entries[i].password, 0, CredentialChars)) return FALSE;
+        HWND combo = GetDlgItem(window, AccountChoicesId);
+        if (!combo) return FALSE;
+        SecureZeroMemory(&savedAccounts, sizeof(savedAccounts));
+        savedAccounts = *choices;
+        SendMessageW(combo, CB_RESETCONTENT, 0, 0);
+        for (DWORD i = 0; i < savedAccounts.count; ++i) {
+            wchar_t label[160];
+            swprintf_s(label, L"%s (%lu)", savedAccounts.entries[i].account, i + 1);
+            SendMessageW(combo, CB_ADDSTRING, 0, (LPARAM)label);
+        }
+        EnableWindow(combo, savedAccounts.count != 0);
+        return TRUE;
+    }
+    if (message == WM_COMMAND && LOWORD(wparam) == AccountChoicesId && HIWORD(wparam) == CBN_SELCHANGE) {
+        LRESULT selected = SendMessageW((HWND)lparam, CB_GETCURSEL, 0, 0);
+        if (selected >= 0 && (DWORD)selected < savedAccounts.count) {
+            const auto& choice = savedAccounts.entries[selected];
+            SetWindowTextW(GetDlgItem(window, 1001), choice.account);
+            SetWindowTextW(GetDlgItem(window, 1002), choice.password);
+        }
+        return 0;
+    }
+    if (message == WM_COMMAND && LOWORD(wparam) == 1004 && HIWORD(wparam) == BN_CLICKED) {
+        PostMessageW(GetAncestor(window, GA_ROOT), WM_CLOSE, 0, 0);
+        return 0;
+    }
     if (message == WM_ERASEBKGND) return 1;
     if (message == WM_PAINT) {
         PAINTSTRUCT state; HDC dc = BeginPaint(window, &state); paint(window, dc); EndPaint(window, &state); return 0;
@@ -92,7 +158,7 @@ static LRESULT CALLBACK loginProcedure(HWND window, UINT message, WPARAM wparam,
         auto item = (DRAWITEMSTRUCT*)lparam;
         bool primary = wparam == 1003, down = (item->itemState & ODS_SELECTED) != 0;
         fill(item->hDC, item->rcItem, primary ? (down ? RGB(198, 151, 73) : Gold) : Panel);
-        text(item->hDC, primary ? L"登 录 游 戏" : L"返回", item->rcItem, textFont,
+        text(item->hDC, primary ? L"登录" : L"退出", item->rcItem, textFont,
             (item->itemState & ODS_DISABLED) ? Muted : (primary ? RGB(28, 30, 35) : Muted), DT_CENTER | DT_VCENTER | DT_SINGLELINE);
         if (item->itemState & ODS_FOCUS) { RECT focus = item->rcItem; InflateRect(&focus, -4, -4); DrawFocusRect(item->hDC, &focus); }
         return TRUE;
@@ -100,7 +166,10 @@ static LRESULT CALLBACK loginProcedure(HWND window, UINT message, WPARAM wparam,
     if (message == WM_SHOWWINDOW && wparam) {
         centerPanel(window);
     }
-    if (message == WM_NCDESTROY) RemoveWindowSubclass(window, loginProcedure, SkinId);
+    if (message == WM_NCDESTROY) {
+        SecureZeroMemory(&savedAccounts, sizeof(savedAccounts));
+        RemoveWindowSubclass(window, loginProcedure, SkinId);
+    }
     return DefSubclassProc(window, message, wparam, lparam);
 }
 
@@ -131,16 +200,25 @@ extern "C" __declspec(dllexport) BOOL __stdcall SkinLoginWindow(HWND window) {
         HWND edit = edits[index];
         SetWindowLongW(edit, GWL_STYLE, (GetWindowLongW(edit, GWL_STYLE) & ~WS_BORDER) | WS_TABSTOP);
         SetWindowLongW(edit, GWL_EXSTYLE, GetWindowLongW(edit, GWL_EXSTYLE) & ~WS_EX_CLIENTEDGE);
-        SetWindowPos(edit, nullptr, 255, 143 + index * 80, 310, 26, SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+        SetWindowPos(edit, nullptr, 42, 108 + index * 76, 314, 26, SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
         SendMessageW(edit, WM_SETFONT, (WPARAM)textFont, TRUE);
         SetWindowSubclass(edit, editProcedure, SkinId, 0);
     }
     HWND buttons[] = { login, cancel };
+    // Keep the original editable account control and its ID for the SDK.
+    SetWindowPos(account, nullptr, 42, 108, 278, 26, SWP_NOZORDER | SWP_NOACTIVATE);
+    HWND choices = CreateWindowW(L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST | WS_VSCROLL,
+        334, 108, 24, 220, window, (HMENU)AccountChoicesId, GetModuleHandleW(nullptr), nullptr);
+    if (choices) {
+        SendMessageW(choices, WM_SETFONT, (WPARAM)textFont, FALSE);
+        SendMessageW(choices, CB_SETDROPPEDWIDTH, 320, 0);
+        EnableWindow(choices, FALSE);
+    }
     for (int index = 0; index < 2; ++index) {
         SetWindowLongW(buttons[index], GWL_STYLE, (GetWindowLongW(buttons[index], GWL_STYLE) & ~BS_TYPEMASK) | BS_OWNERDRAW | WS_TABSTOP);
-        SetWindowPos(buttons[index], nullptr, 244, 281 + index * 52, 334, index ? 30 : 44, SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+        SetWindowPos(buttons[index], nullptr, 32, 242 + index * 52, 336, index ? 30 : 44, SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
     }
-    SetWindowTextW(login, L"登录游戏"); SetWindowTextW(cancel, L"返回");
+    SetWindowTextW(login, L"登录"); SetWindowTextW(cancel, L"退出");
     RedrawWindow(window, nullptr, nullptr, RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_FRAME);
     return TRUE;
 }
@@ -152,7 +230,10 @@ static BOOL CALLBACK findLogin(HWND window, LPARAM) {
 extern "C" __declspec(dllexport) LRESULT CALLBACK LoginSkinHook(int code, WPARAM wparam, LPARAM lparam) {
     if (code >= 0) {
         auto message = (CWPSTRUCT*)lparam;
-        if (message->message == SkinMessage && message->wParam == SkinId) findLogin(message->hwnd, 0);
+        if (message->message == SkinMessage && message->wParam == SkinId) {
+            SetPropW(message->hwnd, L"OpenKFO.LoginCompatibility", reinterpret_cast<HANDLE>(attachNativeParent(message->hwnd)));
+            findLogin(message->hwnd, 0);
+        }
     }
     return CallNextHookEx(nullptr, code, wparam, lparam);
 }

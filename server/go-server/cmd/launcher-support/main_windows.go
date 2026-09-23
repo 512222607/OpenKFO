@@ -6,6 +6,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf16"
 	"unsafe"
 )
 
@@ -27,14 +29,39 @@ const processQuery = 0x1000
 const wmSetText = 0x000c
 const accountControl = 1001
 const passwordControl = 1002
-const gameWindowTitle = "KK - 神兵天下 [1.13.0.594]"
 
 type request struct {
 	Op, Path, Key, Account, Password, Image, Action string
+	Accounts                                        []credentials
 	PID                                             uint32
 	Created                                         uint64
 }
 type credentials struct{ Account, Password string }
+
+// LoginSkin.dll accepts eight fixed UTF-16 pairs through WM_COPYDATA.
+// Passwords travel only in process memory, never command lines or files.
+func accountChoicesPayload(accounts []credentials) ([]byte, error) {
+	const maxAccounts, fieldChars = 8, 128
+	if len(accounts) > maxAccounts {
+		return nil, errors.New("保存的账号数量超过限制")
+	}
+	data := make([]byte, 4+maxAccounts*fieldChars*4)
+	binary.LittleEndian.PutUint32(data, uint32(len(accounts)))
+	for i, account := range accounts {
+		for j, value := range []string{account.Account, account.Password} {
+			units := utf16.Encode([]rune(value))
+			if len(units) >= fieldChars || strings.ContainsRune(value, 0) {
+				zeroBytes(data)
+				return nil, errors.New("保存的账号或密码长度无效")
+			}
+			for k, unit := range units {
+				binary.LittleEndian.PutUint16(data[4+i*fieldChars*4+j*fieldChars*2+k*2:], unit)
+			}
+		}
+	}
+	return data, nil
+}
+
 type envelope struct {
 	Version                            int
 	WrappedKey, Nonce, Tag, Ciphertext []byte
@@ -232,6 +259,11 @@ func window(r request) (any, error) {
 		return true, nil
 	}
 	if r.Action == "fill" {
+		choices, err := accountChoicesPayload(r.Accounts)
+		if err != nil {
+			return false, err
+		}
+		defer zeroBytes(choices)
 		var dialog uintptr
 		cb := syscall.NewCallback(func(h, p uintptr) uintptr {
 			if class(h) == "LoginChildWndClass" {
@@ -244,9 +276,6 @@ func window(r request) (any, error) {
 		if dialog == 0 {
 			return false, nil
 		}
-		// The native SDK finds its parent by the original caption while creating
-		// LoginChildWndClass. Rename only after that child exists.
-		user.NewProc("SetWindowTextW").Call(w, uintptr(unsafe.Pointer(utf(gameWindowTitle))))
 		for id, text := range map[int]string{accountControl: r.Account, passwordControl: r.Password} {
 			control, _, _ := user.NewProc("GetDlgItem").Call(dialog, uintptr(id))
 			if class(control) != "Edit" {
@@ -258,7 +287,14 @@ func window(r request) (any, error) {
 				return false, nil
 			}
 		}
-		return true, nil
+		packet := struct {
+			Kind uintptr
+			Size uint32
+			Data uintptr
+		}{0x4b4b4131, uint32(len(choices)), uintptr(unsafe.Pointer(&choices[0]))}
+		var accepted uintptr
+		ok, _, _ := user.NewProc("SendMessageTimeoutW").Call(dialog, 0x004a, 0, uintptr(unsafe.Pointer(&packet)), 3, 1500, uintptr(unsafe.Pointer(&accepted)))
+		return ok != 0 && accepted != 0, nil
 	}
 	return false, errors.New("未知窗口操作")
 }

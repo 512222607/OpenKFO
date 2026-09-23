@@ -24,14 +24,19 @@ func main() {
 	launch := flag.Bool("launch", true, "start native client")
 	window := flag.Int("window", 1, "shared client window number")
 	flag.Parse()
-	logFile, err := os.OpenFile(filepath.Join(filepath.Dir(executable), "online-client.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+	config, configErr := bridge.LoadConfig(*configPath)
+	logDirectory := filepath.Dir(executable)
+	if configErr == nil && config.SharedClient && config.ControlDirectory != "" {
+		logDirectory = config.ControlDirectory
+	}
+	logFile, err := os.OpenFile(filepath.Join(logDirectory, "online-client.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer logFile.Close()
 	log.SetOutput(bridge.PrivateLogWriter{Writer: logFile})
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
-	config, err := bridge.LoadConfig(*configPath)
+	err = configErr
 	if err == nil && config.SharedClient {
 		err = bridge.RequestSharedWindow(config, *window)
 	}

@@ -85,6 +85,7 @@ def main():
     parser.add_argument('--version', required=True)
     parser.add_argument('--base-url', default='https://openkfo.oss-cn-hangzhou.aliyuncs.com/')
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--announcement', type=Path, help='UTF-8 JSON with title and content')
     parser.add_argument('--notes', default='启动器与客户端文件更新')
     args = parser.parse_args()
     endpoint = urlsplit(args.base_url)
@@ -96,7 +97,16 @@ def main():
         parser.error('Payload directory does not exist')
     if args.output.exists():
         parser.error('Output already exists; use a new directory/version')
+    announcement = None
+    if args.announcement:
+        announcement = json.loads(args.announcement.read_text(encoding='utf-8-sig'))
+        if not isinstance(announcement, dict) or not isinstance(announcement.get('content'), str) or not isinstance(announcement.get('title', ''), str):
+            parser.error('Announcement requires string title and content')
+        if len(json.dumps(announcement, ensure_ascii=False).encode('utf-8')) > 65536:
+            parser.error('Announcement exceeds 64 KiB')
     args.output.mkdir(parents=True)
+    if announcement is not None:
+        (args.output / 'announcement.json').write_text(json.dumps(announcement, ensure_ascii=False, indent=2), encoding='utf-8')
     base = args.base_url.rstrip('/') + '/'
     version = {'version': args.version, 'manifest': prepare(args.launcher, args.output, base, args.version, 'launcher', args.notes, args.previous_launcher)}
     if args.client:
