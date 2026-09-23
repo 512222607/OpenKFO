@@ -1,3 +1,4 @@
+import 'user_management.dart';
 import 'banned_words_config.dart';
 import 'gm_version.dart';
 import 'talisman_config.dart';
@@ -199,7 +200,7 @@ class _ManagerState extends State<Manager> {
   @override
   void initState() {
     super.initState();
-    environment = widget.onlineOnly ? 'online' : 'local';
+    environment = 'online';
     if (widget.startupNotice.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted)
@@ -684,6 +685,23 @@ class _ManagerState extends State<Manager> {
                               context,
                               MaterialPageRoute<void>(
                                 builder: (_) => TrainingConfigPage(
+                                  api: api,
+                                  environment: environmentLabel,
+                                ),
+                              ),
+                            ),
+                    ),
+                    ListTile(
+                      textColor: Colors.white,
+                      iconColor: Colors.white,
+                      leading: const Icon(Icons.manage_accounts),
+                      title: const Text('用户管理'),
+                      onTap: busy
+                          ? null
+                          : () => Navigator.push(
+                              context,
+                              MaterialPageRoute<void>(
+                                builder: (_) => UserManagementPage(
                                   api: api,
                                   environment: environmentLabel,
                                 ),

@@ -17,6 +17,8 @@ func loginFailureMessage(err error) string {
 		return "账号密码验证已通过，但当前游戏窗口的连接编号被另一条活动连接占用。为避免多开串线，请关闭这个游戏窗口并从启动器重新启动。"
 	case "account_already_online":
 		return "该账号已有活动连接，请先退出该账号的其他游戏窗口，再重试。"
+	case "account_banned":
+		return "该账号已被封禁，请联系管理员。"
 	case "invalid_credentials":
 		return "账号或密码错误，请检查当前窗口填写的账号和密码。"
 	case "client_config_mismatch":

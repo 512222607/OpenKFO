@@ -71,7 +71,7 @@ func TestRandomWeaponRoomMySQL(t *testing.T) {
 	if e = h.selectRandomWeapon(s, 8, true); e != nil {
 		t.Fatal(e)
 	}
-	replies := roomOutputs(t, s, 2161, 1158, 21422)
+	replies := roomOutputs(t, s, 2161, 1158, 21422, protocol.MsgRoomRoster)
 	if protocol.ReadUint32(replies[2].Payload, 9) != 25300200 || s.RandomWeaponMode != 8 {
 		t.Fatal("random result")
 	}
@@ -87,7 +87,7 @@ func TestRandomWeaponRoomMySQL(t *testing.T) {
 	if e = h.route(s, s.game(), protocol.Message{ID: protocol.MsgEquipItem, Payload: request}); e != nil {
 		t.Fatal(e)
 	}
-	roomOutputs(t, s, protocol.MsgEquipmentChanged, 21425, 21422)
+	roomOutputs(t, s, protocol.MsgEquipmentChanged, 21425, 21422, protocol.MsgRoomRoster)
 	roomOutputs(t, peer, protocol.MsgRoomRoster)
 	state, e := store.RandomWeapon(s.UID)
 	if e != nil || state.Mode != 0 || s.RandomWeaponMode != 0 {
@@ -112,7 +112,7 @@ func TestRandomWeaponRoomMySQL(t *testing.T) {
 	if e = h.route(s, s.game(), protocol.Message{ID: protocol.MsgEquipItem, Payload: use}); e != nil {
 		t.Fatal(e)
 	}
-	out := roomOutputs(t, s, 2160, 2160, 2160, 2160, 2090, 2162, 2090, 2090, 2090)
+	out := roomOutputs(t, s, 2160, 2160, 2160, 2160, 2090, 2162, 2090, 2090, 2090, protocol.MsgRoomRoster)
 	ids := map[uint32]bool{}
 	for _, m := range out {
 		if m.ID == 2160 {

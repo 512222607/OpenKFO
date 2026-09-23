@@ -50,6 +50,7 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
       '缺少图片' => imageStatus[i['key']] == false,
       '推荐/优惠' => data?['offers']?[i['key']]?['recommended'] == true,
       '武器' => kind == 25 || kind == 26,
+      '闯关门票' => i['category'] == '闯关门票',
       '宠物/法宝' =>
         text.contains('宠物') || text.contains('法宝') || text.contains('护符'),
       '造型换装' =>
@@ -518,6 +519,7 @@ class _ShopConfigPageState extends State<ShopConfigPage> {
                       '缺少图片',
                       '推荐/优惠',
                       '武器',
+                      '闯关门票',
                       '宠物/法宝',
                       '造型换装',
                       '材料/药水',

@@ -30,6 +30,23 @@ var kinds = map[byte][2]string{
 }
 
 func stackable(kind byte) bool { return kind == 64 || kind == 71 || kind == 74 }
+
+// Verified item.txt admission tokens, not their crafting fragments. Keep the
+// native material type (60); this classifies sale/inventory records only.
+func stageTicket(kind byte, id uint32) bool {
+	if kind != 60 {
+		return false
+	}
+	switch id {
+	case 603316, 603317, 603318: // 街头、庙宇、仓库秘境
+		return true
+	case 603355: // 古寺僵尸符
+		return true
+	case 603396, 603397, 603398, 603407: // 密室、巅峰、神罚、挑战BOSS
+		return true
+	}
+	return false
+}
 func timed(kind byte) bool {
 	switch kind {
 	case 12, 13, 14, 15, 16, 17, 18, 20, 21, 25, protocol.ItemTalisman,
@@ -120,7 +137,11 @@ func catalog(client string, icons bool) ([]Item, error) {
 		if description == "#" {
 			description = ""
 		}
-		items = append(items, Item{key, uint32(id), byte(kind), fields[3], labels[0], labels[1], description, icon, gender, stackable(byte(kind)), timed(byte(kind)), stackable(byte(kind)) || timed(byte(kind)), fields})
+		quantityItem := stackable(byte(kind)) || stageTicket(byte(kind), uint32(id))
+		if stageTicket(byte(kind), uint32(id)) {
+			labels = [2]string{"闯关道具", "闯关门票"}
+		}
+		items = append(items, Item{key, uint32(id), byte(kind), fields[3], labels[0], labels[1], description, icon, gender, quantityItem, timed(byte(kind)), quantityItem || timed(byte(kind)), fields})
 	}
 	return items, nil
 }

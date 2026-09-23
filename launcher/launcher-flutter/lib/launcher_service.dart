@@ -45,6 +45,15 @@ class LauncherService {
   LauncherService(this.root);
   String get payload => p.join(root, 'launcher-files');
   String get support => p.join(root, 'LauncherSupport.exe');
+  Future<String> fpsExecutable() async {
+    final bytes = await File(support).readAsBytes();
+    final hash = hashBytes(bytes);
+    final target = p.join(game, 'launcher-components', 'fps', hash, 'LauncherSupport.exe');
+    if (!await File(target).exists() || await fileHash(target) != hash) {
+      await writeAtomic(target, bytes);
+    }
+    return target;
+  }
   String get shared => p.join(game, 'launcher-components', 'shared');
   String get bridgeExecutable => p.join(
     shared, 'versions', components['OnlineBridge.exe'] as String, 'OnlineBridge.exe',
@@ -399,7 +408,7 @@ class LauncherService {
         workingDirectory: skin,
       );
       if (fps && (s['fps_counter'] ?? 0) != 0) {
-        await Process.start(support, [
+        await Process.start(await fpsExecutable(), [
           '--fps',
           '${s['PID']}',
           '${s['Created']}',

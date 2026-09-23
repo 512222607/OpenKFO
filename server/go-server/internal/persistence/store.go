@@ -27,17 +27,18 @@ type Store struct {
 	wordFilter *wordCache
 }
 type Account struct {
-	UID          uint64   `json:"uid"`
-	Account      string   `json:"account"`
-	Nickname     string   `json:"nickname"`
-	Profile      []byte   `json:"profile"`
-	Salt         []byte   `json:"salt,omitempty"`
-	Digest       []byte   `json:"digest,omitempty"`
-	LegacySalt   []byte   `json:"legacy_salt,omitempty"`
-	LegacyDigest []byte   `json:"legacy_digest,omitempty"`
-	Gold         uint32   `json:"gold"`
-	Tickets      uint32   `json:"tickets"`
-	Inventory    [][]byte `json:"inventory,omitempty"`
+	BanGeneration uint64   `json:"-"`
+	UID           uint64   `json:"uid"`
+	Account       string   `json:"account"`
+	Nickname      string   `json:"nickname"`
+	Profile       []byte   `json:"profile"`
+	Salt          []byte   `json:"salt,omitempty"`
+	Digest        []byte   `json:"digest,omitempty"`
+	LegacySalt    []byte   `json:"legacy_salt,omitempty"`
+	LegacyDigest  []byte   `json:"legacy_digest,omitempty"`
+	Gold          uint32   `json:"gold"`
+	Tickets       uint32   `json:"tickets"`
+	Inventory     [][]byte `json:"inventory,omitempty"`
 }
 type Offer struct {
 	Key      uint32 `json:"key"`
@@ -67,6 +68,8 @@ var schema = []string{
         gold BIGINT UNSIGNED NOT NULL DEFAULT 0 ,
         tickets BIGINT UNSIGNED NOT NULL DEFAULT 0
     ) ENGINE=InnoDB`,
+	accountBanSchema,
+	accountBanAuditSchema,
 	`CREATE TABLE IF NOT EXISTS random_weapon_settings(uid BIGINT UNSIGNED PRIMARY KEY, mode TINYINT UNSIGNED NOT NULL DEFAULT 0, instance INT UNSIGNED NOT NULL DEFAULT 0, FOREIGN KEY(uid) REFERENCES accounts(uid) ON DELETE CASCADE) ENGINE=InnoDB`,
 	`CREATE TABLE IF NOT EXISTS honour_rules(id TINYINT UNSIGNED PRIMARY KEY,revision BIGINT UNSIGNED NOT NULL,rules MEDIUMBLOB NOT NULL) ENGINE=InnoDB`,
 	`CREATE TABLE IF NOT EXISTS honour_rules_audit(revision BIGINT UNSIGNED PRIMARY KEY,before_data MEDIUMBLOB NOT NULL,after_data MEDIUMBLOB NOT NULL,created TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB`,
@@ -220,7 +223,16 @@ func (store *Store) Authenticate(account, legacy string) (Account, error) {
 	if err != nil || lookupErr != nil || len(salt) != 16 || len(digest) != 32 || subtle.ConstantTimeCompare(actual, digest) != 1 {
 		return Account{}, ErrDenied
 	}
-	return store.RoleManager().Snapshot(uid)
+	ban, err := store.AccountBan(uid)
+	if err != nil {
+		return Account{}, err
+	}
+	if ban.Active(time.Now().Unix()) {
+		return Account{}, ErrAccountBanned
+	}
+	result, err := store.RoleManager().Snapshot(uid)
+	result.BanGeneration = ban.Generation
+	return result, err
 }
 func NewAccount(uid uint64, name, password string) (Account, error) {
 	if uid == 0 || !accountPattern.MatchString(name) || len(password) < 6 || len(password) > 128 {

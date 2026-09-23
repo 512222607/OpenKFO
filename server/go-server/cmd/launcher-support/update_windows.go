@@ -7,12 +7,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
-	"time"
+	"unsafe"
 )
 
 type updateFile struct {
@@ -45,6 +46,43 @@ func noLinks(path string) error {
 	}
 	return nil
 }
+
+// Check the full image path: other installations and game processes are unrelated.
+func ensureLauncherClosed(image string) error {
+	snapshot, err := syscall.CreateToolhelp32Snapshot(syscall.TH32CS_SNAPPROCESS, 0)
+	if err != nil {
+		return fmt.Errorf("检查启动器占用失败：%w", err)
+	}
+	defer syscall.CloseHandle(snapshot)
+	entry := syscall.ProcessEntry32{Size: uint32(unsafe.Sizeof(syscall.ProcessEntry32{}))}
+	for err = syscall.Process32First(snapshot, &entry); err == nil; err = syscall.Process32Next(snapshot, &entry) {
+		if !strings.EqualFold(syscall.UTF16ToString(entry.ExeFile[:]), filepath.Base(image)) {
+			continue
+		}
+		handle, e := syscall.OpenProcess(processQuery, false, entry.ProcessID)
+		if e != nil {
+			if e == syscall.ERROR_ACCESS_DENIED {
+				return fmt.Errorf("无法确认启动器是否已退出（PID %d），请关闭所有启动器窗口后重试", entry.ProcessID)
+			}
+			continue // The process may have exited after the snapshot.
+		}
+		var buffer [32768]uint16
+		length := uint32(len(buffer))
+		ok, _, queryErr := kernel.NewProc("QueryFullProcessImageNameW").Call(uintptr(handle), 0, uintptr(unsafe.Pointer(&buffer[0])), uintptr(unsafe.Pointer(&length)))
+		syscall.CloseHandle(handle)
+		if ok == 0 {
+			return fmt.Errorf("读取启动器路径失败（PID %d）：%w", entry.ProcessID, queryErr)
+		}
+		if strings.EqualFold(filepath.Clean(syscall.UTF16ToString(buffer[:length])), filepath.Clean(image)) {
+			return fmt.Errorf("同一目录的启动器仍在运行（PID %d）。请关闭所有启动器窗口后重试更新；游戏无需关闭。文件：%s", entry.ProcessID, image)
+		}
+	}
+	if err != syscall.ERROR_NO_MORE_FILES {
+		return fmt.Errorf("检查启动器进程失败：%w", err)
+	}
+	return nil
+}
+
 func applyPlan(path string) error {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -93,6 +131,9 @@ func applyPlan(path string) error {
 		if e != nil || r != syscall.WAIT_OBJECT_0 {
 			return errors.New("请关闭启动器后重试更新，文件尚未替换")
 		}
+	}
+	if err = ensureLauncherClosed(plan.Launcher); err != nil {
+		return err
 	}
 	journalPath := filepath.Join(plan.Stage, "journal.json")
 	if previous, e := os.ReadFile(journalPath); e == nil {
@@ -165,7 +206,7 @@ func applyPlan(path string) error {
 					os.Remove(undo.Path)
 				}
 			}
-			return err
+			return fmt.Errorf("替换更新文件失败：%s。请检查文件占用或写入权限：%w", j.Path, err)
 		}
 	}
 	os.Remove(filepath.Join(plan.Stage, "journal.json"))
@@ -178,5 +219,3 @@ func applyPlan(path string) error {
 	}
 	return cmd.Process.Release()
 }
-
-var _ = time.Second

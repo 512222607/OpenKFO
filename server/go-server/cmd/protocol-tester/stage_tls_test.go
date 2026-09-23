@@ -289,8 +289,15 @@ func TestStageGateTLS(t *testing.T) {
 			t.Fatal(e)
 		}
 	}
-	selection(host, 1)
-	selection(peer, 0)
+	// No 21370: the periodic refresh must initialize the native map cache.
+	for i := range accounts {
+		hub.Mutex.Lock()
+		hub.Sessions[accounts[i].UID].StageViewRequested = false
+		hub.Mutex.Unlock()
+		refresh(i)
+	}
+	receiveSelection(host, 1)
+	receiveSelection(peer, 0)
 	send(peer, 21370, []byte{1})
 	find(drain(peer), 20150)
 	send(host, 4030, nil)

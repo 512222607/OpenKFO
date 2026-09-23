@@ -321,7 +321,11 @@ func run(r request) (any, error) {
 }
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "--apply" {
+		if len(os.Args) != 3 {
+			os.Exit(2)
+		}
 		if err := applyPlan(os.Args[2]); err != nil {
+			_ = os.WriteFile(filepath.Join(filepath.Dir(os.Args[2]), "update-error.txt"), []byte(time.Now().Format(time.RFC3339)+"\n"+err.Error()+"\n"), 0600)
 			user.NewProc("MessageBoxW").Call(0, uintptr(unsafe.Pointer(utf(err.Error()))), uintptr(unsafe.Pointer(utf("更新失败"))), 0x10)
 			os.Exit(1)
 		}

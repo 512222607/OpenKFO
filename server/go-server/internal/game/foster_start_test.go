@@ -3,10 +3,37 @@ package game
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"kungfu.local/server/internal/persistence"
 	"kungfu.local/server/internal/protocol"
 )
+
+func TestSoloFosterReadyReachesNetworkProbe(t *testing.T) {
+	for _, mode := range []protocol.RoomType{protocol.FosterMode, protocol.StageAssault, protocol.SoloSurvival, protocol.TeamSurvival} {
+		t.Run(mode.String(), func(t *testing.T) {
+			h, owner, peer, _ := waitingRoomFixture()
+			r := owner.Room
+			delete(r.Members, peer.UID)
+			peer.Room = nil
+			r.Request[protocol.RoomTypeOffset] = byte(mode)
+			owner.P2PUntil = time.Now().Add(time.Minute)
+			roomRequest(t, h, owner, protocol.MsgReady, nil)
+			defer h.cancelNetworkProbe(r)
+			if mode == protocol.FosterMode || mode == protocol.StageAssault {
+				roomOutputs(t, owner, protocol.MsgPlayerReady, protocol.MsgNetworkDelayProbe)
+				if r.NetworkProbe == nil || !r.Members[owner.UID].Ready || r.Stage != "room" {
+					t.Fatal("solo PVE did not reach normal pre-start validation")
+				}
+			} else {
+				roomOutputs(t, owner)
+				if r.NetworkProbe != nil || r.Members[owner.UID].Ready {
+					t.Fatal("competitive room incorrectly allowed solo start")
+				}
+			}
+		})
+	}
+}
 
 func TestPersistedFosterPlan(t *testing.T) {
 	hash := strings.Repeat("a", 64)

@@ -351,10 +351,6 @@ class _LauncherPageState extends State<LauncherPage> {
                 ),
               ],
             ),
-            const SizedBox(height: 4),
-            Text(ready
-                ? '${service.local ? '线下环境' : '线上环境'} · ${service.clientExecutable}${service.config['update_enabled'] == false ? ' · 本地测试（暂停更新）' : ''}'
-                : '正在读取运行环境…'),
             const SizedBox(height: 8),
             Card(
               child: SizedBox(

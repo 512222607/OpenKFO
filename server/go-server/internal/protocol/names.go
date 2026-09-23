@@ -148,6 +148,7 @@ const (
 	MsgReady                = 4030 // 准备请求
 	MsgPlayerReady          = 4050 // 玩家准备通知
 	MsgCancelReady          = 4060
+	MsgRoomEquipmentEffects = 3350 // 房间装备变化：21B头+68B物品，重建挂载特效
 	MsgPlayerNotReady       = 4070
 	MsgBattleLoading        = 4080
 	MsgBattleStartFailed    = 4081

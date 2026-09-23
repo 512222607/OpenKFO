@@ -41,8 +41,8 @@ func TestExpiredEquipmentSynchronizesAtEachPlayersReturn(t *testing.T) {
 					assertPlayerRefresh(t, roomOutputs(t, other, 3090)[0], s.UID)
 				} else {
 					roomRequest(t, hub, s, 3550, append(protocol.Uint64Bytes(s.UID), make([]byte, 4)...))
-					roomOutputs(t, s, 3550, 2310, 2161, 2121)
-					assertPlayerRefresh(t, roomOutputs(t, other, 3550, 3090)[1], s.UID)
+					roomOutputs(t, s, 3550, 2310, 2161, 2121, protocol.MsgRoomRoster)
+					assertPlayerRefresh(t, roomOutputs(t, other, 3550, protocol.MsgRoomRoster)[1], s.UID)
 				}
 				if s.game().Phase != "room" || protocol.ReadUint16(s.Inventory[7], 17) != 0 || protocol.ReadUint32(s.Inventory[7], 19) != 2 {
 					t.Fatal("returned player retained expired equipment")
@@ -74,8 +74,12 @@ func TestEquipmentChangeRemainsPlayerRecord(t *testing.T) {
 	if !host.Room.Members[peer.UID].Ready {
 		t.Fatal("equipment refresh cancelled peer readiness")
 	}
-	assertPlayerRefresh(t, roomOutputs(t, peer, protocol.MsgRoomRoster)[0], host.UID)
-	roomOutputs(t, host)
+	remote := roomOutputs(t, peer, protocol.MsgRoomRoster)[0]
+	own := roomOutputs(t, host, protocol.MsgRoomRoster)[0]
+	assertPlayerRefresh(t, remote, host.UID)
+	if !bytes.Equal(own.Payload, remote.Payload) {
+		t.Fatal("self and peer room appearances differ")
+	}
 }
 
 func TestRoomWeaponReplacementAndRemoval(t *testing.T) {
@@ -110,11 +114,15 @@ func TestRoomWeaponReplacementAndRemoval(t *testing.T) {
 			expected = append(expected, protocol.MsgItemUpdated)
 		}
 		expected = append(expected, protocol.MsgItemUpdated)
+		expected = append(expected, protocol.MsgRoomRoster)
 		own := roomOutputs(t, host, expected...)
 		if oldEquipped && (protocol.ReadUint32(own[0].Payload, 0) != 1 || protocol.ReadUint16(own[0].Payload, 21) != 0) {
 			t.Fatal("displaced weapon was not explicitly unequipped first")
 		}
 		remote := roomOutputs(t, peer, protocol.MsgRoomRoster)[0]
+		if !bytes.Equal(own[len(own)-1].Payload, remote.Payload) {
+			t.Fatal("self and peer received different room equipment")
+		}
 		assertPlayerRefresh(t, remote, host.UID)
 		wantCount := 0
 		if equip {
@@ -153,7 +161,7 @@ func TestExpiryRefreshSkipsUnsafeSessionPhases(t *testing.T) {
 	}
 }
 
-func TestTwoWeaponRoomRefreshOnlyUpdatesPeers(t *testing.T) {
+func TestTwoWeaponRoomRefreshUpdatesSelfAndPeers(t *testing.T) {
 	hub, self, peer, _ := waitingRoomFixture()
 	records := [][]byte{}
 	for i, slot := range []uint16{protocol.SlotPrimaryWeapon, protocol.SlotSecondaryWeapon} {
@@ -164,9 +172,43 @@ func TestTwoWeaponRoomRefreshOnlyUpdatesPeers(t *testing.T) {
 		records = append(records, item)
 	}
 	hub.broadcastEquipment(self, persistence.Account{UID: self.UID, Profile: make([]byte, 360), Inventory: records})
-	roomOutputs(t, self)
+	own := roomOutputs(t, self, protocol.MsgRoomRoster)[0]
 	messages := roomOutputs(t, peer, protocol.MsgRoomRoster)
+	if !bytes.Equal(own.Payload, messages[0].Payload) {
+		t.Fatal("self did not receive both weapon slots")
+	}
 	if messages[0].Payload[64] != 2 || !bytes.Equal(messages[0].Payload[149:], append(bytes.Clone(records[0]), records[1]...)) {
 		t.Fatal("peer lost primary or secondary weapon")
+	}
+}
+
+func TestPetRefreshAndExpiryPreservePeerReadiness(t *testing.T) {
+	hub, self, peer, _ := waitingRoomFixture()
+	pet := make([]byte, protocol.InventoryRecordSize)
+	protocol.WriteUint32(pet, 0, 123)
+	pet[protocol.InventoryKindOffset] = protocol.ItemTalisman
+	protocol.WriteUint32(pet, protocol.InventoryItemIDOffset, 303131)
+	protocol.WriteUint16(pet, protocol.InventorySlotOffset, protocol.SlotPrimaryTalisman)
+	protocol.WriteUint16(pet, 23, 10000)
+	original := bytes.Clone(pet)
+	account := persistence.Account{UID: self.UID, Profile: make([]byte, 360), Inventory: [][]byte{pet}}
+	peer.Room.Members[peer.UID].Ready = true
+	hub.broadcastEquipment(self, account)
+	own := roomOutputs(t, self, protocol.MsgRoomRoster, protocol.MsgRoomEquipmentEffects)[0]
+	remote := roomOutputs(t, peer, protocol.MsgRoomRoster, protocol.MsgRoomEquipmentEffects)[0]
+	if !bytes.Equal(own.Payload, remote.Payload) || own.Payload[64] != 1 || !bytes.Equal(own.Payload[149:], original) {
+		t.Fatal("pet instance, slot or durability lost in self/peer refresh")
+	}
+	protocol.WriteUint16(pet, protocol.InventorySlotOffset, protocol.SlotUnequipped)
+	self.Room.Members[self.UID].Ready = true
+	hub.refreshExpiredEquipment(self, account)
+	for _, player := range []*Session{self, peer} {
+		out := roomOutputs(t, player, protocol.MsgPlayerNotReady, protocol.MsgRoomRoster, protocol.MsgRoomEquipmentEffects)
+		if protocol.ReadUint64(out[0].Payload, 0) != self.UID || out[1].Payload[64] != 0 {
+			t.Fatal("expiry cancelled another player or retained the pet")
+		}
+	}
+	if !peer.Room.Members[peer.UID].Ready || self.Room.Members[self.UID].Ready {
+		t.Fatal("expiry readiness scope incorrect")
 	}
 }

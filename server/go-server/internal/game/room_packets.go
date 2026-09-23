@@ -83,6 +83,25 @@ func roomList(room *Room) []byte {
 	return record
 }
 
+// Native 3350/81F270: UID, appearance bytes, item count, cosmetic metadata,
+// then 68-byte inventory records. Apply after 3105 so removed slots are cleared.
+func roomEquipmentEffects(roster []byte) []byte {
+	const headerSize = 21
+	items := roster[149:]
+	storage := len(items)
+	if storage == 0 {
+		// 81F36C reads the first item's kind even when the count is zero.
+		storage = protocol.InventoryRecordSize
+	}
+	p := make([]byte, headerSize+storage)
+	copy(p[:8], roster[:8])
+	p[8], p[9], p[11] = roster[54], roster[56], roster[64]
+	copy(p[12:16], roster[136:140])
+	copy(p[16:21], roster[144:149])
+	copy(p[headerSize:], items)
+	return p
+}
+
 func roomEntryForMember(room *Room, member *Member, own []byte) []byte {
 	entry := roomEntry(room, room.Owner)
 	entry[10], entry[11], entry[66] = member.Slot, member.Spawn, member.Team

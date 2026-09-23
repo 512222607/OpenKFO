@@ -189,7 +189,9 @@ func (server *Server) serveConnection(connection *tls.Conn) {
 	<-server.hashing
 	auth.Password = ""
 	if err != nil {
-		if errors.Is(err, persistence.ErrDenied) {
+		if errors.Is(err, persistence.ErrAccountBanned) {
+			deny("account_banned")
+		} else if errors.Is(err, persistence.ErrDenied) {
 			deny("invalid_credentials")
 		} else {
 			log.Printf("login_database_failed account=%q error_type=%T", auth.Account, err)
@@ -218,13 +220,26 @@ func (server *Server) serveConnection(connection *tls.Conn) {
 	log.Printf("authenticated uid=%d account=%q player=%q", session.UID, session.Account, session.Nickname)
 	connection.SetDeadline(time.Time{})
 	go func() {
-		ticker := time.NewTicker(15 * time.Second)
+		ticker := time.NewTicker(time.Second)
+		inventoryTicker := time.NewTicker(15 * time.Second)
+		defer inventoryTicker.Stop()
 		defer ticker.Stop()
 		for {
 			select {
 			case <-session.Done:
 				return
 			case <-ticker.C:
+				ban, err := server.Hub.Store.AccountBan(session.UID)
+				if err != nil {
+					log.Printf("account_ban_check_failed uid=%d", session.UID)
+					continue
+				}
+				if ban.Active(time.Now().Unix()) || ban.Generation != account.BanGeneration {
+					log.Printf("account_banned_disconnect uid=%d account=%q generation=%d", session.UID, session.Account, ban.Generation)
+					session.Close()
+					return
+				}
+			case <-inventoryTicker.C:
 				if err := server.Hub.RefreshExpiredInventory(session); err != nil {
 					log.Printf("inventory_refresh_failed uid=%d", session.UID)
 				}

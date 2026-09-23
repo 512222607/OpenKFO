@@ -18,6 +18,7 @@ import (
 )
 
 type Request struct {
+	Reason           string                           `json:"reason"`
 	BannedWords      *persistence.BannedWordsSettings `json:"banned_words,omitempty"`
 	GMVersion        string                           `json:"gm_version"`
 	Recommended      *bool                            `json:"recommended,omitempty"`
@@ -207,6 +208,7 @@ func (admin *Admin) Call(request Request) (any, error) {
 	}
 	remote := persistence.AdminRequest{Operation: request.Operation, ID: request.ID, UID: request.UID, Mode: request.Mode, Amount: request.Amount, Rewards: request.Rewards, RewardRevision: request.RewardRevision}
 	remote.Instance, remote.ExpiresAt = request.Instance, request.ExpiresAt
+	remote.Reason = request.Reason
 	remote.BannedWords = request.BannedWords
 	remote.StageAccess = request.StageAccess
 	remote.StageUnlocks = request.StageUnlocks
@@ -220,7 +222,7 @@ func (admin *Admin) Call(request Request) (any, error) {
 	remote.Titles = request.Titles
 	remote.VIPKind = request.VIPKind
 	switch request.Operation {
-	case "banned_words_get", "banned_words_save", "stage_unlocks_get", "stage_unlocks_save":
+	case "users_list", "user_ban_save", "user_ban_history", "banned_words_get", "banned_words_save", "stage_unlocks_get", "stage_unlocks_save":
 		return call(remote)
 	case "tasks_get", "tasks_save", "titles_get", "titles_save":
 		return call(remote)

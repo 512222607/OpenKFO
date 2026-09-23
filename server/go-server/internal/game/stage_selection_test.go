@@ -91,3 +91,21 @@ func TestStageSelectionIncludesPersistedPVEPlans(t *testing.T) {
 	view.Access.ClientHash = strings.Repeat("b", 64)
 	check()
 }
+
+func TestStageAuxiliaryStateQuery(t *testing.T) {
+	h, owner, _, _ := waitingRoomFixture()
+	for _, phase := range []string{"lobby", "room"} {
+		owner.game().Phase = phase
+		if err := h.route(owner, owner.game(), protocol.Message{ID: protocol.MsgStageStateQuery}); err != nil {
+			t.Fatal(err)
+		}
+		out := roomOutputs(t, owner, protocol.MsgStageStateReply)[0]
+		if len(out.Payload) != 8 || protocol.ReadUint32(out.Payload, 0) != 0 || protocol.ReadUint32(out.Payload, 4) != 0 {
+			t.Fatal("invalid empty auxiliary state")
+		}
+	}
+	if err := h.route(owner, owner.game(), protocol.Message{ID: protocol.MsgStageStateQuery, Payload: []byte{1}}); err != nil {
+		t.Fatal(err)
+	}
+	roomOutputs(t, owner, 20150)
+}

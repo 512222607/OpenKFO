@@ -402,6 +402,9 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		protocol.WriteUint32(reply.Payload, 26, lobbyID)
 		session.send(channel.ID, reply)
 		log.Printf("lobby uid=%d", session.UID)
+		if err := hub.refreshStageSelection(session); err != nil {
+			log.Printf("stage_refresh_failed uid=%d", session.UID)
+		}
 		return nil
 	}
 	if channel.Phase == "connected" {
@@ -502,6 +505,13 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		return nil
 	}
 	switch message.ID {
+	case protocol.MsgStageStateQuery:
+		if len(payload) != 0 {
+			session.sendGame(notice("关卡状态查询格式不正确。"))
+			return nil
+		}
+		session.sendGame(protocol.Message{ID: protocol.MsgStageStateReply, Payload: protocol.EmptyStageState()})
+		return nil
 	case 21370:
 		return hub.stageSelection(session, payload)
 	case protocol.MsgClaimTitleReward:

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -57,5 +58,32 @@ func TestUpdaterAppliesVerifiedStagedFile(t *testing.T) {
 	got, _ = os.ReadFile(dest)
 	if string(got) != string(old) {
 		t.Fatal("live file changed on failed verification")
+	}
+}
+
+func TestUpdaterDetectsOtherLauncherWithoutChangingFiles(t *testing.T) {
+	image, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = ensureLauncherClosed(image); err == nil || !strings.Contains(err.Error(), "PID") {
+		t.Fatalf("running launcher was not identified: %v", err)
+	}
+	if err = ensureLauncherClosed(filepath.Join(t.TempDir(), filepath.Base(image))); err != nil {
+		t.Fatalf("unrelated installation blocked: %v", err)
+	}
+	stage := t.TempDir()
+	next := []byte("must-not-install")
+	os.WriteFile(filepath.Join(stage, "probe.dat"), next, 0600)
+	sum := sha256.Sum256(next)
+	plan := updatePlan{Target: filepath.Dir(image), Stage: stage, Launcher: image, Files: []updateFile{{Name: "probe.dat", SHA256: hex.EncodeToString(sum[:]), Size: int64(len(next))}}}
+	raw, _ := json.Marshal(plan)
+	path := filepath.Join(stage, "plan.json")
+	os.WriteFile(path, raw, 0600)
+	if err = applyPlan(path); err == nil || !strings.Contains(err.Error(), "仍在运行") {
+		t.Fatalf("expected occupancy error: %v", err)
+	}
+	if _, err = os.Stat(filepath.Join(stage, "journal.json")); !os.IsNotExist(err) {
+		t.Fatal("started replacement despite running launcher")
 	}
 }

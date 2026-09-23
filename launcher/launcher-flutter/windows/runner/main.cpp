@@ -7,9 +7,12 @@
 
 #include "flutter_window.h"
 #include "utils.h"
+#include "launcher_lifecycle.h"
 
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
+  launcher_lifecycle::Instance single_instance;
+  if (!single_instance.Acquire()) return EXIT_SUCCESS;
   // Complete a staged update before loading the Dart application.
   wchar_t executable[32768];
   if (GetModuleFileNameW(nullptr, executable, 32768)) {
@@ -60,7 +63,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   window.SetQuitOnClose(true);
 
   ::MSG msg;
-  while (::GetMessage(&msg, nullptr, 0, 0)) {
+  while (::GetMessage(&msg, nullptr, 0, 0) > 0) {
     ::TranslateMessage(&msg);
     ::DispatchMessage(&msg);
   }

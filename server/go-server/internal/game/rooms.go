@@ -463,10 +463,21 @@ func (hub *Hub) broadcastEquipment(session *Session, account persistence.Account
 	if member == nil {
 		return
 	}
-	// The owner already receives 2090/2310 and incremental inventory updates.
-	// Only peers need 3105; its self branch rebuilds the local character via
-	// 9F3540. Do not apply a second local equipment reconstruction.
-	hub.broadcast(session.Room, protocol.Message{ID: protocol.MsgRoomRoster, Payload: fighter(account, member)}, session.UID)
+	// Inventory acknowledgements do not refresh the owner's room actor.
+	// 3105 updates existing actors, including self via native 81F202/9F3540.
+	// Unlike the new-member notification, it does not rejoin or clear readiness.
+	roster := fighter(account, member)
+	hub.broadcast(session.Room, protocol.Message{ID: protocol.MsgRoomRoster, Payload: roster}, 0)
+	// 3105 replaces the appearance but its self branch does not rebuild item
+	// effects. Native 3350 does (81F422 -> 9FAC40 -> 9EDF20), including wings.
+	// Include unequipped talismans in this check so removing the last one also
+	// clears its effects. Ordinary clothing/weapon-only inventories stay unchanged.
+	for _, item := range account.Inventory {
+		if len(item) == protocol.InventoryRecordSize && item[protocol.InventoryKindOffset] == protocol.ItemTalisman {
+			hub.broadcast(session.Room, protocol.Message{ID: protocol.MsgRoomEquipmentEffects, Payload: roomEquipmentEffects(roster)}, 0)
+			break
+		}
+	}
 }
 func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol.Message) (bool, error) {
 	payload := message.Payload
@@ -708,8 +719,7 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 				room.Stage = "room"
 				hub.broadcast(room, message, 0)
 				if returned != nil && session.syncUnequippedInventory(returned.Inventory) {
-					hub.clearRoomReady(room)
-					hub.broadcast(room, protocol.Message{ID: 3090, Payload: fighter(*returned, room.Members[uid])}, uid)
+					hub.refreshExpiredEquipment(session, *returned)
 				}
 				if returned != nil {
 					if err := hub.extendedTaskLists(session); err != nil {
@@ -811,7 +821,9 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 			hub.broadcast(room, protocol.Message{ID: protocol.MsgPlayerNotReady, Payload: protocol.Uint64Bytes(uid)}, 0)
 			return true, nil
 		}
-		if uid == room.Owner && room.Type() != protocol.FreePractice && room.Type() != protocol.StageAssault && !tutorialRoom(room) {
+		// Both PVE modes accept a solo party. Their persisted plan, map access
+		// and reward configuration are still validated before startBattle.
+		if uid == room.Owner && room.Type() != protocol.FreePractice && room.Type() != protocol.FosterMode && room.Type() != protocol.StageAssault && !tutorialRoom(room) {
 			if room.fighterCount() < 2 {
 				return true, nil
 			}

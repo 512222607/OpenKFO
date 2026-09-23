@@ -32,6 +32,19 @@ class ComponentTestLauncher extends LauncherService {
 }
 
 void main() {
+  test('FPS helper versions preserve running binaries across updates', () async {
+    final dir = await Directory.systemTemp.createTemp('fps-helper-');
+    addTearDown(() => dir.delete(recursive: true));
+    final service = LauncherService(dir.path)..game = dir.path;
+    await File(service.support).writeAsBytes([1, 2]);
+    final old = await service.fpsExecutable();
+    expect(await service.fpsExecutable(), old);
+    await File(service.support).writeAsBytes([3, 4]);
+    final updated = await service.fpsExecutable();
+    expect(updated, isNot(old));
+    expect(await File(old).readAsBytes(), [1, 2]);
+    expect(await File(updated).readAsBytes(), [3, 4]);
+  });
   test('announcement is independent of update manifest and tolerates missing file', () async {
     final service = LauncherService('.')..config = {
       'update_version_url': 'https://example.invalid/version/version.json',

@@ -95,12 +95,14 @@ func (h *Hub) sendStageSelection(s *Session, view persistence.StagePlayerView, e
 }
 
 func (h *Hub) refreshStageSelection(s *Session) error {
-	if !s.StageViewRequested {
-		return nil
-	}
 	view, err := h.Store.StagePlayerView(s.UID, h.Config.ConfigHash)
 	if err != nil {
 		return err
+	}
+	// Some native map selectors never request 21370. Initialize their cache
+	// proactively; subsequent refreshes are deduplicated by the view digest.
+	if !view.Configured && !s.StageViewRequested {
+		return nil
 	}
 	return h.sendStageSelection(s, view, false)
 }

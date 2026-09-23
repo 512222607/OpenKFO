@@ -1,6 +1,7 @@
 package game
 
 import (
+	"kungfu.local/server/internal/persistence"
 	"kungfu.local/server/internal/protocol"
 	"log"
 	"time"
@@ -53,8 +54,22 @@ func (hub *Hub) RefreshExpiredInventory(s *Session) error {
 	}
 	changedEquipment := s.syncUnequippedInventory(a.Inventory)
 	if changedEquipment && s.Room != nil {
-		hub.clearRoomReady(s.Room)
-		hub.broadcast(s.Room, protocol.Message{ID: 3090, Payload: fighter(a, s.Room.Members[s.UID])}, s.UID)
+		hub.refreshExpiredEquipment(s, a)
 	}
 	return nil
+}
+
+// An expired loadout invalidates only its owner's ready confirmation.
+func (hub *Hub) refreshExpiredEquipment(s *Session, account persistence.Account) {
+	r := s.Room
+	if r == nil || r.Stage != "room" || r.Members[s.UID] == nil {
+		return
+	}
+	hub.cancelNetworkProbe(r)
+	hub.cancelSeatExchange(r)
+	if r.Members[s.UID].Ready {
+		r.Members[s.UID].Ready = false
+		hub.broadcast(r, protocol.Message{ID: protocol.MsgPlayerNotReady, Payload: protocol.Uint64Bytes(s.UID)}, 0)
+	}
+	hub.broadcastEquipment(s, account)
 }

@@ -20,6 +20,7 @@ type AdminOffer struct {
 	Enabled bool `json:"enabled"`
 }
 type AdminRequest struct {
+	Reason           string               `json:"reason"`
 	BannedWords      *BannedWordsSettings `json:"banned_words,omitempty"`
 	GMVersion        string               `json:"gm_version"`
 	Definition       *ItemDefinition      `json:"definition,omitempty"`
@@ -73,6 +74,12 @@ func (store *Store) adminOffers() ([]AdminOffer, error) {
 }
 func (store *Store) Admin(request AdminRequest) (any, error) {
 	switch request.Operation {
+	case "users_list":
+		return store.UsersList()
+	case "user_ban_save":
+		return store.SaveAccountBan(request)
+	case "user_ban_history":
+		return store.AccountBanHistory(request.UID)
 	case "banned_words_get":
 		return store.BannedWords()
 	case "banned_words_save":
