@@ -111,9 +111,12 @@ def main():
     version = {'version': args.version, 'manifest': prepare(args.launcher, args.output, base, args.version, 'launcher', args.notes, args.previous_launcher)}
     if args.client:
         version['client_manifest'] = prepare(args.client, args.output, base, args.version, 'client', args.notes, args.previous_client, args.config_hash)
-    updater = args.output / 'updater' / args.version / 'updater.exe'
-    updater.parent.mkdir(parents=True)
-    shutil.copy2(args.launcher / 'LauncherSupport.exe', updater)
+    # Existing immutable LauncherSupport objects are already referenced by
+    # the launcher manifest. A resource-only release needs no duplicate EXE.
+    if not args.previous_launcher:
+        updater = args.output / 'updater' / args.version / 'updater.exe'
+        updater.parent.mkdir(parents=True)
+        shutil.copy2(args.launcher / 'LauncherSupport.exe', updater)
     # Publish this pointer only after every referenced object is uploaded.
     path = args.output / 'version/version.json'
     path.parent.mkdir()

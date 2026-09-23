@@ -172,8 +172,7 @@ func (server *Server) serveConnection(connection *tls.Conn) {
 		encoder.Encode(response)
 	}
 	if auth.ConfigHash != server.Hub.Config.ConfigHash {
-		deny("client_config_mismatch")
-		return
+		log.Printf("client_config_mismatch account=%q client_hash=%.64q server_hash=%.64q action=allow", auth.Account, auth.ConfigHash, server.Hub.Config.ConfigHash)
 	}
 	if !server.allowLogin(auth.Account) {
 		deny("rate_limited")

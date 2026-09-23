@@ -3,14 +3,14 @@ package protocol
 import "bytes"
 
 const (
-	MsgStageStateQuery uint32 = 21342
-	MsgStageStateReply uint32 = 21343
+	MsgStageSelectionReply uint32 = 21371
+	StageStateReplySize           = 16
+	MsgStageStateQuery     uint32 = 21342
+	MsgStageStateReply     uint32 = 21343
 )
 
-// Native A27670 reads two counts, followed by 12-byte and 8-byte records.
-// This server does not yet project these auxiliary records. Empty counts
-// report no records, not invented clearance history or unlocked maps.
-func EmptyStageState() []byte { return make([]byte, 8) }
+// EmptyStageState follows the reference reply: 16 zero bytes, no fabricated clears.
+func EmptyStageState() []byte { return make([]byte, StageStateReplySize) }
 
 // EncodeStageSelection is specific to 21373. Native 9290F3 compares each
 // parsed integer with the positive PVE MapID; an empty string skips the

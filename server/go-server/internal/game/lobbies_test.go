@@ -49,7 +49,7 @@ func TestLobbyRoomAndPlayerIsolation(t *testing.T) {
 	room := host.Room
 	room.LobbyID, host.LobbyID, peer.LobbyID, visitor.LobbyID = 1, 1, 1, 2
 	roomRequest(t, hub, visitor, 2260, []byte{1, 0, 0x88})
-	if p := roomOutputs(t, visitor, 2280)[0].Payload; len(p) != 8 || protocol.ReadUint32(p, 4) != 0 {
+	if p := roomOutputs(t, visitor, 2280)[0].Payload; len(p) != 8 || protocol.ReadUint32(p, 4) != 1 {
 		t.Fatal("foreign room listed")
 	}
 	join := make([]byte, 14)

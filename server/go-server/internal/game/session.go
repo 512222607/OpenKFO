@@ -45,6 +45,7 @@ type Channel struct {
 type Session struct {
 	RandomWeaponMode     uint32
 	StageViewRequested   bool
+	StageViewReady       bool
 	StageViewDigest      [32]byte
 	TitleOffer           byte              // Server-announced title; retained after claim to bind retries.
 	ExtendedTaskNotified map[uint16]string // Client hash + cycle, scoped to this login.
@@ -402,9 +403,10 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		protocol.WriteUint32(reply.Payload, 26, lobbyID)
 		session.send(channel.ID, reply)
 		log.Printf("lobby uid=%d", session.UID)
-		if err := hub.refreshStageSelection(session); err != nil {
-			log.Printf("stage_refresh_failed uid=%d", session.UID)
-		}
+		// The lobby acknowledgement precedes native PVE panel initialization.
+		// Wait for its first room-directory request before seeding those panels.
+		session.StageViewReady = false
+		session.StageViewRequested = false
 		return nil
 	}
 	if channel.Phase == "connected" {
@@ -452,6 +454,7 @@ func (hub *Hub) route(session *Session, channel *Channel, message protocol.Messa
 		session.GameChannel, session.BootstrapChannel = 0, 0
 		session.LobbyID = 0
 		session.StageViewRequested = false
+		session.StageViewReady = false
 		session.StageViewDigest = [32]byte{}
 		session.Bound = false
 		session.UDPRelayed = 0

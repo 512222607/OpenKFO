@@ -2,10 +2,61 @@ package game
 
 import (
 	"errors"
+	"fmt"
 	"kungfu.local/server/internal/protocol"
 	"kungfu.local/server/internal/tunnel"
 	"testing"
 )
+
+func TestRoomDirectoryPageCounters(t *testing.T) {
+	for _, total := range []int{0, 1, 9, 10, 18, 19} {
+		for _, page := range []byte{0, 1, 2, 3} {
+			t.Run(fmt.Sprintf("rooms_%d_page_%d", total, page), func(t *testing.T) {
+				h := NewHub(nil, Config{})
+				for i := 1; i <= total+20; i++ {
+					r := &Room{ID: uint16(i), LobbyID: 1, Request: make([]byte, 81), Stage: "room", Members: map[uint64]*Member{}}
+					if i > total {
+						if i%2 == 0 {
+							r.LobbyID = 2
+						} else {
+							r.Request[46] = 5
+						}
+					}
+					h.Rooms[r.ID] = r
+				}
+				s := &Session{UID: 1004, LobbyID: 1, Output: make(chan tunnel.Frame, 1), Done: make(chan struct{})}
+				ch := &Channel{ID: 1, Kind: "game", Phase: "lobby"}
+				if _, err := h.roomMessage(s, ch, protocol.Message{ID: 2260, Payload: []byte{page, 1, 0}}); err != nil {
+					t.Fatal(err)
+				}
+				d := protocol.Decoder{}
+				messages, err := d.Feed((<-s.Output).Data)
+				if err != nil || len(messages) != 1 {
+					t.Fatal(messages, err)
+				}
+				p := messages[0].Payload
+				wantPage := int(page)
+				if wantPage == 0 {
+					wantPage = 1
+				}
+				wantPages := (total + 8) / 9
+				if wantPages == 0 {
+					wantPages = 1
+				}
+				count := total - (wantPage-1)*9
+				if count < 0 {
+					count = 0
+				}
+				if count > 9 {
+					count = 9
+				}
+				if protocol.ReadUint32(p, 0) != uint32(wantPage) || protocol.ReadUint32(p, 4) != uint32(wantPages) || len(p) != 8+259*count {
+					t.Fatalf("page counters=%d/%d bytes=%d; want=%d/%d rooms=%d", protocol.ReadUint32(p, 0), protocol.ReadUint32(p, 4), len(p), wantPage, wantPages, count)
+				}
+			})
+		}
+	}
+}
 
 func TestRoomDirectoryRefreshPendingDuringJoin(t *testing.T) {
 	hub, host, peer, newcomer := waitingRoomFixture()

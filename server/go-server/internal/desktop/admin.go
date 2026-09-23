@@ -221,6 +221,12 @@ func (admin *Admin) Call(request Request) (any, error) {
 	remote.Tasks = request.Tasks
 	remote.Titles = request.Titles
 	remote.VIPKind = request.VIPKind
+	if request.Operation == "user_ban_save" {
+		if request.Enabled == nil {
+			return nil, fmt.Errorf("请选择封禁或解封操作")
+		}
+		remote.Enabled = *request.Enabled
+	}
 	switch request.Operation {
 	case "users_list", "user_ban_save", "user_ban_history", "banned_words_get", "banned_words_save", "stage_unlocks_get", "stage_unlocks_save":
 		return call(remote)

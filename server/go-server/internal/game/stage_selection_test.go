@@ -1,11 +1,25 @@
 package game
 
 import (
+	"bytes"
 	"kungfu.local/server/internal/persistence"
 	"kungfu.local/server/internal/protocol"
 	"strings"
 	"testing"
 )
+
+func TestStageSelectionWaitsForNativeLobby(t *testing.T) {
+	h := NewHub(nil, Config{})
+	s := &Session{}
+	// The periodic inventory refresh may run after the lobby acknowledgement
+	// but before its UI opens. It must not read or mark a delivered stage view.
+	if err := h.refreshStageSelection(s); err != nil {
+		t.Fatal(err)
+	}
+	if s.StageViewRequested || s.StageViewReady {
+		t.Fatal("stage cache initialized before native lobby request")
+	}
+}
 
 func TestStageSelectionRefreshAndRevocation(t *testing.T) {
 	h, s, peer, _ := waitingRoomFixture()
@@ -13,12 +27,8 @@ func TestStageSelectionRefreshAndRevocation(t *testing.T) {
 	view := persistence.StagePlayerView{Configured: true, Catalogue: []uint32{8110, 8111}, Maps: []uint32{8110, 8111}}
 	check := func(want []uint32) {
 		t.Helper()
-		out := roomOutputs(t, s, 21372, 21373)
-		records, e := protocol.ParseStageRecords(out[0].Payload)
-		if e != nil || len(records) != 2 {
-			t.Fatal(records, e)
-		}
-		selection, e := protocol.ParseStageSelection(out[1].Payload)
+		out := roomOutputs(t, s, protocol.MsgStageSelectionReply)
+		selection, e := protocol.ParseStageProgress(out[0].Payload)
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -71,8 +81,8 @@ func TestStageSelectionIncludesPersistedPVEPlans(t *testing.T) {
 		if err := h.sendStageSelection(s, view, true); err != nil {
 			t.Fatal(err)
 		}
-		out := roomOutputs(t, s, 21372, 21373)
-		actual, err := protocol.ParseStageSelection(out[1].Payload)
+		out := roomOutputs(t, s, protocol.MsgStageSelectionReply)
+		actual, err := protocol.ParseStageProgress(out[0].Payload)
 		if err != nil || len(actual.MapIDs) != len(want) {
 			t.Fatal(actual, err, want)
 		}
@@ -100,7 +110,7 @@ func TestStageAuxiliaryStateQuery(t *testing.T) {
 			t.Fatal(err)
 		}
 		out := roomOutputs(t, owner, protocol.MsgStageStateReply)[0]
-		if len(out.Payload) != 8 || protocol.ReadUint32(out.Payload, 0) != 0 || protocol.ReadUint32(out.Payload, 4) != 0 {
+		if !bytes.Equal(out.Payload, make([]byte, 16)) {
 			t.Fatal("invalid empty auxiliary state")
 		}
 	}

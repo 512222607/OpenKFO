@@ -199,7 +199,7 @@ func TestRoomDirectoryWaitingFilter(t *testing.T) {
 			t.Fatal(err)
 		}
 		p := roomOutputs(t, o, 2280)[0].Payload
-		if protocol.ReadUint32(p, 4) != uint32(option) {
+		if (len(p)-8)/259 != int(option) {
 			t.Fatal("waiting filter ignored")
 		}
 	}

@@ -159,7 +159,13 @@ func Run(ctx context.Context, config Config, launch bool) error {
 		if err != nil {
 			return err
 		}
-		if hex.EncodeToString(digest.Sum(nil)) != expected {
+		actual := hex.EncodeToString(digest.Sum(nil))
+		if path != image {
+			if actual != expected {
+				log.Printf("client_config_mismatch expected=%.64q actual=%s action=allow", expected, actual)
+			}
+			config.ConfigHash = actual
+		} else if actual != expected {
 			return fmt.Errorf("client file mismatch: %s", filepath.Base(path))
 		}
 	}

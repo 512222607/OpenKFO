@@ -19,7 +19,7 @@ func TestNativeTutorialEntryWithoutPeerRegistration(t *testing.T) {
 	}
 	roomRequest(t, h, s, 3010, p)
 	created := roomOutputs(t, s, 3020)[0]
-	if len(created.Payload) != 83 || s.Room == nil || !s.Room.TutorialPending || s.Bound || s.P2P != 0 {
+	if len(created.Payload) != 83 || s.Room == nil || !s.Room.CreationPending || s.Bound || s.P2P != 0 {
 		t.Fatal("tutorial entry altered network identity or skipped native creation", s.Room)
 	}
 	roomRequest(t, h, s, 4030, nil)
@@ -28,7 +28,7 @@ func TestNativeTutorialEntryWithoutPeerRegistration(t *testing.T) {
 	protocol.WriteUint16(join, 0, s.Room.ID)
 	roomRequest(t, h, s, 3070, join)
 	entry := roomOutputs(t, s, 3100, 3160)[0]
-	if len(entry.Payload) != 245 || entry.Payload[65] != 4 || entry.Payload[62] != 1 || s.Room.TutorialPending {
+	if len(entry.Payload) != 245 || entry.Payload[65] != 4 || entry.Payload[62] != 1 || s.Room.CreationPending {
 		t.Fatal("wrong tutorial room layout")
 	}
 	roomRequest(t, h, s, 3070, join)

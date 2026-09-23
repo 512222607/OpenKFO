@@ -68,7 +68,7 @@ type Room struct {
 	FosterRetired         []int // Per-group removals whose received-event HP was zero.
 	FosterFinishReported  bool
 	NetworkProbe          *roomNetworkProbe
-	TutorialPending       bool
+	CreationPending       bool
 	Reliable              map[reliableActor]*reliableExchange
 	ReliableSerial        uint32
 	Exchange              *seatExchange
@@ -132,6 +132,27 @@ func (hub *Hub) resolveWithPolicy(request []byte, allows func(uint32) bool, acce
 		return bytes.Clone(request), nil
 	}
 	mode, capacity := protocol.RoomTypeFromRequest(request), request[protocol.RoomCapacityOffset]
+	if mode == protocol.FosterMode {
+		chosen := protocol.ReadUint32(request, protocol.RoomMapOffset)
+		suggested := protocol.ReadUint32(request, protocol.RoomSuggestedMapOffset)
+		known := false
+		for _, id := range access.PVEMaps {
+			known = known || id == chosen
+		}
+		for _, plan := range access.WavePlans {
+			if plan.MapID == chosen {
+				return nil, protocol.ErrFrame
+			}
+		}
+		if capacity < 1 || capacity > 8 || chosen == 0 || !known ||
+			hub.Config.ConfigHash == "" || access.ClientHash != hub.Config.ConfigHash ||
+			!allows(chosen) || (suggested != 0 && suggested != 0xffffffff && suggested != chosen) {
+			return nil, protocol.ErrFrame
+		}
+		// Room admission uses the known map catalogue. The persisted monster plan
+		// is validated separately before battle; missing plans never start combat.
+		return bytes.Clone(request), nil
+	}
 	if mode == protocol.StageAssault {
 		chosen := protocol.ReadUint32(request, protocol.RoomMapOffset)
 		suggested := protocol.ReadUint32(request, protocol.RoomSuggestedMapOffset)
@@ -286,10 +307,10 @@ func (hub *Hub) completeRoomJoin(room *Room, member *Member, own []byte, peers [
 	room.Members[session.UID] = member
 	session.Room = room
 	session.game().Phase = "room"
-	if tutorialRoom(room) {
+	if tutorialRoom(room) || (room.Owner == session.UID && (room.Type() == protocol.FosterMode || room.Type() == protocol.StageAssault)) {
 		// 8253A0 initializes the native mode/map from the 83B creation reply;
 		// the client then sends 3550 and 3070 before receiving its 3100 roster.
-		room.TutorialPending = true
+		room.CreationPending = true
 		p := make([]byte, 83)
 		protocol.WriteUint16(p, 0, room.ID)
 		copy(p[2:], room.Request)
@@ -513,6 +534,13 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		if (channel.Phase != "lobby" && channel.Phase != "room") || len(payload) != 3 || payload[1] > 1 {
 			return true, protocol.ErrFrame
 		}
+		if !session.StageViewReady && hub.Store != nil {
+			session.StageViewReady = true
+			if err := hub.refreshStageSelection(session); err != nil {
+				session.StageViewReady = false
+				log.Printf("stage_refresh_failed uid=%d", uid)
+			}
+		}
 		// Native 92DD40 sends page, refresh option, mode (0x88 = all).
 		// The old adapter mistook the page for a mode and hid mode-0 rooms.
 		ids := []int{}
@@ -526,15 +554,22 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		if page < 1 {
 			page = 1
 		}
-		start := (page - 1) * 9
+		const roomsPerPage = 9
+		pages := (len(ids) + roomsPerPage - 1) / roomsPerPage
+		if pages < 1 {
+			pages = 1
+		}
+		start := (page - 1) * roomsPerPage
 		response := make([]byte, 8)
-		protocol.WriteUint32(response, 0, 1)
+		// 824280 derives record count from payload length; header words are
+		// page counters (82432C -> +15C, 82433D -> +158), not record counts.
+		protocol.WriteUint32(response, 0, uint32(page))
+		protocol.WriteUint32(response, 4, uint32(pages))
 		count := 0
-		for index := start; index < len(ids) && index < start+9; index++ {
+		for index := start; index < len(ids) && index < start+roomsPerPage; index++ {
 			response = append(response, roomList(hub.Rooms[uint16(ids[index])])...)
 			count++
 		}
-		protocol.WriteUint32(response, 4, uint32(count))
 		session.send(channel.ID, protocol.Message{ID: protocol.MsgRoomList, Payload: response})
 		log.Printf("room_directory uid=%d page=%d option=%d mode=%d rooms=%d returned=%d", uid, page, payload[1], payload[2], len(hub.Rooms), count)
 	case protocol.MsgCreateRoom:
@@ -607,8 +642,8 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		}
 		id := join.RoomID
 		if room != nil && room.ID == id && channel.Phase == "room" {
-			if tutorialRoom(room) && room.TutorialPending {
-				return true, hub.acknowledgeTutorialJoin(session, room)
+			if room.Owner == uid && room.CreationPending {
+				return true, hub.acknowledgeCreatedRoomJoin(session, room)
 			}
 			return true, nil
 		}
@@ -808,7 +843,7 @@ func (hub *Hub) roomMessage(session *Session, channel *Channel, message protocol
 		if member.Spectator {
 			return true, nil
 		}
-		if room.TutorialPending {
+		if room.CreationPending {
 			return true, nil
 		}
 		if !tutorialRoom(room) && time.Now().After(session.P2PUntil) {

@@ -12,6 +12,7 @@ func (h *Hub) stageSelection(s *Session, payload []byte) error {
 		s.sendGame(notice("关卡查询格式不正确。"))
 		return nil
 	}
+	s.StageViewReady = true
 	view, err := h.Store.StagePlayerView(s.UID, h.Config.ConfigHash)
 	if err != nil {
 		s.sendGame(notice("关卡信息读取失败，请稍后重试。"))
@@ -65,36 +66,27 @@ func (h *Hub) sendStageSelection(s *Session, view persistence.StagePlayerView, e
 			ids = append(ids, id)
 		}
 	}
-	p, err := protocol.EncodeStageSelection(ids)
+	// Reference trial: 21370 -> 21371, reserved DWORD + NUL-terminated map CSV.
+	p, err := (protocol.StageProgress{MapIDs: ids}).Encode()
 	if err != nil {
 		return err
 	}
-	// RoomSet 7F876D returns before disabling its action button if the
-	// selected map has no 21372 record. Seed all catalogue keys first.
-	// This server has no inferred prerequisite/clearance counters: unknown
-	// fields stay zero. The prerequisite uses a nonmatching sentinel:
-	// MapInfo includes random map 0, which must not become a fake prerequisite.
-	records := make([]protocol.StageRecord, len(view.Catalogue))
-	for i, id := range view.Catalogue {
-		records[i].MapID = id
-		records[i].RequiredMapID = 0xffffffff
-	}
-	recordPayload, err := protocol.EncodeStageRecords(records)
-	if err != nil {
-		return err
-	}
-	digest := sha256.Sum256(append(append([]byte(nil), recordPayload...), p...))
+	digest := sha256.Sum256(p)
 	if !explicit && s.StageViewRequested && s.StageViewDigest == digest {
 		return nil
 	}
-	s.sendGame(protocol.Message{ID: 21372, Payload: recordPayload})
-	s.sendGame(protocol.Message{ID: 21373, Payload: p})
+	s.sendGame(protocol.Message{ID: protocol.MsgStageSelectionReply, Payload: p})
 	s.StageViewRequested = true
 	s.StageViewDigest = digest
 	return nil
 }
 
 func (h *Hub) refreshStageSelection(s *Session) error {
+	// Before the native lobby UI is initialized, the packet can be discarded
+	// or overwritten. Do not mark that early send as a delivered cache view.
+	if !s.StageViewReady {
+		return nil
+	}
 	view, err := h.Store.StagePlayerView(s.UID, h.Config.ConfigHash)
 	if err != nil {
 		return err

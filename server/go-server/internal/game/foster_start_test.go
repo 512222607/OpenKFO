@@ -92,6 +92,7 @@ func TestFosterStartFailureKeepsSessions(t *testing.T) {
 	r.Request[46] = byte(protocol.FosterMode)
 	for _, m := range r.Members {
 		m.Ready = true
+		m.Session.P2PUntil = time.Now().Add(time.Minute)
 	}
 	h.beginNetworkProbe(r)
 	defer h.cancelNetworkProbe(r)
@@ -99,6 +100,9 @@ func TestFosterStartFailureKeepsSessions(t *testing.T) {
 		if err := h.networkDelayReply(s, nil); err != nil {
 			t.Fatal("configuration failure disconnected player", err)
 		}
+	}
+	for _, s := range []*Session{owner, peer} {
+		roomOutputs(t, s, protocol.MsgNetworkDelayProbe, protocol.MsgPlayerNotReady, protocol.MsgPlayerNotReady, 20150)
 	}
 	if r.Stage != "room" || r.FosterPlan != nil || owner.Room != r || peer.Room != r || r.NetworkProbe != nil {
 		t.Fatal("failed start changed room")

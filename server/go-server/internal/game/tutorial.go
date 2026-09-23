@@ -15,7 +15,7 @@ func tutorialRequest(p []byte) bool {
 
 func tutorialRoom(r *Room) bool { return r != nil && tutorialRequest(r.Request) }
 
-func (h *Hub) acknowledgeTutorialJoin(s *Session, r *Room) error {
+func (h *Hub) acknowledgeCreatedRoomJoin(s *Session, r *Room) error {
 	a, err := h.Store.RoleManager().Snapshot(s.UID)
 	if err != nil {
 		return err
@@ -23,7 +23,7 @@ func (h *Hub) acknowledgeTutorialJoin(s *Session, r *Room) error {
 	m := r.Members[s.UID]
 	s.sendGame(protocol.Message{ID: protocol.MsgRoomEntered, Payload: roomEntryForMember(r, m, fighter(a, m))})
 	s.sendGame(protocol.Message{ID: protocol.MsgRoomOwner, Payload: protocol.Uint64Bytes(r.Owner)})
-	r.TutorialPending = false
+	r.CreationPending = false
 	return nil
 }
 
