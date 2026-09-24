@@ -240,6 +240,118 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
     return low;
   }
 
+  List<Map<String, String>> comboChain = [];
+
+  Future<void> refreshChain(dynamic weaponId) async {
+    try {
+      final result = Map<String, dynamic>.from(
+        await widget.api({'operation': 'weapon_combo_chain', 'weapon': weaponId}),
+      );
+      if (!mounted) return;
+      setState(() {
+        comboChain = [
+          for (final e in (result['chain'] as List? ?? []))
+            Map<String, String>.from(e as Map),
+        ];
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() => comboChain = []);
+      }
+    }
+  }
+
+  /// 连招链：按「老状态」分组展示 delayacttable.xml 的状态转移。
+  Widget comboChainCard() {
+    if (comboChain.isEmpty) return const SizedBox.shrink();
+    final byOld = <String, List<Map<String, String>>>{};
+    final order = <String>[];
+    for (final e in comboChain) {
+      final o = e['old']!;
+      if (!byOld.containsKey(o)) {
+        byOld[o] = [];
+        order.add(o);
+      }
+      byOld[o]!.add(e);
+    }
+    order.sort((a, b) => int.parse(a).compareTo(int.parse(b)));
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.account_tree_outlined, size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  '连招链 · ${comboChain.length} 条转移',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    '来自 delayacttable.xml：站在左侧状态上按下对应键，就切到右侧状态',
+                    style: TextStyle(fontSize: 11, color: Colors.black54),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            for (final o in order) comboChainGroup(o, byOld[o]!),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget comboChainGroup(String from, List<Map<String, String>> edges) {
+    final fromLabel = edges.first['old_label']!;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 210,
+            child: Text(
+              fromLabel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+            ),
+          ),
+          Expanded(
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                for (final e in edges) comboEdgeChip(e),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget comboEdgeChip(Map<String, String> edge) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.teal.shade50,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        '${edge['key_label']} → ${edge['new_label']}',
+        style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+      ),
+    );
+  }
+
+
   void select(Map<String, dynamic> value) {
     editorVersion++;
     selectedAction = null;
@@ -257,6 +369,7 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
           : Map<String, dynamic>.from(saved.first);
     }).toList();
     dirty = false;
+    refreshChain(value['id']);
   }
 
   Future<bool> discard() async =>
@@ -1573,6 +1686,7 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                                 ),
                                 const SizedBox(height: 8),
                                 comboBanner(),
+                                comboChainCard(),
                                 Text(
                                   '连招与命中效果',
                                   style: Theme.of(context)

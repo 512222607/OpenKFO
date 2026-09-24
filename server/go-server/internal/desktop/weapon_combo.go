@@ -296,3 +296,72 @@ func comboSuggestions(actionLines [][]string, counts map[string]int) map[int]int
 	}
 	return suggestions
 }
+
+// keyInputNames maps a delayacttable KeyInput id to its human label (see the
+// <KeyInputList> comments in the same file).
+var keyInputNames = map[string]string{
+	"1":  "普通攻击",
+	"2":  "特殊攻击",
+	"3":  "瞄准",
+	"4":  "跳跃",
+	"5":  "前",
+	"6":  "后",
+	"7":  "必杀",
+	"8":  "C+C",
+	"9":  "C+C",
+	"10": "防御",
+	"11": "C+X",
+	"12": "C+Z",
+	"13": "C+X",
+	"20": "向前",
+	"21": "向后",
+}
+
+func keyInputLabel(key string) string {
+	if name, ok := keyInputNames[key]; ok {
+		return name
+	}
+	return "按键" + key
+}
+
+// comboChain returns the delayacttable transitions for one weapon, annotated
+// with the human labels of both states, so the editor can draw the chain
+// instead of a flat stage list.
+func comboChain(a *archive, info *inspection, weaponID string) []map[string]string {
+	text, err := a.text("delayacttable.xml")
+	if err != nil {
+		return nil
+	}
+	rows := comboRowsOf(text, weaponID)
+	if len(rows) == 0 {
+		return nil
+	}
+	labels := map[string]string{}
+	for _, weapon := range info.weapons {
+		if strconv.Itoa(weapon.ID) != weaponID {
+			continue
+		}
+		for _, stage := range weapon.Stages {
+			labels[stage.State] = stage.Label
+		}
+		break
+	}
+	label := func(state string) string {
+		if text, ok := labels[state]; ok && text != "" {
+			return state + " · " + text
+		}
+		return state
+	}
+	result := make([]map[string]string, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, map[string]string{
+			"old":       row.OldState,
+			"new":       row.NewState,
+			"key":       row.KeyInput,
+			"key_label": keyInputLabel(row.KeyInput),
+			"old_label": label(row.OldState),
+			"new_label": label(row.NewState),
+		})
+	}
+	return result
+}

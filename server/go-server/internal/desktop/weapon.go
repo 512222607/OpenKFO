@@ -1370,6 +1370,22 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 		}
 		return map[string]any{"combos": state.Combos, "revision": digest(append(append([]byte(nil), current...), encoded...)), "message": message}, nil
 	}
+	// weapon_combo_chain returns the state-transition chain for one weapon so the
+	// editor can draw it as a readable flow instead of a flat stage list.
+	if request.Operation == "weapon_combo_chain" {
+		if request.Weapon == 0 {
+			return nil, fmt.Errorf("请选择武器")
+		}
+		info, err := inspect(base, items)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{
+			"weapon":  request.Weapon,
+			"chain":   comboChain(base, info, strconv.Itoa(request.Weapon)),
+			"revision": revision,
+		}, nil
+	}
 	// weapon_clients reports the selected client and every client we have a
 	// baseline for. weapon_client_rebase re-captures the selected client's
 	// baseline after something else replaced its config.spf2 — its own updater
