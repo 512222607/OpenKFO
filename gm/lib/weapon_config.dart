@@ -241,6 +241,18 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
   }
 
   List<Map<String, String>> comboChain = [];
+  bool chainEditing = false;
+  List<Map<String, String>> chainDraft = [];
+  String? chainOld, chainKey, chainNew;
+
+  static const chainKeys = [
+    {'v': '1', 'l': '普通攻击(C)'},
+    {'v': '2', 'l': '特殊攻击(X)'},
+    {'v': '3', 'l': '瞄准(Z)'},
+    {'v': '4', 'l': '跳跃'},
+    {'v': '5', 'l': '前'},
+    {'v': '6', 'l': '后'},
+  ];
 
   Future<void> refreshChain(dynamic weaponId) async {
     try {
@@ -261,12 +273,125 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
     }
   }
 
-  /// 连招链：按「老状态」分组展示 delayacttable.xml 的状态转移。
+  String chainStateLabel(String state) {
+    for (final w in (data?['weapons'] as List? ?? [])) {
+      if (w['id'] != weapon!['id']) continue;
+      for (final s in (w['stages'] as List? ?? [])) {
+        if ('${s['state']}' == state && '${s['label'] ?? ''}'.isNotEmpty) {
+          return '$state · ${s['label']}';
+        }
+      }
+    }
+    return state;
+  }
+
+  void startChainEdit() {
+    setState(() {
+      chainDraft = [for (final e in comboChain) Map<String, String>.from(e)];
+      chainEditing = true;
+      chainOld = chainKey = chainNew = null;
+    });
+  }
+
+  void cancelChainEdit() {
+    setState(() {
+      chainEditing = false;
+      chainDraft = [];
+    });
+  }
+
+  Future<void> saveChain() async {
+    final prefer = weapon!['id'] as int?;
+    setState(() {
+      busy = true;
+      failed = false;
+      message = '正在保存连招链…';
+    });
+    try {
+      final result = Map<String, dynamic>.from(await widget.api({
+        'operation': 'weapon_combo_chain_set',
+        'weapon': weapon!['id'],
+        'transitions': [
+          for (final e in chainDraft)
+            {'old': e['old'], 'new': e['new'], 'key': e['key']},
+        ],
+      }));
+      if (!mounted) return;
+      setState(() {
+        busy = false;
+        chainEditing = false;
+        message = '${result['message'] ?? '已保存'}';
+      });
+      await load(prefer: prefer);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          busy = false;
+          failed = true;
+          message = '$e';
+        });
+      }
+    }
+  }
+
+  Future<void> clearChain() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('清除定制的连招链'),
+        content: const Text('清空后恢复继承：借用供体（或客户端原生）的连招。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('清除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final prefer = weapon!['id'] as int?;
+    setState(() {
+      busy = true;
+      failed = false;
+      message = '正在清除连招链…';
+    });
+    try {
+      final result = Map<String, dynamic>.from(await widget.api({
+        'operation': 'weapon_combo_chain_set',
+        'weapon': weapon!['id'],
+        'transitions': const [],
+      }));
+      if (!mounted) return;
+      setState(() {
+        busy = false;
+        chainEditing = false;
+        message = '${result['message'] ?? '已清除'}';
+      });
+      await load(prefer: prefer);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          busy = false;
+          failed = true;
+          message = '$e';
+        });
+      }
+    }
+  }
+
+  /// 连招链：按「老状态」分组展示 delayacttable.xml 的状态转移，可编辑。
   Widget comboChainCard() {
-    if (comboChain.isEmpty) return const SizedBox.shrink();
+    if (comboChain.isEmpty && !chainEditing) return const SizedBox.shrink();
+    final states = [for (final s in (data?['states'] as List? ?? [])) '$s'];
+    final editing = chainEditing;
+    final rows = editing ? chainDraft : comboChain;
     final byOld = <String, List<Map<String, String>>>{};
     final order = <String>[];
-    for (final e in comboChain) {
+    for (final e in rows) {
       final o = e['old']!;
       if (!byOld.containsKey(o)) {
         byOld[o] = [];
@@ -287,28 +412,61 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                 const Icon(Icons.account_tree_outlined, size: 18),
                 const SizedBox(width: 8),
                 Text(
-                  '连招链 · ${comboChain.length} 条转移',
+                  '连招链 · ${editing ? chainDraft.length : comboChain.length} 条转移',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(width: 8),
                 const Expanded(
                   child: Text(
-                    '来自 delayacttable.xml：站在左侧状态上按下对应键，就切到右侧状态',
+                    '站在左侧状态上按下对应键，就切到右侧状态',
                     style: TextStyle(fontSize: 11, color: Colors.black54),
                   ),
                 ),
+                if (!editing)
+                  TextButton.icon(
+                    onPressed: busy ? null : startChainEdit,
+                    icon: const Icon(Icons.edit, size: 16),
+                    label: const Text('编辑'),
+                  ),
+                if (editing) ...[
+                  TextButton(
+                    onPressed: busy ? null : cancelChainEdit,
+                    child: const Text('取消'),
+                  ),
+                  FilledButton.icon(
+                    onPressed: busy ? null : saveChain,
+                    icon: const Icon(Icons.check, size: 16),
+                    label: const Text('保存连招链'),
+                  ),
+                ],
               ],
             ),
-            const SizedBox(height: 8),
-            for (final o in order) comboChainGroup(o, byOld[o]!),
+            const SizedBox(height: 6),
+            for (final o in order) comboChainGroup(o, byOld[o]!, editing),
+            if (editing) chainAddRow(states),
+            if (!editing && comboChain.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: TextButton(
+                  onPressed: busy ? null : clearChain,
+                  child: const Text(
+                    '恢复继承（清空定制，回到借用供体/原生）',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
     );
   }
 
-  Widget comboChainGroup(String from, List<Map<String, String>> edges) {
-    final fromLabel = edges.first['old_label']!;
+  Widget comboChainGroup(
+    String from,
+    List<Map<String, String>> edges,
+    bool editing,
+  ) {
+    final fromLabel = chainStateLabel(from);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
@@ -328,7 +486,16 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
               spacing: 8,
               runSpacing: 4,
               children: [
-                for (final e in edges) comboEdgeChip(e),
+                for (var i = 0; i < edges.length; i++)
+                  comboEdgeChip(edges[i], editing
+                      ? () => setState(() => chainDraft.removeWhere(
+                          (e) =>
+                              identical(e, edges[i]) ||
+                              (e['old'] == edges[i]['old'] &&
+                                  e['new'] == edges[i]['new'] &&
+                                  e['key'] == edges[i]['key']),
+                        ))
+                      : null),
               ],
             ),
           ),
@@ -337,20 +504,113 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
     );
   }
 
-  Widget comboEdgeChip(Map<String, String> edge) {
+  Widget comboEdgeChip(Map<String, String> edge, VoidCallback? onDelete) {
+    final text = '${edge['key_label'] ?? keyName(edge['key'] ?? '')} → ${edge['new']}';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: Colors.teal.shade50,
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Text(
-        '${edge['key_label']} → ${edge['new_label']}',
-        style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(text, style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
+          if (onDelete != null)
+            GestureDetector(
+              onTap: onDelete,
+              child: const Padding(
+                padding: EdgeInsets.only(left: 6),
+                child: Icon(Icons.close, size: 14, color: Colors.deepOrange),
+              ),
+            ),
+        ],
       ),
     );
   }
 
+  String keyName(String key) {
+    for (final k in chainKeys) {
+      if (k['v'] == key) return '${k['l']}';
+    }
+    return '按键$key';
+  }
+
+  Widget chainAddRow(List<String> states) {
+    final canAdd =
+        chainOld != null && chainKey != null && chainNew != null;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          const Text('添加：', style: TextStyle(fontSize: 12)),
+          const SizedBox(width: 6),
+          SizedBox(
+            width: 150,
+            child: DropdownButtonFormField<String>(
+              key: ValueKey('chain-old-$chainEditing'),
+              initialValue: chainOld,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: '老状态', isDense: true),
+              items: [
+                for (final s in states)
+                  DropdownMenuItem(value: s, child: Text(s)),
+              ],
+              onChanged: (v) => setState(() => chainOld = v),
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 150,
+            child: DropdownButtonFormField<String>(
+              key: ValueKey('chain-key-$chainEditing'),
+              initialValue: chainKey,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: '按键', isDense: true),
+              items: [
+                for (final k in chainKeys)
+                  DropdownMenuItem(value: k['v'], child: Text('${k['l']}')),
+              ],
+              onChanged: (v) => setState(() => chainKey = v),
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 150,
+            child: DropdownButtonFormField<String>(
+              key: ValueKey('chain-new-$chainEditing'),
+              initialValue: chainNew,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: '新状态', isDense: true),
+              items: [
+                for (final s in states)
+                  DropdownMenuItem(value: s, child: Text(s)),
+              ],
+              onChanged: (v) => setState(() => chainNew = v),
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            onPressed: canAdd
+                ? () {
+                    setState(() {
+                      chainDraft.add({
+                        'old': chainOld!,
+                        'new': chainNew!,
+                        'key': chainKey!,
+                        'key_label': keyName(chainKey!),
+                      });
+                      chainOld = chainKey = chainNew = null;
+                    });
+                  }
+                : null,
+            icon: const Icon(Icons.add_circle_outline),
+            tooltip: '添加转移',
+          ),
+        ],
+      ),
+    );
+  }
 
   void select(Map<String, dynamic> value) {
     editorVersion++;

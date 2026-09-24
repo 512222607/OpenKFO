@@ -1157,6 +1157,10 @@ type weaponState struct {
 	// hit-property nodes cloned from a template under a fresh SkillProId.
 	Remaps          map[string]map[int]*StageRemap `json:"remaps,omitempty"`
 	ExtraProperties map[string]ExtraProperty        `json:"extra_properties,omitempty"`
+	// Chains holds an author-authored combo state machine per weapon. When a
+	// weapon has an entry here, it replaces whatever delayacttable.xml says
+	// (including a borrowed donor table) with exactly these transitions.
+	Chains map[string][]ComboTransition `json:"chains,omitempty"`
 }
 
 func weaponHandle(request Request, client string, items []Item, folder string) (any, error) {
@@ -1199,6 +1203,9 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 	if state.ExtraProperties == nil {
 		state.ExtraProperties = map[string]ExtraProperty{}
 	}
+	if state.Chains == nil {
+		state.Chains = map[string][]ComboTransition{}
+	}
 	// The edit set is rendered onto whichever client the GM currently points at,
 	// each client directory keeping its own baseline: the user can switch
 	// clients, and a client can be refreshed by its own updater, so a single
@@ -1228,20 +1235,11 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 	// animation each state plays, delayacttable.xml is what lets the player
 	// actually reach the next state, and a weapon without transitions cannot
 	// chain attacks however complete its action row looks.
-	plan := comboPlanOf(state.Created, state.Combos)
-	base := source
-	combo := comboResult{}
-	if len(state.Created) > 0 {
-		if base, err = applyBlueprints(source, state.Created); err != nil {
-			return nil, err
-		}
+	base, err := buildWeaponBase(source, &state)
+	if err != nil {
+		return nil, err
 	}
-	if len(plan) > 0 {
-		if base, combo, err = applyComboTables(base, plan); err != nil {
-			return nil, err
-		}
-	}
-	if len(state.Created) > 0 || combo.Rows > 0 {
+	if len(state.Created) > 0 || len(state.Combos) > 0 || len(state.Chains) > 0 {
 		text, err := base.text("item.txt")
 		if err != nil {
 			return nil, err
@@ -1267,7 +1265,7 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 		if err != nil {
 			return nil, err
 		}
-		return map[string]any{"weapons": info.weapons, "effects": effects(info), "fields": propertyFields, "buffs": buffRows, "drafts": state.Drafts, "applied": state.Applied, "created": state.Created, "combos": state.Combos, "remaps": state.Remaps, "extra_properties": state.ExtraProperties, "states": itemactStates(base), "client": describeClient(entry, folder), "clients": describeBaselines(&state, folder), "models": weaponModels(client), "types": weaponTypes, "used_ids": weaponItemIDs(source), "blueprint_min": blueprintMinID, "blueprint_max": blueprintMaxID, "revision": revision, "folder": folder}, nil
+		return map[string]any{"weapons": info.weapons, "effects": effects(info), "fields": propertyFields, "buffs": buffRows, "drafts": state.Drafts, "applied": state.Applied, "created": state.Created, "combos": state.Combos, "chains": state.Chains, "remaps": state.Remaps, "extra_properties": state.ExtraProperties, "states": itemactStates(base), "client": describeClient(entry, folder), "clients": describeBaselines(&state, folder), "models": weaponModels(client), "types": weaponTypes, "used_ids": weaponItemIDs(source), "blueprint_min": blueprintMinID, "blueprint_max": blueprintMaxID, "revision": revision, "folder": folder}, nil
 	}
 	if request.Operation == "weapon_create" || request.Operation == "weapon_forget" {
 		message := ""
@@ -1369,6 +1367,53 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 			return nil, err
 		}
 		return map[string]any{"combos": state.Combos, "revision": digest(append(append([]byte(nil), current...), encoded...)), "message": message}, nil
+	}
+	// weapon_combo_chain_set replaces a weapon's combo state machine with the
+	// author-provided transitions.
+	if request.Operation == "weapon_combo_chain_set" {
+		key := strconv.Itoa(request.Weapon)
+		if request.Weapon == 0 {
+			return nil, fmt.Errorf("请选择武器")
+		}
+		actionText, err := base.text("itemact.txt")
+		if err != nil {
+			return nil, err
+		}
+		if actionRowIndex(actionText)[key] == nil {
+			return nil, fmt.Errorf("武器 %s 不在本客户端的动作表中", key)
+		}
+		for _, transition := range request.Transitions {
+			for _, field := range []string{transition.OldState, transition.NewState} {
+				number, err := strconv.Atoi(field)
+				if err != nil || number < 1000 || number > 9999 {
+					return nil, fmt.Errorf("状态必须是四位数字（如 2011）")
+				}
+			}
+			if number, err := strconv.Atoi(transition.KeyInput); err != nil || number < 1 || number > 99 {
+				return nil, fmt.Errorf("按键编号无效")
+			}
+		}
+		if len(request.Transitions) == 0 {
+			delete(state.Chains, key)
+		} else {
+			state.Chains[key] = request.Transitions
+		}
+		encoded, err := json.MarshalIndent(state, "", "  ")
+		if err != nil {
+			return nil, err
+		}
+		if err = atomicWrite(statePath, encoded); err != nil {
+			return nil, err
+		}
+		message := fmt.Sprintf("已保存连招链（%d 条转移）；应用后生效", len(request.Transitions))
+		if len(request.Transitions) == 0 {
+			message = "已清除定制的连招链；恢复继承（借用供体或原生）"
+		}
+		return map[string]any{
+			"chains":   state.Chains,
+			"revision": digest(append(append([]byte(nil), current...), encoded...)),
+			"message":  message,
+		}, nil
 	}
 	// weapon_combo_chain returns the state-transition chain for one weapon so the
 	// editor can draw it as a readable flow instead of a flat stage list.

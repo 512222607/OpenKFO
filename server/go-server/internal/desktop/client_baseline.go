@@ -250,8 +250,20 @@ func buildWeaponBase(source *archive, state *weaponState) (*archive, error) {
 			return nil, err
 		}
 	}
-	if plan := comboPlanOf(state.Created, state.Combos); len(plan) > 0 {
+	plan := comboPlanOf(state.Created, state.Combos)
+	for key := range plan {
+		if _, explicit := state.Chains[key]; explicit {
+			// An author-authored chain supersedes the borrowed donor table.
+			delete(plan, key)
+		}
+	}
+	if len(plan) > 0 {
 		if base, _, err = applyComboTables(base, plan); err != nil {
+			return nil, err
+		}
+	}
+	if len(state.Chains) > 0 {
+		if base, err = applyComboChains(base, state.Chains); err != nil {
 			return nil, err
 		}
 	}
@@ -265,7 +277,7 @@ func checkAllowedWrites(source, verified *archive, state *weaponState, info *ins
 	if len(state.Created) > 0 {
 		allowed["item.txt"] = true
 	}
-	if len(state.Created) > 0 || len(state.Combos) > 0 {
+	if len(state.Created) > 0 || len(state.Combos) > 0 || len(state.Chains) > 0 {
 		allowed["delayacttable.xml"] = true
 		allowed["acteffect.xml"] = true
 	}

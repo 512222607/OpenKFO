@@ -365,3 +365,85 @@ func comboChain(a *archive, info *inspection, weaponID string) []map[string]stri
 	}
 	return result
 }
+
+// ComboTransition is one author-authored edge of a weapon's combo state
+// machine: from OldState, pressing KeyInput (see keyInputNames) advances to
+// NewState.
+type ComboTransition struct {
+	OldState  string `json:"old"`
+	NewState  string `json:"new"`
+	KeyInput  string `json:"key"`
+	StartPart string `json:"part,omitempty"`
+}
+
+func (t ComboTransition) row() comboRow {
+	part := t.StartPart
+	if part == "" {
+		part = "1"
+	}
+	return comboRow{OldState: t.OldState, NewState: t.NewState, KeyInput: t.KeyInput, StartPart: part}
+}
+
+// setComboRows replaces every transition a weapon owns with the given set,
+// leaving the rest of delayacttable.xml intact.
+func setComboRows(text, weapon string, rows []comboRow) (string, error) {
+	lines := strings.Split(text, "\n")
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "<Item") {
+			if match := comboRowPattern.FindStringSubmatch(trimmed); match != nil && match[1] == weapon {
+				continue
+			}
+		}
+		out = append(out, line)
+	}
+	rebuilt := make([]string, 0, len(rows))
+	for _, row := range rows {
+		rebuilt = append(rebuilt, "\t"+row.render(weapon))
+	}
+	text = strings.Join(out, "\n")
+	closing := comboListEndPattern.FindAllStringIndex(text, -1)
+	if len(closing) != 1 {
+		return "", fmt.Errorf("连招表结构错误")
+	}
+	block := "\t<!--编辑器定制的连招-->\n" + strings.Join(rebuilt, "\n") + "\n"
+	at := closing[0][0]
+	return text[:at] + block + text[at:], nil
+}
+
+// applyComboChains writes the author-authored state machines into
+// delayacttable.xml, replacing the existing rows (and any borrowed donor rows)
+// for each weapon that has one.
+func applyComboChains(a *archive, chains map[string][]ComboTransition) (*archive, error) {
+	if len(chains) == 0 {
+		return a, nil
+	}
+	text, err := a.text("delayacttable.xml")
+	if err != nil {
+		return nil, err
+	}
+	keys := make([]string, 0, len(chains))
+	for key := range chains {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		rows := make([]comboRow, 0, len(chains[key]))
+		for _, transition := range chains[key] {
+			rows = append(rows, transition.row())
+		}
+		if text, err = setComboRows(text, key, rows); err != nil {
+			return nil, err
+		}
+	}
+	encoded, err := encodeText(text)
+	if err != nil {
+		return nil, err
+	}
+	data, err := a.replace(map[string][]byte{"delayacttable.xml": encoded})
+	if err != nil {
+		return nil, err
+	}
+	return parseArchive(data)
+}

@@ -61,6 +61,7 @@ type Request struct {
 	Template         string                           `json:"template"`
 	TemplateWeapon   int                              `json:"template_weapon"`
 	TemplateStage    int                              `json:"template_stage"`
+	Transitions      []ComboTransition                `json:"transitions"`
 	Target           string                           `json:"target"`
 	Path             string                           `json:"path"`
 	Directory        string                           `json:"directory"`
