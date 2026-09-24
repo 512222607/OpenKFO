@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class WeaponConfigPage extends StatefulWidget {
   const WeaponConfigPage({super.key, required this.api});
@@ -11,6 +12,7 @@ class WeaponConfigPage extends StatefulWidget {
 
 class _WeaponConfigPageState extends State<WeaponConfigPage> {
   Map<String, dynamic>? data, weapon;
+  Map<String, dynamic> _clientInfo = {};
   final form = GlobalKey<FormState>();
   List<Map<String, dynamic>> rules = [];
   String query = '', message = '';
@@ -25,17 +27,26 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
     load();
   }
 
-  Future<void> load() async {
+  Future<void> load({int? prefer}) async {
     try {
       final result = Map<String, dynamic>.from(
         await widget.api({'operation': 'weapon_catalog'}),
       );
+      Map<String, dynamic> client = {};
+      try {
+        client = Map<String, dynamic>.from(
+          await widget.api({'operation': 'client_directory_get'}),
+        );
+      } catch (_) {
+        // The card falls back to whatever was shown before.
+      }
       if (!mounted) return;
       setState(() {
         data = result;
+        if (client.isNotEmpty) _clientInfo = client;
         final weapons = (data!['weapons'] as List);
         final selected = weapons.where(
-          (w) => w['id'] == (weapon?['id'] ?? 253013),
+          (w) => w['id'] == (prefer ?? weapon?['id'] ?? 253013),
         );
         if (selected.isNotEmpty) {
           select(Map<String, dynamic>.from(selected.first));
@@ -53,6 +64,180 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
         });
       }
     }
+  }
+
+  /// Self-made weapons registered in settings.json, keyed by weapon id.
+  /// They exist only as rows injected into item.txt / itemact.txt, so the
+  /// client binary stays untouched.
+  Map<String, dynamic> get created =>
+      Map<String, dynamic>.from(data?['created'] as Map? ?? const {});
+
+  bool isCreated(dynamic id) => created.containsKey('$id');
+
+  /// The registered blueprint behind a self-made weapon, empty for shipped ones.
+  Map<String, dynamic> blueprintOf(dynamic id) {
+    final value = created['$id'];
+    return value is Map ? Map<String, dynamic>.from(value) : const {};
+  }
+
+  /// Combo completions recorded in settings.json: weapon id -> reference weapon.
+  Map<String, dynamic> get comboFixes =>
+      Map<String, dynamic>.from(data?['combos'] as Map? ?? const {});
+
+  int? comboDonorOf(dynamic id) {
+    final value = comboFixes['$id'];
+    if (value == null) return null;
+    return value is int ? value : int.tryParse('$value');
+  }
+
+  String weaponName(int id) {
+    for (final w in (data?['weapons'] as List? ?? [])) {
+      if (w['id'] == id) return '${w['name']}';
+    }
+    return '$id';
+  }
+
+  /// The client this editor reads and writes, plus the server config files that
+  /// validate its config.spf2. Loaded separately so switching clients is
+  /// reflected without reloading the whole catalogue.
+  Map<String, dynamic> get clientInfo => _clientInfo;
+
+  /// config.spf2 digest as the game server sees it — the value to put into the
+  /// server's config.json `config_hash`.
+  String get clientConfigHash => '${_clientInfo['config_hash'] ?? ''}';
+
+  Future<void> reloadClient() async {
+    try {
+      final result = Map<String, dynamic>.from(
+        await widget.api({'operation': 'client_directory_get'}),
+      );
+      if (mounted) setState(() => _clientInfo = result);
+    } catch (_) {
+      // The card simply keeps the previous picture.
+    }
+  }
+
+  Future<void> chooseClient(/* optional initial pick */) async {
+    final picked = await showDialog<String>(
+      context: context,
+      builder: (_) => _ClientPickerDialog(
+        current: '${_clientInfo['directory'] ?? ''}',
+        detected: [
+          for (final value in (_clientInfo['detected'] as List? ?? []))
+            Map<String, dynamic>.from(value as Map),
+        ],
+      ),
+    );
+    if (picked == null || picked.isEmpty || !mounted) return;
+    final prefer = weapon?['id'] as int?;
+    setState(() {
+      busy = true;
+      failed = false;
+      message = '正在切换客户端…';
+    });
+    try {
+      final result = await widget.api({
+        'operation': 'client_directory_set',
+        'directory': picked,
+      });
+      if (!mounted) return;
+      setState(() {
+        busy = false;
+        _clientInfo = Map<String, dynamic>.from(result is Map ? result : {});
+        message = '${(result as Map)['message'] ?? '已切换客户端'}';
+      });
+      await load(prefer: prefer);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          busy = false;
+          failed = true;
+          message = '$e';
+        });
+      }
+    }
+  }
+
+    Future<void> rebaseClient() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('按当前客户端配置重新采集基线'),
+        content: const Text(
+          '把客户端现在的 config.spf2 记为新的基线，之后的编辑都以它为准。\n\n'
+          '只在客户端被别的程序改过（例如它自己的更新器）而我们手上还是旧基线时才需要这样做。'
+          '旧基线会另存一份备份。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('重新采集'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final prefer = weapon?['id'] as int?;
+    setState(() {
+      busy = true;
+      failed = false;
+      message = '正在重新采集基线…';
+    });
+    try {
+      final result = await widget.api({'operation': 'weapon_client_rebase'});
+      if (!mounted) return;
+      setState(() {
+        busy = false;
+        message = '${(result as Map)['message'] ?? '已重新采集基线'}';
+      });
+      await load(prefer: prefer);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          busy = false;
+          failed = true;
+          message = '$e';
+        });
+      }
+    }
+  }
+
+  /// The dialog works with the *value* of item.txt column 2, while the
+  /// catalogue exposes the human label. Map back through the same table.
+  String typeValueFor(String label) {
+    for (final type in (data?['types'] as List? ?? [])) {
+      if ('${type['label']}' == label) return '${type['value']}';
+    }
+    return '';
+  }
+
+  /// Weapons that can act as a donor: everything the client already ships.
+  List<Map<String, dynamic>> get donors => [
+    for (final w in (data?['weapons'] as List? ?? []))
+      if (!isCreated(w['id'])) Map<String, dynamic>.from(w as Map),
+  ];
+
+  /// Every id already claimed by item.txt, including ids that carry no action
+  /// row. Authoritative set for the reserved-range picker.
+  List<int> get usedIDs {
+    final ids = data?['used_ids'] as List?;
+    if (ids != null) return [for (final id in ids) id as int];
+    return [for (final w in (data?['weapons'] as List? ?? [])) w['id'] as int];
+  }
+
+  /// Lowest unused id in the reserved self-made range.
+  int suggestID() {
+    final low = data?['blueprint_min'] as int? ?? 253000;
+    final high = data?['blueprint_max'] as int? ?? 253999;
+    final used = usedIDs.toSet();
+    for (var id = low; id <= high; id++) {
+      if (!used.contains(id)) return id;
+    }
+    return low;
   }
 
   void select(Map<String, dynamic> value) {
@@ -101,10 +286,12 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: Text(operation == 'weapon_apply' ? '应用到本地客户端' : '恢复原效果'),
+          title: Text(operation == 'weapon_apply' ? '应用到游戏' : '恢复原效果'),
           content: Text(
             operation == 'weapon_apply'
-                ? '将应用「${weapon!['name']}」当前配置的招式伤害、BUFF 和受击效果。修改对使用此客户端的角色生效，不限当前账号。\n\n请先退出游戏；写入前自动备份。重启后加载，实战效果尚待验证。'
+                ? '将应用「${weapon!['name']}」当前配置的招式伤害、BUFF 和受击效果。修改对使用此客户端的角色生效，不限当前账号。\n\n'
+                    '写入 ${_clientInfo['directory'] ?? '当前客户端'}；写前自动备份。\n\n'
+                    '请先退出游戏。重启后加载，实战效果尚待验证。'
                 : '恢复「${weapon!['name']}」的原始招式伤害、BUFF 和受击效果，其他武器配置保留。请先退出游戏。',
           ),
           actions: [
@@ -224,6 +411,153 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
         });
       }
     }
+  }
+
+  Future<void> createWeapon() async {
+    if (!(await discard()) || !mounted) return;
+    final blueprint = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (_) => _BlueprintDialog(
+        types: [for (final t in (data?['types'] as List? ?? [])) t],
+        models: [for (final m in (data?['models'] as List? ?? [])) '$m'],
+        donors: donors,
+        minID: data?['blueprint_min'] as int? ?? 253000,
+        maxID: data?['blueprint_max'] as int? ?? 253999,
+        suggestedID: suggestID(),
+        usedIDs: {
+          for (final id in usedIDs) '$id',
+        },
+      ),
+    );
+    if (blueprint == null || !mounted) return;
+    setState(() {
+      busy = true;
+      failed = false;
+      message = '正在登记自建武器…';
+    });
+    try {
+      final result = await widget.api({
+        'operation': 'weapon_create',
+        'blueprint': blueprint,
+      });
+      if (!mounted) return;
+      setState(() {
+        dirty = false;
+        message = '${result['message']}';
+      });
+      await load(prefer: blueprint['id'] as int);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          busy = false;
+          failed = true;
+          message = '$e';
+        });
+      }
+    }
+  }
+
+  Future<void> forget() async {
+    if (!(await discard()) || !mounted) return;
+    final id = weapon!['id'];
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('移除自建武器'),
+        content: Text(
+          '将从编辑清单中移除「${weapon!['name']}」（$id）及其已保存的效果方案。\n\n'
+          '已写入客户端的配置不会自动回滚：请再点一次「应用到游戏」，自建武器才会从配置包中消失。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('移除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() {
+      busy = true;
+      failed = false;
+      message = '正在移除自建武器…';
+    });
+    try {
+      final result = await widget.api({
+        'operation': 'weapon_forget',
+        'weapon': id,
+      });
+      if (!mounted) return;
+      setState(() {
+        dirty = false;
+        message = '${result['message']}';
+      });
+      await load(prefer: 253013);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          busy = false;
+          failed = true;
+          message = '$e';
+        });
+      }
+    }
+  }
+
+  /// Registers (or clears) a combo-table completion for the current weapon.
+  /// A donor of 0 clears it.
+  Future<void> setCombo(int donor) async {
+    if (!(await discard()) || !mounted) return;
+    final id = weapon!['id'];
+    setState(() {
+      busy = true;
+      failed = false;
+      message = donor == 0 ? '正在取消连招补齐…' : '正在登记连招补齐…';
+    });
+    try {
+      final result = await widget.api({
+        'operation': 'weapon_combo',
+        'weapon': id,
+        'donor': donor,
+      });
+      if (!mounted) return;
+      setState(() {
+        dirty = false;
+        message = '${result['message']}';
+      });
+      await load(prefer: id);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          busy = false;
+          failed = true;
+          message = '$e';
+        });
+      }
+    }
+  }
+
+  Future<void> pickComboDonor() async {
+    if (!(await discard()) || !mounted) return;
+    final id = weapon!['id'];
+    final suggested = weapon!['combo_suggestion'] as int? ?? 0;
+    final donor = await showDialog<int>(
+      context: context,
+      builder: (_) => _ComboDonorDialog(
+        candidates: [
+          for (final w in (data?['weapons'] as List? ?? []))
+            if ((w['combo_rows'] as int? ?? 0) > 0 && w['id'] != id)
+              Map<String, dynamic>.from(w as Map),
+        ],
+        suggested: suggested,
+      ),
+    );
+    if (donor == null || !mounted) return;
+    await setCombo(donor);
   }
 
   String buffName(dynamic id) {
@@ -428,6 +762,15 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
               stage['label'] ?? '动作说明缺失（按键待核实）',
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
             ),
+            const SizedBox(height: 2),
+            Text(
+              stageIdentity(index),
+              style: const TextStyle(
+                fontSize: 12,
+                fontFamily: 'monospace',
+                color: Colors.black54,
+              ),
+            ),
             if (stage['supported'] != true)
               Text(
                 stage['reason'],
@@ -518,12 +861,31 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
     );
   }
 
+  /// The 4-digit action state and the action (skill) id it resolves to. The
+  /// state is what delayacttable.xml transitions on; the action id is what
+  /// itemact.txt points at, and both are what you need when cross-checking the
+  /// tables by hand.
+  String stageIdentity(int? index) {
+    if (index == null || index < 0 || index >= (weapon!['stages'] as List).length) {
+      return '';
+    }
+    final stage = weapon!['stages'][index];
+    final ids = (stage['property_ids'] as List? ?? []).join('、');
+    return '状态 ${stage['state']} · 动作 ${stage['action']}'
+        '${ids.isEmpty ? '' : ' · 命中属性 $ids'}';
+  }
+
   Widget actionChoice(String key, int? index, String label) {
     return Column(
       children: [
         ListTile(
           title: Text(label),
-          subtitle: index == null ? const Text('提示中的状态没有对应动作，不能编辑') : null,
+          subtitle: index == null
+              ? const Text('提示中的状态没有对应动作，不能编辑')
+              : Text(
+                  stageIdentity(index),
+                  style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                ),
           selected: selectedAction == key,
           trailing: index == null ? null : const Icon(Icons.edit_outlined),
           onTap: index == null || busy
@@ -553,6 +915,215 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
               fit: BoxFit.contain,
               errorBuilder: (_, error, stack) => fallback,
             ),
+    );
+  }
+
+  /// Page-level strip: which client this editor works on and its full
+  /// config.spf2 SHA-256. Only the current client's id is shown — comparing it
+  /// against the server's stored value was noise.
+  Widget clientStrip() {
+    if (_clientInfo.isEmpty) return const SizedBox.shrink();
+    final directory = '${_clientInfo['directory'] ?? ''}';
+    final hash = clientConfigHash;
+    final baselineState = '${(data?['client'] as Map?)?['state'] ?? ''}';
+    final rebaseNeeded = baselineState == '有差异' ||
+        baselineState == '未采集基线' ||
+        baselineState == '客户端缺失';
+    return Card(
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 2),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.folder_open, size: 16),
+                const SizedBox(width: 6),
+                const Text(
+                  '客户端',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: SelectableText(
+                    directory,
+                    maxLines: 1,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+                if (baselineState.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  baselineChip(baselineState),
+                ],
+                if (rebaseNeeded) ...[
+                  const SizedBox(width: 4),
+                  Text(
+                    baselineState == '客户端缺失'
+                        ? '没有 Data/config.spf2，无法写入'
+                        : '与手上的基线不一致',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.deepOrange.shade800,
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: busy ? null : rebaseClient,
+                    child: const Text('重新采集基线',
+                        style: TextStyle(fontSize: 12)),
+                  ),
+                ],
+                const Spacer(),
+                OutlinedButton.icon(
+                  onPressed: busy ? null : chooseClient,
+                  icon: const Icon(Icons.swap_horiz, size: 16),
+                  label: const Text('更换客户端'),
+                ),
+              ],
+            ),
+            Row(
+              children: [
+                const SizedBox(width: 22),
+                const Text(
+                  'config.spf2 SHA-256',
+                  style: TextStyle(fontSize: 11),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: SelectableText(
+                    hash.isEmpty ? '(读不到)' : hash,
+                    maxLines: 1,
+                    style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: hash.isEmpty ? null : () => copyConfigHash(hash),
+                  icon: const Icon(Icons.copy, size: 14),
+                  label: const Text('复制', style: TextStyle(fontSize: 12)),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> copyConfigHash(String hash) async {
+    await Clipboard.setData(ClipboardData(text: hash));
+    if (mounted) {
+      setState(() => message = '已复制 config.spf2 的完整 SHA-256');
+    }
+  }
+
+  Widget baselineChip(String state) {
+    late final Color color;
+    if (state == '已同步') {
+      color = Colors.teal.shade700;
+    } else if (state == '未写入') {
+      color = Colors.blueGrey.shade600;
+    } else {
+      color = Colors.deepOrange.shade700;
+    }
+    return Padding(
+      padding: const EdgeInsets.only(right: 4),
+      child: Text(state, style: TextStyle(fontSize: 12, color: color)),
+    );
+  }
+
+  /// Warns about weapons the client will refuse to chain.
+  ///
+  /// itemact.txt only names the animation for each state; the state machine
+  /// that turns a key press into the next state lives in delayacttable.xml.
+  /// Several shipped weapons (混沌宇宙, D眩晕之锤, 无名剑 …) copy another
+  /// weapon's action row but were never registered there, so they look complete
+  /// in this editor yet cannot combo in game. The fix is to borrow the
+  /// transitions of the weapon whose action row they copied.
+  Widget comboBanner() {
+    final id = weapon!['id'];
+    final rows = weapon!['combo_rows'] as int? ?? 0;
+    final registered = comboDonorOf(id);
+    if (rows > 0 && registered == null) return const SizedBox.shrink();
+
+    final suggested = weapon!['combo_suggestion'] as int? ?? 0;
+    final reference = registered ?? suggested;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Card(
+        color: registered == null ? Colors.orange.shade50 : Colors.teal.shade50,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    registered == null ? Icons.link_off : Icons.link,
+                    size: 18,
+                    color: registered == null
+                        ? Colors.deepOrange.shade800
+                        : Colors.teal.shade800,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      registered == null
+                          ? '缺少连招表：进游戏后只能出第一段，按键不会推进到下一段'
+                          : '连招表已补齐：借用「${weaponName(reference)}」的 $rows 条转移',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: registered == null
+                            ? Colors.deepOrange.shade900
+                            : Colors.teal.shade900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (registered == null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    '动作行（itemact.txt）只决定每段放哪个动画，能否连到下一段由 delayacttable.xml 的状态机决定。'
+                    '${suggested > 0 ? '这把武器的动作行与「${weaponName(suggested)}」一致，可以直接借用它的连招。' : ''}'
+                    '补齐后需「应用到游戏」并重启客户端才生效。',
+                    style: const TextStyle(fontSize: 12, height: 1.6),
+                  ),
+                ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 10,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  if (registered == null && suggested > 0)
+                    FilledButton.tonalIcon(
+                      onPressed: busy ? null : () => setCombo(suggested),
+                      icon: const Icon(Icons.auto_fix_high, size: 18),
+                      label: Text('借用「${weaponName(suggested)}」的连招'),
+                    ),
+                  if (registered == null)
+                    OutlinedButton.icon(
+                      onPressed: busy ? null : pickComboDonor,
+                      icon: const Icon(Icons.search, size: 18),
+                      label: const Text('选择其它参考武器'),
+                    ),
+                  if (registered != null)
+                    TextButton(
+                      onPressed: busy ? null : () => setCombo(0),
+                      child: const Text('取消连招补齐'),
+                    ),
+                  if (registered != null)
+                    TextButton(
+                      onPressed: busy ? null : pickComboDonor,
+                      child: const Text('换一个参考武器'),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -598,6 +1169,11 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
           title: const Text('武器配置'),
           actions: [
             TextButton.icon(
+              onPressed: busy || data == null ? null : createWeapon,
+              icon: const Icon(Icons.add),
+              label: const Text('新建武器'),
+            ),
+            TextButton.icon(
               onPressed: busy
                   ? null
                   : () async {
@@ -618,6 +1194,7 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
         body: Column(
           children: [
             if (busy) const LinearProgressIndicator(),
+            clientStrip(),
             Expanded(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -671,7 +1248,21 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                               return ListTile(
                                 leading: weaponIcon(value, 40),
                                 selected: weapon?['id'] == value['id'],
-                                title: Text(value['name']),
+                                title: Row(
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        '${value['name']}',
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    if (isCreated(value['id']))
+                                      const Padding(
+                                        padding: EdgeInsets.only(left: 6),
+                                        child: _SelfMadeBadge(),
+                                      ),
+                                  ],
+                                ),
                                 subtitle: Text(
                                   '${value['type'] ?? '未分类'} · ${value['id']}\n${(value['stages'] as List).length} 个招式',
                                 ),
@@ -707,7 +1298,7 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 SizedBox(
-                                  height: 160,
+                                  height: 130,
                                   child: Card(
                                     child: Padding(
                                       padding: const EdgeInsets.all(12),
@@ -731,6 +1322,23 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                                                 Text(
                                                   '${weapon!['type'] ?? '未分类'} · ${weapon!['id']}',
                                                 ),
+                                                if (isCreated(weapon!['id']))
+                                                  Row(
+                                                    children: [
+                                                      const _SelfMadeBadge(),
+                                                      const SizedBox(width: 8),
+                                                      Expanded(
+                                                        child: Text(
+                                                          '复用模型 ${weapon!['model'] ?? '未知'} · 供体 ${blueprintOf(weapon!['id'])['donor'] ?? '未知'} · 连招随供体自动补齐',
+                                                          style: Theme.of(context)
+                                                              .textTheme
+                                                              .bodySmall,
+                                                          overflow:
+                                                              TextOverflow.ellipsis,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
                                                 const SizedBox(height: 6),
                                                 const Text(
                                                   '武器简介',
@@ -761,6 +1369,7 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                                   ),
                                 ),
                                 const SizedBox(height: 8),
+                                comboBanner(),
                                 Text(
                                   '连招与命中效果',
                                   style: Theme.of(context)
@@ -883,6 +1492,11 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                                           : () => execute('weapon_restore'),
                                       child: const Text('恢复原效果'),
                                     ),
+                                    if (isCreated(weapon!['id']))
+                                      TextButton(
+                                        onPressed: busy ? null : forget,
+                                        child: const Text('移除自建武器'),
+                                      ),
                                     FilledButton.tonalIcon(
                                       onPressed: busy ? null : publish,
                                       icon: const Icon(
@@ -921,6 +1535,523 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Small tag shown next to weapons that only exist in the editor state.
+class _SelfMadeBadge extends StatelessWidget {
+  const _SelfMadeBadge();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+    decoration: BoxDecoration(
+      color: Colors.teal.shade100,
+      borderRadius: BorderRadius.circular(4),
+    ),
+    child: Text(
+      '自建',
+      style: TextStyle(fontSize: 11, color: Colors.teal.shade900),
+    ),
+  );
+}
+
+/// Collects the fields needed to invent a weapon that the untouched client can
+/// still draw.
+///
+/// A self-made weapon is a new row in item.txt plus a clone of an existing row
+/// in itemact.txt, so it must borrow a RenderWare clump the client already
+/// ships (we only add rows, we never add archives). The donor supplies the
+/// per-stage animation ids that get cloned and isolated server side.
+class _BlueprintDialog extends StatefulWidget {
+  const _BlueprintDialog({
+    required this.types,
+    required this.models,
+    required this.donors,
+    required this.minID,
+    required this.maxID,
+    required this.suggestedID,
+    required this.usedIDs,
+  });
+
+  final List types;
+  final List<String> models;
+  final List<Map<String, dynamic>> donors;
+  final int minID, maxID, suggestedID;
+  final Set<String> usedIDs;
+
+  @override
+  State<_BlueprintDialog> createState() => _BlueprintDialogState();
+}
+
+class _BlueprintDialogState extends State<_BlueprintDialog> {
+  final form = GlobalKey<FormState>();
+  late final TextEditingController number;
+  late final TextEditingController name;
+  final note = TextEditingController();
+  String type = '';
+  String? model;
+  int? donor;
+  String modelNotice = '';
+
+  @override
+  void initState() {
+    super.initState();
+    number = TextEditingController(text: '${widget.suggestedID}');
+    name = TextEditingController();
+    type = widget.types.isEmpty ? '1' : '${widget.types.first['value']}';
+  }
+
+  @override
+  void dispose() {
+    number.dispose();
+    name.dispose();
+    note.dispose();
+    super.dispose();
+  }
+
+  String typeValueFor(String label) {
+    for (final value in widget.types) {
+      if ('${value['label']}' == label) return '${value['value']}';
+    }
+    return '';
+  }
+
+  /// Reusing the donor's appearance is the whole point: an unknown model name
+  /// would leave the client rendering nothing.
+  void adoptDonor(int? value) {
+    setState(() {
+      donor = value;
+      modelNotice = '';
+      if (value == null) return;
+      final weapon = widget.donors.firstWhere((w) => w['id'] == value);
+      final candidate = '${weapon['model'] ?? ''}';
+      if (widget.models.contains(candidate)) {
+        model = candidate;
+      } else {
+        // A handful of shipped weapons were re-skinned without keeping their
+        // original clump, so their model column names a file the client no
+        // longer has. Do not guess an appearance; ask the author to choose.
+        modelNotice = '客户端没有 $candidate，请手动选择模型';
+      }
+      final mapped = typeValueFor('${weapon['type'] ?? ''}');
+      if (mapped.isNotEmpty) type = mapped;
+      if (name.text.trim().isEmpty) {
+        name.text = '自建${weapon['name']}';
+      }
+    });
+  }
+
+  void submit() {
+    if (!(form.currentState?.validate() ?? false)) return;
+    Navigator.pop(context, <String, dynamic>{
+      'id': int.tryParse(number.text.trim()) ?? 0,
+      'name': name.text.trim(),
+      'type': type,
+      'model': model,
+      'donor': donor,
+      'note': note.text.trim(),
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sorted = [...widget.donors]
+      ..sort((a, b) => (a['id'] as int).compareTo(b['id'] as int));
+    final models = [...widget.models]..sort();
+    return AlertDialog(
+      title: const Text('新建武器（不改动客户端）'),
+      content: SizedBox(
+        width: 540,
+        child: Form(
+          key: form,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '自建武器会在配置包里新增两行数据，并复用客户端已有的模型与动作，因此无需改动客户端。'
+                  '编号使用预留区间，不影响原有武器。',
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 170,
+                      child: TextFormField(
+                        controller: number,
+                        decoration: InputDecoration(
+                          labelText: '武器编号',
+                          helperText: '${widget.minID}–${widget.maxID}',
+                        ),
+                        keyboardType: TextInputType.number,
+                        validator: (text) {
+                          final v = int.tryParse((text ?? '').trim());
+                          if (v == null || v < widget.minID || v > widget.maxID) {
+                            return '编号超出预留区间';
+                          }
+                          if (widget.usedIDs.contains('$v')) return '编号已被占用';
+                          return null;
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: TextFormField(
+                        controller: name,
+                        decoration: const InputDecoration(
+                          labelText: '武器名称',
+                          helperText: '1–24 字',
+                        ),
+                        validator: (text) {
+                          final value = (text ?? '').trim();
+                          if (value.isEmpty || value.runes.length > 24) {
+                            return '名称需为 1–24 个字符';
+                          }
+                          if (value.contains('\t')) return '名称不能包含制表符';
+                          return null;
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                DropdownButtonFormField<int>(
+                  isExpanded: true,
+                  menuMaxHeight: 340,
+                  initialValue: donor,
+                  decoration: const InputDecoration(
+                    labelText: '供体武器（复制其招式结构）',
+                    helperText: '从客户端已有武器中选一件作为动作模板',
+                  ),
+                  items: [
+                    for (final weapon in sorted)
+                      DropdownMenuItem<int>(
+                        value: weapon['id'] as int,
+                        child: Text(
+                          '${weapon['name']} · ${weapon['id']} · ${weapon['type'] ?? '未分类'}',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                  onChanged: adoptDonor,
+                  validator: (value) => value == null ? '请选择供体武器' : null,
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        initialValue: type.isEmpty ? null : type,
+                        decoration: const InputDecoration(labelText: '武器子类'),
+                        items: [
+                          for (final value in widget.types)
+                            DropdownMenuItem<String>(
+                              value: '${value['value']}',
+                              child: Text('${value['label']}'),
+                            ),
+                        ],
+                        onChanged: (value) =>
+                            setState(() => type = value ?? type),
+                        validator: (value) =>
+                            value == null || value.isEmpty ? '请选择子类' : null,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    SizedBox(
+                      width: 230,
+                      child: DropdownButtonFormField<String>(
+                        key: ValueKey('blueprint-model-$model'),
+                        isExpanded: true,
+                        menuMaxHeight: 340,
+                        initialValue: model,
+                        decoration: const InputDecoration(
+                          labelText: '模型（.dff）',
+                          helperText: '只能选客户已有的模型',
+                        ),
+                        items: [
+                          for (final value in models)
+                            DropdownMenuItem<String>(
+                              value: value,
+                              child: Text(
+                                value,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                        ],
+                        onChanged: (value) => setState(() => model = value),
+                        validator: (value) =>
+                            value == null || value.isEmpty ? '请选择模型' : null,
+                      ),
+                    ),
+                  ],
+                ),
+                if (modelNotice.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      modelNotice,
+                      style: const TextStyle(
+                        color: Colors.deepOrange,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 14),
+                TextFormField(
+                  controller: note,
+                  maxLength: 200,
+                  decoration: const InputDecoration(
+                    labelText: '备注（可选，仅本地记录）',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        FilledButton(onPressed: submit, child: const Text('登记自建武器')),
+      ],
+    );
+  }
+}
+
+/// Picks the weapon whose combo state machine should be borrowed.
+///
+/// Only weapons that already own transitions are offered: a donor with an empty
+/// table would produce a weapon that still cannot chain.
+class _ComboDonorDialog extends StatefulWidget {
+  const _ComboDonorDialog({required this.candidates, required this.suggested});
+
+  final List<Map<String, dynamic>> candidates;
+  final int suggested;
+
+  @override
+  State<_ComboDonorDialog> createState() => _ComboDonorDialogState();
+}
+
+class _ComboDonorDialogState extends State<_ComboDonorDialog> {
+  String query = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final suggestedFirst = [...widget.candidates]..sort((a, b) {
+      if (a['id'] == widget.suggested) return -1;
+      if (b['id'] == widget.suggested) return 1;
+      return (a['id'] as int).compareTo(b['id'] as int);
+    });
+    final matches = suggestedFirst.where((w) {
+      final text = query.trim();
+      return text.isEmpty ||
+          '${w['name']} ${w['id']}'.contains(text);
+    }).toList();
+    return AlertDialog(
+      title: const Text('选择参考武器（借用它的连招表）'),
+      content: SizedBox(
+        width: 520,
+        height: 460,
+        child: Column(
+          children: [
+            if (widget.suggested > 0)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Text(
+                  '推荐参考武器编号 ${widget.suggested}：它与当前武器的动作行一致，'
+                  '通常就是当初的模板。',
+                  style: const TextStyle(fontSize: 12, height: 1.5),
+                ),
+              ),
+            TextField(
+              decoration: const InputDecoration(
+                labelText: '搜索名称 / 编号',
+                prefixIcon: Icon(Icons.search),
+              ),
+              onChanged: (value) => setState(() => query = value),
+            ),
+            const SizedBox(height: 10),
+            Expanded(
+              child: ListView.builder(
+                itemCount: matches.length,
+                itemBuilder: (context, index) {
+                  final value = matches[index];
+                  final recommended = value['id'] == widget.suggested;
+                  return ListTile(
+                    dense: true,
+                    selected: recommended,
+                    leading: recommended
+                        ? const Icon(Icons.star, color: Colors.amber)
+                        : null,
+                    title: Text('${value['name']}'),
+                    subtitle: Text(
+                      '${value['type'] ?? '未分类'} · ${value['id']} · '
+                      '${value['combo_rows']} 条连招',
+                    ),
+                    onTap: () => Navigator.pop(context, value['id'] as int),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Picks which client folder the editor works on.
+///
+/// Detection only covers folders next to the server tree, so a manual path
+/// field is always offered as a fallback. A plain ListTile-based list is used
+/// instead of RadioListTile to stay clear of the Radio API churn.
+class _ClientPickerDialog extends StatefulWidget {
+  const _ClientPickerDialog({required this.current, required this.detected});
+
+  final String current;
+  final List<Map<String, dynamic>> detected;
+
+  @override
+  State<_ClientPickerDialog> createState() => _ClientPickerDialogState();
+}
+
+class _ClientPickerDialogState extends State<_ClientPickerDialog> {
+  String chosen = '';
+  final manual = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    chosen = widget.current;
+  }
+
+  @override
+  void dispose() {
+    manual.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('选择客户端所在文件夹'),
+      content: SizedBox(
+        width: 660,
+        height: 430,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('自动找到的客户端：', style: TextStyle(fontSize: 12)),
+            const SizedBox(height: 2),
+            Expanded(
+              child: widget.detected.isEmpty
+                  ? const Center(
+                      child: Text('没有自动找到客户端，请在下面直接填路径'),
+                    )
+                  : ListView.builder(
+                      itemCount: widget.detected.length,
+                      itemBuilder: (context, index) {
+                        final entry = widget.detected[index];
+                        final directory = '${entry['directory']}';
+                        final valid = entry['valid'] == true;
+                        final hash = '${entry['config_hash'] ?? ''}';
+                        final selected = chosen.trim() == directory;
+                        return ListTile(
+                          dense: true,
+                          enabled: valid,
+                          selected: selected,
+                          leading: Icon(
+                            selected
+                                ? Icons.radio_button_checked
+                                : Icons.radio_button_unchecked,
+                            size: 18,
+                          ),
+                          title: Row(
+                            children: [
+                              Text('${entry['label']}'),
+                              if (entry['current'] == true) ...[
+                                const SizedBox(width: 8),
+                                const Text(
+                                  '（当前使用）',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.teal,
+                                  ),
+                                ),
+                              ],
+                              if (!valid) ...[
+                                const SizedBox(width: 8),
+                                const Text(
+                                  '（不是客户端目录）',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.deepOrange,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          subtitle: Text(
+                            hash.isEmpty
+                                ? directory
+                                : '$directory\nconfig.spf2  ${hash.substring(0, 12)}…',
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                          isThreeLine: hash.isNotEmpty,
+                          onTap: valid
+                              ? () => setState(() {
+                                    chosen = directory;
+                                    manual.text = directory;
+                                  })
+                              : null,
+                        );
+                      },
+                    ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: manual,
+              decoration: const InputDecoration(
+                labelText: '或者直接填写文件夹路径',
+                hintText: r'例如 D:/OpenKFO/local-client',
+                prefixIcon: Icon(Icons.edit),
+              ),
+              onChanged: (value) => setState(() => chosen = value.trim()),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              '所选目录里必须有能解析的 Data/config.spf2，否则会被拒绝。',
+              style: TextStyle(fontSize: 11),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: chosen.trim().isEmpty
+              ? null
+              : () => Navigator.pop(context, chosen.trim()),
+          child: const Text('使用此客户端'),
+        ),
+      ],
     );
   }
 }

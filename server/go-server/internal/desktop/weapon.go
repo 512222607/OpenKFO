@@ -17,7 +17,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 	"unicode"
 )
 
@@ -309,10 +308,19 @@ type Weapon struct {
 	Icon        string           `json:"icon"`
 	Description string           `json:"description"`
 	Type        string           `json:"type"`
+	Model       string           `json:"model"`
 	Stages      []Stage          `json:"stages"`
 	Combos      []Combo          `json:"combos"`
 	BuffIDs     []int            `json:"buff_ids"`
 	Allowed     map[string][]int `json:"allowed_values"`
+	// ComboRows is how many delayacttable.xml transitions the weapon owns.
+	// Zero means the client can never advance past the first hit.
+	ComboRows int `json:"combo_rows"`
+	// ComboSuggestion points at the weapon whose action row this one copies,
+	// used as the default donor when completing a missing combo table.
+	ComboSuggestion int `json:"combo_suggestion,omitempty"`
+	// Effects reports whether acteffect.xml registers action effects for it.
+	Effects bool `json:"effects"`
 }
 type block struct {
 	original string
@@ -342,6 +350,39 @@ func weaponType(item Item) string {
 	default:
 		return "类型 " + item.Fields[2]
 	}
+}
+
+// weaponTypes lists the item.txt column-2 subtypes an author may pick when
+// inventing a weapon. The labels mirror weaponType so the editor and the
+// catalogue speak the same language.
+var weaponTypes = []map[string]string{
+	{"value": "1", "label": "刀类"},
+	{"value": "2", "label": "剑类"},
+	{"value": "3", "label": "长柄"},
+	{"value": "4", "label": "拳套"},
+	{"value": "5", "label": "拳脚"},
+	{"value": "6", "label": "重型"},
+	{"value": "7", "label": "奇门"},
+}
+
+// weaponModels lists the RenderWare clumps shipped inside the client. A
+// self-made weapon has to borrow one of them, because the client binary is
+// never touched and unknown model names fall back to an invisible mesh.
+func weaponModels(client string) []string {
+	models := []string{}
+	folder := filepath.Join(client, "Data", "Weapon", "Model")
+	entries, err := os.ReadDir(folder)
+	if err != nil {
+		return models
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".dff") {
+			continue
+		}
+		models = append(models, entry.Name())
+	}
+	sort.Strings(models)
+	return models
 }
 
 type inspection struct {
@@ -494,7 +535,11 @@ func inspect(a *archive, items []Item) (*inspection, error) {
 		if err != nil {
 			return nil, err
 		}
-		weapon := Weapon{ID: id, Name: item.Name, Icon: item.Icon, Description: item.Description, Type: weaponType(item), Stages: []Stage{}, Combos: sequences, BuffIDs: buffIDs, Allowed: allowed}
+		model := ""
+		if len(item.Fields) > 7 {
+			model = item.Fields[7]
+		}
+		weapon := Weapon{ID: id, Name: item.Name, Icon: item.Icon, Description: item.Description, Type: weaponType(item), Model: model, Stages: []Stage{}, Combos: sequences, BuffIDs: buffIDs, Allowed: allowed}
 		for _, state := range states {
 			column, ok := columns[state]
 			if !ok || column >= len(row) {
@@ -894,11 +939,219 @@ func atomicWrite(path string, data []byte) error {
 	return os.Rename(temp, path)
 }
 
+// Blueprint describes a weapon invented without touching the client binary.
+// Its item row and action row are copied from a donor weapon that already ships
+// in the client's config.spf2, so the untouched client still draws an existing
+// RenderWare clump while the name, subtype and per-stage effects are new.
+type Blueprint struct {
+	ID    int    `json:"id"`
+	Name  string `json:"name"`
+	Type  string `json:"type"`
+	Model string `json:"model"`
+	Donor int    `json:"donor"`
+	Note  string `json:"note,omitempty"`
+}
+
+const blueprintMinID, blueprintMaxID = 253000, 253999
+
+// splitRows splits a tab separated table, dropping blank lines.
+func splitRows(text string) [][]string {
+	lines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
+	rows := make([][]string, 0, len(lines))
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		rows = append(rows, strings.Split(line, "\t"))
+	}
+	return rows
+}
+
+// appendTabRow appends one row, matching the file's existing line ending so the
+// untouched client keeps parsing the table the same way.
+func appendTabRow(text, row string) string {
+	ending := "\n"
+	if strings.Contains(text, "\r\n") {
+		ending = "\r\n"
+	}
+	body := strings.TrimRight(text, "\r\n")
+	if body == "" {
+		return row + ending
+	}
+	return body + ending + row + ending
+}
+
+func setCell(row []string, index int, value string) []string {
+	for len(row) <= index {
+		row = append(row, "")
+	}
+	row[index] = value
+	return row
+}
+
+// itemRowIndex maps a level item id to its item.txt row (kind 25 only).
+func itemRowIndex(text string) map[string][]string {
+	index := map[string][]string{}
+	for _, row := range splitRows(text) {
+		if len(row) >= 2 && row[0] == "25" {
+			index[row[1]] = row
+		}
+	}
+	return index
+}
+
+// actionRowIndex maps a weapon id to its itemact.txt row.
+func actionRowIndex(text string) map[string][]string {
+	index := map[string][]string{}
+	for _, row := range splitRows(text) {
+		if len(row) >= 2 {
+			index[row[0]] = row
+		}
+	}
+	return index
+}
+
+// weaponItemIDs lists every item.txt id of kind 25. The reserved range must be
+// validated against this table rather than against the renderable weapon list:
+// item.txt is what validateBlueprint writes into, and a shipped id is taken
+// even if it happens to carry no usable action row.
+func weaponItemIDs(a *archive) []int {
+	text, err := a.text("item.txt")
+	if err != nil {
+		return nil
+	}
+	ids := []int{}
+	for key := range itemRowIndex(text) {
+		if number, err := strconv.Atoi(key); err == nil {
+			ids = append(ids, number)
+		}
+	}
+	sort.Ints(ids)
+	return ids
+}
+
+// applyBlueprints returns a configuration whose item.txt and itemact.txt carry
+// one extra row per blueprint. Both files already exist in the archive, so the
+// SGDP writer can replace them without growing the entry table.
+func applyBlueprints(a *archive, created map[string]Blueprint) (*archive, error) {
+	if len(created) == 0 {
+		return a, nil
+	}
+	itemText, err := a.text("item.txt")
+	if err != nil {
+		return nil, err
+	}
+	actionText, err := a.text("itemact.txt")
+	if err != nil {
+		return nil, err
+	}
+	itemIndex := itemRowIndex(itemText)
+	actionIndex := actionRowIndex(actionText)
+	keys := make([]string, 0, len(created))
+	for key := range created {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		blueprint := created[key]
+		number := strconv.Itoa(blueprint.ID)
+		if itemIndex[number] != nil {
+			// Already emitted by an earlier apply; never duplicate a row.
+			continue
+		}
+		donorItem := itemIndex[strconv.Itoa(blueprint.Donor)]
+		if donorItem == nil {
+			return nil, fmt.Errorf("供体武器 %d 缺少物品配置", blueprint.Donor)
+		}
+		donorAction := actionIndex[strconv.Itoa(blueprint.Donor)]
+		if donorAction == nil {
+			return nil, fmt.Errorf("供体武器 %d 缺少动作配置", blueprint.Donor)
+		}
+		itemRow := append([]string(nil), donorItem...)
+		itemRow = setCell(itemRow, 0, "25")
+		itemRow = setCell(itemRow, 1, number)
+		itemRow = setCell(itemRow, 2, blueprint.Type)
+		itemRow = setCell(itemRow, 3, blueprint.Name)
+		itemRow = setCell(itemRow, 7, blueprint.Model)
+		itemRow = setCell(itemRow, 9, "#")
+		itemRow = setCell(itemRow, 16, blueprint.Name)
+		itemText = appendTabRow(itemText, strings.Join(itemRow, "\t"))
+
+		actionRow := append([]string(nil), donorAction...)
+		actionRow = setCell(actionRow, 0, number)
+		actionRow = setCell(actionRow, 1, blueprint.Name)
+		actionText = appendTabRow(actionText, strings.Join(actionRow, "\t"))
+	}
+	items, err := encodeText(itemText)
+	if err != nil {
+		return nil, err
+	}
+	actions, err := encodeText(actionText)
+	if err != nil {
+		return nil, err
+	}
+	data, err := a.replace(map[string][]byte{"item.txt": items, "itemact.txt": actions})
+	if err != nil {
+		return nil, err
+	}
+	return parseArchive(data)
+}
+
+// validateBlueprint rejects anything the untouched client could not render or
+// resolve. The model must already exist on disk: new RenderWare clumps cannot be
+// authored from here.
+func validateBlueprint(client string, source *archive, blueprint Blueprint) error {
+	if blueprint.ID < blueprintMinID || blueprint.ID > blueprintMaxID {
+		return fmt.Errorf("武器编号需在 %d..%d 之间", blueprintMinID, blueprintMaxID)
+	}
+	if name := blueprint.Name; name == "" || len([]rune(name)) > 24 || strings.ContainsAny(name, "\t\r\n") {
+		return fmt.Errorf("武器名称需为 1..24 个字符且不含制表符")
+	}
+	switch blueprint.Type {
+	case "1", "2", "3", "4", "5", "6", "7":
+	default:
+		return fmt.Errorf("武器子类无效")
+	}
+	if blueprint.Model == "" || filepath.Base(blueprint.Model) != blueprint.Model || !strings.EqualFold(filepath.Ext(blueprint.Model), ".dff") {
+		return fmt.Errorf("模型文件名无效")
+	}
+	if _, err := os.Stat(filepath.Join(client, "Data", "Weapon", "Model", blueprint.Model)); err != nil {
+		return fmt.Errorf("客户端缺少模型文件 %s，自建武器必须复用已有模型", blueprint.Model)
+	}
+	if blueprint.Donor == blueprint.ID {
+		return fmt.Errorf("供体武器不能是自身")
+	}
+	if len([]rune(blueprint.Note)) > 200 {
+		return fmt.Errorf("备注过长")
+	}
+	itemText, err := source.text("item.txt")
+	if err != nil {
+		return err
+	}
+	actionText, err := source.text("itemact.txt")
+	if err != nil {
+		return err
+	}
+	if itemRowIndex(itemText)[strconv.Itoa(blueprint.ID)] != nil {
+		return fmt.Errorf("武器编号 %d 已存在", blueprint.ID)
+	}
+	donor := strconv.Itoa(blueprint.Donor)
+	if itemRowIndex(itemText)[donor] == nil || actionRowIndex(actionText)[donor] == nil {
+		return fmt.Errorf("供体武器 %d 不在本客户端可用的武器表中", blueprint.Donor)
+	}
+	return nil
+}
+
 type weaponState struct {
-	Drafts      map[string][]Rule `json:"drafts"`
-	Applied     map[string][]Rule `json:"applied"`
-	SourceHash  string            `json:"source_hash,omitempty"`
-	AppliedHash string            `json:"applied_hash,omitempty"`
+	Drafts      map[string][]Rule    `json:"drafts"`
+	Applied     map[string][]Rule    `json:"applied"`
+	Created     map[string]Blueprint `json:"created,omitempty"`
+	Combos      map[string]int       `json:"combos,omitempty"`
+	SourceHash  string               `json:"source_hash,omitempty"`
+	AppliedHash string               `json:"applied_hash,omitempty"`
+	// Targets holds one baseline and hash pair per managed client. The edit set
+	// above is shared; each client is rendered onto its own baseline.
+	Baselines map[string]*clientBaseline `json:"baselines,omitempty"`
 }
 
 func weaponHandle(request Request, client string, items []Item, folder string) (any, error) {
@@ -916,7 +1169,7 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 	lock.Close()
 	defer os.Remove(lockPath)
 	statePath := filepath.Join(folder, "settings.json")
-	state := weaponState{Drafts: map[string][]Rule{}, Applied: map[string][]Rule{}}
+	state := weaponState{Drafts: map[string][]Rule{}, Applied: map[string][]Rule{}, Created: map[string]Blueprint{}}
 	stateBytes, err := os.ReadFile(statePath)
 	if err != nil && !os.IsNotExist(err) {
 		return nil, err
@@ -929,8 +1182,19 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 	if state.Drafts == nil || state.Applied == nil {
 		return nil, fmt.Errorf("配置方案状态不完整")
 	}
-	baseline := filepath.Join(folder, "original.spf2")
-	packagePath := filepath.Join(client, "Data", "config.spf2")
+	if state.Created == nil {
+		state.Created = map[string]Blueprint{}
+	}
+	if state.Combos == nil {
+		state.Combos = map[string]int{}
+	}
+	// The edit set is rendered onto whichever client the GM currently points at,
+	// each client directory keeping its own baseline: the user can switch
+	// clients, and a client can be refreshed by its own updater, so a single
+	// shared baseline would silently overwrite those differences.
+	entry := state.baselineFor(client)
+	baseline := entry.path(folder)
+	packagePath := configPath(client)
 	sourcePath := baseline
 	if _, err = os.Stat(baseline); os.IsNotExist(err) {
 		sourcePath = packagePath
@@ -944,11 +1208,42 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 	if err = source.verify(); err != nil {
 		return nil, err
 	}
-	if state.SourceHash != "" && digest(source.data) != state.SourceHash {
-		return nil, fmt.Errorf("原始配置备份已变化，已停止写入")
+	if entry.SourceHash != "" && digest(source.data) != entry.SourceHash {
+		return nil, fmt.Errorf("该客户端的基线备份已变化，已停止写入")
 	}
-	info, err := inspect(source, items)
+	// Self-made weapons live in the same tables as the shipped ones, so the
+	// inspection, isolation and rendering path below applies to them unchanged.
+	// Combo registrations are layered on top: itemact.txt only says which
+	// animation each state plays, delayacttable.xml is what lets the player
+	// actually reach the next state, and a weapon without transitions cannot
+	// chain attacks however complete its action row looks.
+	plan := comboPlanOf(state.Created, state.Combos)
+	base := source
+	combo := comboResult{}
+	if len(state.Created) > 0 {
+		if base, err = applyBlueprints(source, state.Created); err != nil {
+			return nil, err
+		}
+	}
+	if len(plan) > 0 {
+		if base, combo, err = applyComboTables(base, plan); err != nil {
+			return nil, err
+		}
+	}
+	if len(state.Created) > 0 || combo.Rows > 0 {
+		text, err := base.text("item.txt")
+		if err != nil {
+			return nil, err
+		}
+		if items, err = itemsFromText(client, text, true); err != nil {
+			return nil, err
+		}
+	}
+	info, err := inspect(base, items)
 	if err != nil {
+		return nil, err
+	}
+	if err = annotateComboState(info, base); err != nil {
 		return nil, err
 	}
 	current, err := os.ReadFile(packagePath)
@@ -957,11 +1252,143 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 	}
 	revision := digest(append(append([]byte(nil), current...), stateBytes...))
 	if request.Operation == "weapon_catalog" {
-		buffRows, err := buffs(source)
+		buffRows, err := buffs(base)
 		if err != nil {
 			return nil, err
 		}
-		return map[string]any{"weapons": info.weapons, "effects": effects(info), "fields": propertyFields, "buffs": buffRows, "drafts": state.Drafts, "applied": state.Applied, "revision": revision, "folder": folder}, nil
+		return map[string]any{"weapons": info.weapons, "effects": effects(info), "fields": propertyFields, "buffs": buffRows, "drafts": state.Drafts, "applied": state.Applied, "created": state.Created, "combos": state.Combos, "client": describeClient(entry, folder), "clients": describeBaselines(&state, folder), "models": weaponModels(client), "types": weaponTypes, "used_ids": weaponItemIDs(source), "blueprint_min": blueprintMinID, "blueprint_max": blueprintMaxID, "revision": revision, "folder": folder}, nil
+	}
+	if request.Operation == "weapon_create" || request.Operation == "weapon_forget" {
+		message := ""
+		if request.Operation == "weapon_forget" {
+			key := strconv.Itoa(request.Weapon)
+			if _, ok := state.Created[key]; !ok {
+				return nil, fmt.Errorf("该武器不是自建武器")
+			}
+			delete(state.Created, key)
+			delete(state.Drafts, key)
+			delete(state.Applied, key)
+			delete(state.Combos, key)
+			message = "已移除自建武器；重新应用或发布后才会从配置包消失"
+		} else {
+			if request.Blueprint == nil {
+				return nil, fmt.Errorf("缺少武器蓝图")
+			}
+			blueprint := *request.Blueprint
+			blueprint.Name = strings.TrimSpace(blueprint.Name)
+			blueprint.Type = strings.TrimSpace(blueprint.Type)
+			blueprint.Model = strings.TrimSpace(blueprint.Model)
+			blueprint.Note = strings.TrimSpace(blueprint.Note)
+			if err := validateBlueprint(client, source, blueprint); err != nil {
+				return nil, err
+			}
+			key := strconv.Itoa(blueprint.ID)
+			for other, existing := range state.Created {
+				if other != key && existing.Name == blueprint.Name {
+					return nil, fmt.Errorf("已有同名自建武器 %s", blueprint.Name)
+				}
+			}
+			state.Created[key] = blueprint
+			message = "已登记自建武器；保存效果并应用后写入配置包"
+		}
+		encoded, err := json.MarshalIndent(state, "", "  ")
+		if err != nil {
+			return nil, err
+		}
+		if err = atomicWrite(statePath, encoded); err != nil {
+			return nil, err
+		}
+		return map[string]any{"created": state.Created, "revision": digest(append(append([]byte(nil), current...), encoded...)), "message": message}, nil
+	}
+	// weapon_combo completes the combo registration of an existing weapon. A
+	// shipped weapon can carry a full action row yet own no transitions in
+	// delayacttable.xml, which leaves it unchainable in game; borrowing another
+	// weapon's state machine fixes it without touching the client binary.
+	if request.Operation == "weapon_combo" {
+		if request.Weapon == 0 {
+			return nil, fmt.Errorf("请选择要补齐的武器")
+		}
+		target := strconv.Itoa(request.Weapon)
+		actionText, err := base.text("itemact.txt")
+		if err != nil {
+			return nil, err
+		}
+		if actionRowIndex(actionText)[target] == nil {
+			return nil, fmt.Errorf("武器 %s 不在本客户端的动作表中", target)
+		}
+		message := ""
+		if request.Donor == 0 {
+			if _, ok := state.Combos[target]; !ok {
+				return nil, fmt.Errorf("该武器没有登记过连招补齐")
+			}
+			delete(state.Combos, target)
+			message = "已取消连招补齐；重新应用后恢复原样"
+		} else {
+			donor := strconv.Itoa(request.Donor)
+			if donor == target {
+				return nil, fmt.Errorf("参考武器不能是自身")
+			}
+			itemText, err := base.text("item.txt")
+			if err != nil {
+				return nil, err
+			}
+			if itemRowIndex(itemText)[donor] == nil {
+				return nil, fmt.Errorf("参考武器 %s 不在本客户端的武器表中", donor)
+			}
+			tableText, err := base.text("delayacttable.xml")
+			if err != nil {
+				return nil, fmt.Errorf("本客户端没有连招表，无法补齐")
+			}
+			tables := comboRowCounts(tableText)
+			if tables[donor] == 0 {
+				return nil, fmt.Errorf("参考武器 %s 自身也没有连招表，无法借用", donor)
+			}
+			if tables[target] > 0 {
+				return nil, fmt.Errorf("该武器已有连招表，无需补齐")
+			}
+			state.Combos[target] = request.Donor
+			message = fmt.Sprintf("已登记：借用参考武器的 %d 条连招；应用后生效", tables[donor])
+		}
+		encoded, err := json.MarshalIndent(state, "", "  ")
+		if err != nil {
+			return nil, err
+		}
+		if err = atomicWrite(statePath, encoded); err != nil {
+			return nil, err
+		}
+		return map[string]any{"combos": state.Combos, "revision": digest(append(append([]byte(nil), current...), encoded...)), "message": message}, nil
+	}
+	// weapon_clients reports the selected client and every client we have a
+	// baseline for. weapon_client_rebase re-captures the selected client's
+	// baseline after something else replaced its config.spf2 — its own updater
+	// does exactly that.
+	if request.Operation == "weapon_clients" || request.Operation == "weapon_client_rebase" {
+		message := ""
+		if request.Operation == "weapon_client_rebase" {
+			if err = ensureBaseline(entry, folder, true); err != nil {
+				return nil, err
+			}
+			state.SourceHash = entry.SourceHash
+			state.AppliedHash = entry.AppliedHash
+			encoded, err := json.MarshalIndent(state, "", "  ")
+			if err != nil {
+				return nil, err
+			}
+			if err = atomicWrite(statePath, encoded); err != nil {
+				return nil, err
+			}
+			message = "已按该客户端当前配置重新采集基线；旧基线已备份"
+		}
+		encoded, err := json.MarshalIndent(state, "", "  ")
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{
+			"client":   describeClient(entry, folder),
+			"clients":  describeBaselines(&state, folder),
+			"revision": digest(append(append([]byte(nil), current...), encoded...)),
+			"message":  message,
+		}, nil
 	}
 	if request.Revision != revision {
 		return nil, fmt.Errorf("配置已被其他操作更新，请重新打开武器配置后再保存")
@@ -994,7 +1421,7 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 			plans[id] = rules
 		}
 		plans[key] = rules
-		data, err := render(source, items, plans)
+		data, err := render(base, items, plans)
 		if err != nil {
 			return nil, err
 		}
@@ -1023,6 +1450,7 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 	}
 	backup := ""
 	message := "方案已保存，尚未应用到游戏"
+	prepared := []*preparedClient{}
 	switch request.Operation {
 	case "weapon_save":
 	case "weapon_apply", "weapon_restore":
@@ -1037,13 +1465,6 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 				return nil, fmt.Errorf("请先退出游戏客户端，再应用；可以先保存方案")
 			}
 		}
-		expected := state.AppliedHash
-		if expected == "" {
-			expected = digest(source.data)
-		}
-		if digest(current) != expected {
-			return nil, fmt.Errorf("游戏配置已被其他程序修改，已停止覆盖")
-		}
 		if request.Operation == "weapon_restore" {
 			delete(state.Applied, key)
 			message = "该武器已恢复原效果；保存的方案仍保留"
@@ -1051,69 +1472,19 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 			state.Applied[key] = rules
 			message = "配置已写入；启动游戏后加载，实战效果仍需验证"
 		}
-		data, err := render(source, items, state.Applied)
+		// Render and validate before touching the disk: a failed guard must not
+		// leave the client half-updated.
+		plan, err := prepareClient(entry, folder, &state, state.Applied, info)
 		if err != nil {
 			return nil, err
 		}
-		verified, err := parseArchive(data)
-		if err != nil {
+		prepared = append(prepared, plan)
+		if err = commitClient(plan, folder); err != nil {
 			return nil, err
 		}
-		if err = verified.verify(); err != nil {
-			return nil, err
-		}
-		if _, err = verified.xml("skillproperty.xml"); err != nil {
-			return nil, err
-		}
-		if _, err = verified.xml("animation/2001.xml"); err != nil {
-			return nil, err
-		}
-		allowedFiles := map[string]bool{"itemact.txt": true, "skillproperty.xml": true}
-		for _, w := range info.weapons {
-			for _, rule := range state.Applied[strconv.Itoa(w.ID)] {
-				for _, stage := range w.Stages {
-					if stage.Stage == rule.Stage {
-						allowedFiles["animation/"+stage.Action[:4]+".xml"] = true
-					}
-				}
-			}
-		}
-		for name := range source.entries {
-			after, err := verified.raw(name)
-			if err != nil {
-				return nil, err
-			}
-			before, err := source.raw(name)
-			if err != nil {
-				return nil, err
-			}
-			if bytes.Equal(before, after) {
-				continue
-			}
-			if !allowedFiles[name] {
-				return nil, fmt.Errorf("无关配置校验失败，未写入：%s", name)
-			}
-			if strings.HasSuffix(name, ".xml") {
-				if _, err = verified.xml(name); err != nil {
-					return nil, err
-				}
-			}
-		}
-
-		if sourcePath == packagePath {
-			if err = atomicWrite(baseline, source.data); err != nil {
-				return nil, err
-			}
-		}
-		backup = filepath.Join(folder, "before-"+time.Now().Format("20060102-150405.000000000")+".spf2")
-		if err = atomicWrite(backup, current); err != nil {
-			return nil, err
-		}
-		if err = atomicWrite(packagePath, data); err != nil {
-			return nil, err
-		}
-		state.SourceHash = digest(source.data)
-		state.AppliedHash = digest(data)
+		backup = plan.Backup
+		state.SourceHash = entry.SourceHash
+		state.AppliedHash = entry.AppliedHash
 	default:
 		return nil, fmt.Errorf("未知武器配置操作")
 	}
@@ -1125,9 +1496,11 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 		err = atomicWrite(statePath, encoded)
 	}
 	if err != nil {
-		if backup != "" {
-			if rollbackErr := atomicWrite(packagePath, current); rollbackErr != nil {
-				return nil, fmt.Errorf("保存方案失败且回滚失败；请使用备份 %s：%v；%v", backup, err, rollbackErr)
+		if len(prepared) > 0 {
+			for _, plan := range prepared {
+				if rollbackErr := atomicWrite(configPath(plan.Entry.Directory), plan.Current); rollbackErr != nil {
+					return nil, fmt.Errorf("保存方案失败且回滚失败；请使用备份 %s：%v；%v", plan.Backup, err, rollbackErr)
+				}
 			}
 		}
 		return nil, err

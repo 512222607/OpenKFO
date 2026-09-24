@@ -54,6 +54,11 @@ type Request struct {
 	Enabled          *bool                            `json:"enabled"`
 	All              bool                             `json:"all"`
 	Weapon           int                              `json:"weapon"`
+	Donor            int                              `json:"donor"`
+	Target           string                           `json:"target"`
+	Path             string                           `json:"path"`
+	Directory        string                           `json:"directory"`
+	Blueprint        *Blueprint                       `json:"blueprint,omitempty"`
 	Revision         string                           `json:"revision"`
 	Rules            []Rule                           `json:"rules"`
 }
@@ -236,6 +241,14 @@ func (admin *Admin) Call(request Request) (any, error) {
 		return call(remote)
 	case "definitions_get", "definition_save", "accounts", "inventory", "inventory_expiry", "wallet_accounts", "wallet_update", "rewards_get", "rewards_save":
 		return call(remote)
+	}
+	// Switching which client the tool works on is handled before the client
+	// directory is resolved, so a wrong pick can be corrected from the UI.
+	if request.Operation == "client_directory_get" || request.Operation == "client_directory_set" {
+		return admin.clientDirectory(request)
+	}
+	if request.Operation == "server_config_hash_set" {
+		return admin.setServerConfigHash(request)
 	}
 	client := filepath.Join(admin.Root, "runtime-local", "client")
 	pathConfig := filepath.Join(admin.Root, "runtime-local", "client-path.json")
