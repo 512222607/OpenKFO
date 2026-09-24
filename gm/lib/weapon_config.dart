@@ -400,8 +400,12 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
   }
 
   /// 连招链：按「老状态」分组展示 delayacttable.xml 的状态转移，可编辑。
+  /// 自建武器即使一条转移都没有也要显示这张卡片，否则没法从零开始编连招。
   Widget comboChainCard() {
-    if (comboChain.isEmpty && !chainEditing) return const SizedBox.shrink();
+    final created = weapon != null && isCreated(weapon!['id']);
+    if (comboChain.isEmpty && !chainEditing && !created) {
+      return const SizedBox.shrink();
+    }
     final states = [for (final s in (data?['states'] as List? ?? [])) '$s'];
     final editing = chainEditing;
     final rows = editing ? chainDraft : comboChain;
@@ -458,6 +462,15 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
               ],
             ),
             const SizedBox(height: 6),
+            if (!editing && rows.isEmpty)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 6),
+                child: Text(
+                  '还没有连招链：点「编辑」添加「老状态 → 按键 → 新状态」的转移。'
+                  '没有转移时，按键推不到下一段（第一下能出、之后卡住）。',
+                  style: TextStyle(fontSize: 12, color: Colors.deepOrange),
+                ),
+              ),
             for (final o in order) comboChainGroup(o, byOld[o]!, editing),
             if (editing) chainAddRow(states),
             if (!editing && comboDeadEnds.isNotEmpty) deadEndNotice(),
@@ -550,7 +563,7 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 210,
+            width: 170,
             child: Text(
               fromLabel,
               maxLines: 1,
@@ -2224,103 +2237,158 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                                 ),
                                 const SizedBox(height: 8),
                                 comboBanner(),
-                                comboChainCard(),
                                 remapErrorBanner(),
-                                stateBuilderCard(),
-                                Text(
-                                  '连招与命中效果',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleMedium,
-                                ),
                                 const SizedBox(height: 8),
-                                Text(
-                                  applied.isEmpty
-                                      ? '当前游戏配置：原效果'
-                                      : '当前游戏配置：已写入 ${applied.length} 段效果；需重启游戏加载',
-                                ),
-                                const SizedBox(height: 8),
-                                const Text('选择招式，设置 DEBUFF、受击动作和伤害。'),
-                                if ((weapon!['combos'] as List? ?? []).isEmpty)
-                                  const Text('未收录按键提示，按动作名称选择。'),
-                                if (weapon!['id'] == 253013)
-                                  Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: TextButton.icon(
-                                      onPressed: busy
-                                          ? null
-                                          : () => setState(() {
-                                              editorVersion++;
-                                              for (final r in rules) {
-                                                r['buff'] = r['stage'] == 1
-                                                    ? 1
-                                                    : r['stage'] == 2
-                                                    ? 37
-                                                    : 0;
-                                                r['level'] = 1;
-                                                r['duration'] = 3000;
-                                              }
-                                              dirty = true;
-                                            }),
-                                      icon: const Icon(Icons.auto_fix_high),
-                                      label: const Text('填入示例：第一下中毒，第二下燃烧'),
-                                    ),
-                                  ),
-                                const SizedBox(height: 10),
+                                // 左：连招/按键状态机；右：本武器的状态与伤害效果。
+                                // 两块各自滚动，避免整页串成一条长列表。
                                 Expanded(
-                                  child: Form(
-                                    key: form,
-                                    child: ListView.builder(
-                                      itemCount:
-                                          combos.length +
-                                          (otherStages.isEmpty ? 0 : 1),
-                                      itemBuilder: (context, group) {
-                                        final other = group == combos.length;
-                                        final combo = other
-                                            ? null
-                                            : combos[group];
-                                        final nodes = other
-                                            ? <dynamic>[]
-                                            : combo['nodes'] as List;
-                                        final title = other
-                                            ? '动作说明（${otherStages.length}）'
-                                            : nodes.isEmpty
-                                            ? '按键提示不完整'
-                                            : '${nodes.last['keys']}';
-                                        return ExpansionTile(
-                                          initiallyExpanded:
-                                              other && combos.isEmpty,
-                                          key: ValueKey(
-                                            '${weapon!['id']}-combo-$group',
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      SizedBox(
+                                        width: 560,
+                                        child: SingleChildScrollView(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.stretch,
+                                            children: [
+                                              comboChainCard(),
+                                            ],
                                           ),
-                                          title: Text(title),
-                                          subtitle: Text(
-                                            other
-                                                ? '按动作名称选择'
-                                                : '${combo['name']} · ${nodes.length} 个动作段',
-                                          ),
+                                        ),
+                                      ),
+                                      const VerticalDivider(width: 17),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
-                                            for (
-                                              var n = 0;
-                                              n <
-                                                  (other
-                                                      ? otherStages.length
-                                                      : nodes.length);
-                                              n++
-                                            )
-                                              actionChoice(
-                                                '$group:$n',
-                                                other
-                                                    ? otherStages[n]
-                                                    : stageIndices['${nodes[n]['state']}'],
-                                                other
-                                                    ? '${weapon!['stages'][otherStages[n]]['label'] ?? '动作说明缺失（按键待核实）'}'
-                                                    : '第 ${n + 1} 段 · ${nodes[n]['keys']}',
+                                            stateBuilderCard(),
+                                            Text(
+                                              '连招与命中效果',
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .titleMedium,
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              applied.isEmpty
+                                                  ? '当前游戏配置：原效果'
+                                                  : '当前游戏配置：已写入 ${applied.length} 段效果；需重启游戏加载',
+                                              style: const TextStyle(
+                                                fontSize: 12,
                                               ),
+                                            ),
+                                            const Text(
+                                              '选择招式，设置 DEBUFF、受击动作和伤害。',
+                                              style: TextStyle(fontSize: 12),
+                                            ),
+                                            if ((weapon!['combos'] as List? ?? [])
+                                                .isEmpty)
+                                              const Text(
+                                                '未收录按键提示，按动作名称选择。',
+                                                style:
+                                                    TextStyle(fontSize: 12),
+                                              ),
+                                            if (weapon!['id'] == 253013)
+                                              Align(
+                                                alignment:
+                                                    Alignment.centerLeft,
+                                                child: TextButton.icon(
+                                                  onPressed: busy
+                                                      ? null
+                                                      : () => setState(() {
+                                                          editorVersion++;
+                                                          for (final r in rules) {
+                                                            r['buff'] =
+                                                                r['stage'] == 1
+                                                                ? 1
+                                                                : r['stage'] == 2
+                                                                ? 37
+                                                                : 0;
+                                                            r['level'] = 1;
+                                                            r['duration'] =
+                                                                3000;
+                                                          }
+                                                          dirty = true;
+                                                        }),
+                                                  icon: const Icon(
+                                                    Icons.auto_fix_high,
+                                                  ),
+                                                  label: const Text(
+                                                    '填入示例：第一下中毒，第二下燃烧',
+                                                  ),
+                                                ),
+                                              ),
+                                            const SizedBox(height: 6),
+                                            Expanded(
+                                              child: Form(
+                                                key: form,
+                                                child: ListView.builder(
+                                                  itemCount:
+                                                      combos.length +
+                                                      (otherStages.isEmpty
+                                                          ? 0
+                                                          : 1),
+                                                  itemBuilder: (context, group) {
+                                                    final other =
+                                                        group == combos.length;
+                                                    final combo = other
+                                                        ? null
+                                                        : combos[group];
+                                                    final nodes = other
+                                                        ? <dynamic>[]
+                                                        : combo['nodes']
+                                                              as List;
+                                                    final title = other
+                                                        ? '动作说明（${otherStages.length}）'
+                                                        : nodes.isEmpty
+                                                        ? '按键提示不完整'
+                                                        : '${nodes.last['keys']}';
+                                                    return ExpansionTile(
+                                                      initiallyExpanded:
+                                                          other &&
+                                                          combos.isEmpty,
+                                                      key: ValueKey(
+                                                        '${weapon!['id']}-combo-$group',
+                                                      ),
+                                                      title: Text(title),
+                                                      subtitle: Text(
+                                                        other
+                                                            ? '按动作名称选择'
+                                                            : '${combo['name']} · ${nodes.length} 个动作段',
+                                                      ),
+                                                      children: [
+                                                        for (
+                                                          var n = 0;
+                                                          n <
+                                                              (other
+                                                                  ? otherStages
+                                                                        .length
+                                                                  : nodes
+                                                                        .length);
+                                                          n++
+                                                        )
+                                                          actionChoice(
+                                                            '$group:$n',
+                                                            other
+                                                                ? otherStages[n]
+                                                                : stageIndices['${nodes[n]['state']}'],
+                                                            other
+                                                                ? '${weapon!['stages'][otherStages[n]]['label'] ?? '动作说明缺失（按键待核实）'}'
+                                                                : '第 ${n + 1} 段 · ${nodes[n]['keys']}',
+                                                          ),
+                                                      ],
+                                                    );
+                                                  },
+                                                ),
+                                              ),
+                                            ),
                                           ],
-                                        );
-                                      },
-                                    ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                                 const SizedBox(height: 10),
