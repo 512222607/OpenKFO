@@ -241,6 +241,7 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
   }
 
   List<Map<String, String>> comboChain = [];
+  List<Map<String, String>> comboDeadEnds = [];
   bool chainEditing = false;
   List<Map<String, String>> chainDraft = [];
   String? chainOld, chainKey, chainNew;
@@ -265,10 +266,15 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
           for (final e in (result['chain'] as List? ?? []))
             Map<String, String>.from(e as Map),
         ];
+        comboDeadEnds = [
+          for (final e in (result['dead_ends'] as List? ?? []))
+            Map<String, String>.from(e as Map),
+        ];
       });
     } catch (_) {
       if (mounted) {
         setState(() => comboChain = []);
+        setState(() => comboDeadEnds = []);
       }
     }
   }
@@ -444,6 +450,7 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
             const SizedBox(height: 6),
             for (final o in order) comboChainGroup(o, byOld[o]!, editing),
             if (editing) chainAddRow(states),
+            if (!editing && comboDeadEnds.isNotEmpty) deadEndNotice(),
             if (!editing && comboChain.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
@@ -455,6 +462,66 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                   ),
                 ),
               ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 断链提示：能被打进（有入边）但没有任何出边、连到这里就停的状态。
+  /// 有些是设计上的收招/硬直终点，不一定是缺陷；这里只负责把它们显式列出来。
+  Widget deadEndNotice() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.orange.shade50,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.warning_amber,
+                    size: 16, color: Colors.deepOrange.shade700),
+                const SizedBox(width: 6),
+                Text(
+                  '断链（连到这里就不能继续连）',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.deepOrange.shade800,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                for (final d in comboDeadEnds)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade100,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      d['label'] ?? d['state'] ?? '',
+                      style: TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 12,
+                        color: Colors.deepOrange.shade900,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ],
         ),
       ),

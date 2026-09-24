@@ -447,3 +447,61 @@ func applyComboChains(a *archive, chains map[string][]ComboTransition) (*archive
 	}
 	return parseArchive(data)
 }
+
+// comboDeadEnds lists the states a weapon can enter through a combo transition
+// but can never leave (no outgoing row): once the chain reaches one of these,
+// pressing any key can no longer advance it. In other words these are the
+// "cannot chain further" points the flat chain view does not call out.
+func comboDeadEnds(a *archive, info *inspection, weaponID string) []map[string]string {
+	text, err := a.text("delayacttable.xml")
+	if err != nil {
+		return nil
+	}
+	rows := comboRowsOf(text, weaponID)
+	if len(rows) == 0 {
+		return nil
+	}
+	olds := map[string]bool{}
+	news := map[string]bool{}
+	for _, row := range rows {
+		olds[row.OldState] = true
+		news[row.NewState] = true
+	}
+	labels := map[string]string{}
+	active := map[string]bool{}
+	for _, weapon := range info.weapons {
+		if strconv.Itoa(weapon.ID) != weaponID {
+			continue
+		}
+		for _, stage := range weapon.Stages {
+			if stage.Action != "" && stage.Action != "0" {
+				active[stage.State] = true
+			}
+			labels[stage.State] = stage.Label
+		}
+		break
+	}
+	states := make([]string, 0, len(news))
+	for state := range news {
+		if !active[state] || olds[state] {
+			continue
+		}
+		states = append(states, state)
+	}
+	sort.Slice(states, func(i, j int) bool {
+		a, _ := strconv.Atoi(states[i])
+		b, _ := strconv.Atoi(states[j])
+		return a < b
+	})
+	result := make([]map[string]string, 0, len(states))
+	for _, state := range states {
+		label := labels[state]
+		if label == "" {
+			label = state
+		} else {
+			label = state + " · " + label
+		}
+		result = append(result, map[string]string{"state": state, "label": label})
+	}
+	return result
+}

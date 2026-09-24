@@ -1426,9 +1426,10 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 			return nil, err
 		}
 		return map[string]any{
-			"weapon":  request.Weapon,
-			"chain":   comboChain(base, info, strconv.Itoa(request.Weapon)),
-			"revision": revision,
+			"weapon":    request.Weapon,
+			"chain":     comboChain(base, info, strconv.Itoa(request.Weapon)),
+			"dead_ends": comboDeadEnds(base, info, strconv.Itoa(request.Weapon)),
+			"revision":  revision,
 		}, nil
 	}
 	// weapon_clients reports the selected client and every client we have a
