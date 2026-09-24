@@ -55,6 +55,12 @@ type Request struct {
 	All              bool                             `json:"all"`
 	Weapon           int                              `json:"weapon"`
 	Donor            int                              `json:"donor"`
+	Stage            int                              `json:"stage"`
+	Action           string                           `json:"action"`
+	PropertyID       string                           `json:"property_id"`
+	Template         string                           `json:"template"`
+	TemplateWeapon   int                              `json:"template_weapon"`
+	TemplateStage    int                              `json:"template_stage"`
 	Target           string                           `json:"target"`
 	Path             string                           `json:"path"`
 	Directory        string                           `json:"directory"`

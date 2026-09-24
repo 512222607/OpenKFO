@@ -1152,6 +1152,11 @@ type weaponState struct {
 	// Targets holds one baseline and hash pair per managed client. The edit set
 	// above is shared; each client is rendered onto its own baseline.
 	Baselines map[string]*clientBaseline `json:"baselines,omitempty"`
+	// Remaps rewires individual states: which action plays there and which
+	// hit-property node it points at. ExtraProperties holds editor-authored
+	// hit-property nodes cloned from a template under a fresh SkillProId.
+	Remaps          map[string]map[int]*StageRemap `json:"remaps,omitempty"`
+	ExtraProperties map[string]ExtraProperty        `json:"extra_properties,omitempty"`
 }
 
 func weaponHandle(request Request, client string, items []Item, folder string) (any, error) {
@@ -1187,6 +1192,12 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 	}
 	if state.Combos == nil {
 		state.Combos = map[string]int{}
+	}
+	if state.Remaps == nil {
+		state.Remaps = map[string]map[int]*StageRemap{}
+	}
+	if state.ExtraProperties == nil {
+		state.ExtraProperties = map[string]ExtraProperty{}
 	}
 	// The edit set is rendered onto whichever client the GM currently points at,
 	// each client directory keeping its own baseline: the user can switch
@@ -1256,7 +1267,7 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 		if err != nil {
 			return nil, err
 		}
-		return map[string]any{"weapons": info.weapons, "effects": effects(info), "fields": propertyFields, "buffs": buffRows, "drafts": state.Drafts, "applied": state.Applied, "created": state.Created, "combos": state.Combos, "client": describeClient(entry, folder), "clients": describeBaselines(&state, folder), "models": weaponModels(client), "types": weaponTypes, "used_ids": weaponItemIDs(source), "blueprint_min": blueprintMinID, "blueprint_max": blueprintMaxID, "revision": revision, "folder": folder}, nil
+		return map[string]any{"weapons": info.weapons, "effects": effects(info), "fields": propertyFields, "buffs": buffRows, "drafts": state.Drafts, "applied": state.Applied, "created": state.Created, "combos": state.Combos, "remaps": state.Remaps, "extra_properties": state.ExtraProperties, "states": itemactStates(base), "client": describeClient(entry, folder), "clients": describeBaselines(&state, folder), "models": weaponModels(client), "types": weaponTypes, "used_ids": weaponItemIDs(source), "blueprint_min": blueprintMinID, "blueprint_max": blueprintMaxID, "revision": revision, "folder": folder}, nil
 	}
 	if request.Operation == "weapon_create" || request.Operation == "weapon_forget" {
 		message := ""
@@ -1269,6 +1280,7 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 			delete(state.Drafts, key)
 			delete(state.Applied, key)
 			delete(state.Combos, key)
+			delete(state.Remaps, key)
 			message = "已移除自建武器；重新应用或发布后才会从配置包消失"
 		} else {
 			if request.Blueprint == nil {
@@ -1388,6 +1400,90 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 			"clients":  describeBaselines(&state, folder),
 			"revision": digest(append(append([]byte(nil), current...), encoded...)),
 			"message":  message,
+		}, nil
+	}
+	// weapon_remap rewires one state of one weapon (action and/or hit property),
+	// either directly or by reusing another weapon's state as a template.
+	// weapon_property_add clones a template hit-property node under a fresh id.
+	// weapon_remap_options exposes the picker catalogues on demand.
+	if request.Operation == "weapon_remap_options" {
+		info, err := inspect(base, items)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{
+			"actions":    actionCatalog(info),
+			"properties": propertyCatalog(info),
+			"revision":   revision,
+		}, nil
+	}
+	if request.Operation == "weapon_remap" || request.Operation == "weapon_property_add" {
+		info, err := inspect(base, items)
+		if err != nil {
+			return nil, err
+		}
+		message := ""
+		newPropertyID := ""
+		if request.Operation == "weapon_property_add" {
+			template := strings.TrimSpace(request.Template)
+			if template == "" {
+				return nil, fmt.Errorf("请选择命中属性模板")
+			}
+			if len(info.properties[template]) != 1 {
+				return nil, fmt.Errorf("命中属性模板 %s 不存在或不唯一", template)
+			}
+			id := freshPropertyID(info)
+			if id == "" {
+				return nil, fmt.Errorf("命中属性编号空间不足")
+			}
+			state.ExtraProperties[id] = ExtraProperty{Template: template}
+			newPropertyID = id
+			message = "已新增命中属性节点 " + id
+		} else {
+			key := strconv.Itoa(request.Weapon)
+			if request.Weapon == 0 || request.Stage == 0 {
+				return nil, fmt.Errorf("请选择武器和状态")
+			}
+			action := strings.TrimSpace(request.Action)
+			propertyID := strings.TrimSpace(request.PropertyID)
+			if request.TemplateWeapon > 0 && request.TemplateStage > 0 {
+				action, propertyID, err = resolveTemplate(base, info, strconv.Itoa(request.TemplateWeapon), request.TemplateStage)
+				if err != nil {
+					return nil, err
+				}
+			}
+			if err = validateRemap(base, info, key, request.Stage, action, propertyID); err != nil {
+				return nil, err
+			}
+			if action == "" && propertyID == "" {
+				if state.Remaps[key] != nil {
+					delete(state.Remaps[key], request.Stage)
+					if len(state.Remaps[key]) == 0 {
+						delete(state.Remaps, key)
+					}
+				}
+				message = "已取消该状态的重映射"
+			} else {
+				if state.Remaps[key] == nil {
+					state.Remaps[key] = map[int]*StageRemap{}
+				}
+				state.Remaps[key][request.Stage] = &StageRemap{Action: action, PropertyID: propertyID}
+				message = "已登记重映射；保存效果并应用后写入配置包"
+			}
+		}
+		encoded, err := json.MarshalIndent(state, "", "  ")
+		if err != nil {
+			return nil, err
+		}
+		if err = atomicWrite(statePath, encoded); err != nil {
+			return nil, err
+		}
+		return map[string]any{
+			"remaps":           state.Remaps,
+			"extra_properties": state.ExtraProperties,
+			"property_id":      newPropertyID,
+			"revision":         digest(append(append([]byte(nil), current...), encoded...)),
+			"message":          message,
 		}, nil
 	}
 	if request.Revision != revision {

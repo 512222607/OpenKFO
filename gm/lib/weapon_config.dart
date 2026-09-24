@@ -748,6 +748,207 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
     ];
   }
 
+  Map<String, dynamic> get remaps =>
+      Map<String, dynamic>.from(data?['remaps'] as Map? ?? const {});
+
+  Map<String, dynamic> remapFor(String state) {
+    final per = remaps['${weapon!['id']}'];
+    final value = per is Map ? per[state] : null;
+    return value is Map ? Map<String, dynamic>.from(value) : const {};
+  }
+
+  /// 复用模板：把另一把武器某个状态的动作与命中属性复制到本段。
+  Future<void> remapFromTemplate(String stateKey) async {
+    final picked = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (_) => _RemapTemplateDialog(
+        weapons: [
+          for (final w in (data?['weapons'] as List? ?? []))
+            Map<String, dynamic>.from(w as Map),
+        ],
+        self: weapon!['id'] as int,
+      ),
+    );
+    if (picked == null || !mounted) return;
+    await _callRemap(
+      stateKey,
+      params: {
+        'operation': 'weapon_remap',
+        'weapon': weapon!['id'],
+        'stage': int.parse(stateKey),
+        'template_weapon': picked['weapon'],
+        'template_stage': picked['state'],
+      },
+      busyText: '正在复用动作与命中属性…',
+    );
+  }
+
+  /// 新增命中属性节点：克隆一个模板节点到全新编号，再指定给本段。
+  Future<void> addPropertyFor(String stateKey) async {
+    Map<String, dynamic> catalog = {};
+    try {
+      catalog = Map<String, dynamic>.from(
+        await widget.api({'operation': 'weapon_remap_options'}),
+      );
+    } catch (_) {}
+    final properties = [
+      for (final p in (catalog['properties'] as List? ?? []))
+        Map<String, dynamic>.from(p as Map),
+    ];
+    final template = await showDialog<String>(
+      context: context,
+      builder: (_) => _PropertyPickerDialog(properties: properties),
+    );
+    if (template == null || !mounted) return;
+    final prefer = weapon!['id'] as int?;
+    setState(() {
+      busy = true;
+      failed = false;
+      message = '正在新增命中属性节点…';
+    });
+    try {
+      final result = Map<String, dynamic>.from(
+        await widget.api({'operation': 'weapon_property_add', 'template': template}),
+      );
+      final newId = '${result['property_id'] ?? ''}';
+      if (!mounted) return;
+      if (newId.isEmpty) {
+        setState(() {
+          busy = false;
+          failed = true;
+          message = '${result['message'] ?? '新增失败'}';
+        });
+        return;
+      }
+      final remap = Map<String, dynamic>.from(await widget.api({
+        'operation': 'weapon_remap',
+        'weapon': weapon!['id'],
+        'stage': int.parse(stateKey),
+        'property_id': newId,
+      }));
+      if (!mounted) return;
+      setState(() {
+        busy = false;
+        message = '${remap['message'] ?? '已指定命中属性'}';
+      });
+      await load(prefer: prefer);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          busy = false;
+          failed = true;
+          message = '$e';
+        });
+      }
+    }
+  }
+
+  Future<void> clearRemap(String stateKey) async {
+    await _callRemap(
+      stateKey,
+      params: {
+        'operation': 'weapon_remap',
+        'weapon': weapon!['id'],
+        'stage': int.parse(stateKey),
+      },
+      busyText: '正在取消重映射…',
+    );
+  }
+
+  Future<void> _callRemap(
+    String stateKey, {
+    required Map<String, dynamic> params,
+    required String busyText,
+  }) async {
+    final prefer = weapon!['id'] as int?;
+    setState(() {
+      busy = true;
+      failed = false;
+      message = busyText;
+    });
+    try {
+      final result = Map<String, dynamic>.from(await widget.api(params));
+      if (!mounted) return;
+      setState(() {
+        busy = false;
+        message = '${result['message'] ?? '已更新'}';
+      });
+      await load(prefer: prefer);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          busy = false;
+          failed = true;
+          message = '$e';
+        });
+      }
+    }
+  }
+
+  /// 结构重映射区块：复用模板 / 新增命中属性节点 / 取消。
+  Widget remapSection(int index, Map<String, dynamic> stage) {
+    final stateKey = '${stage['state']}';
+    final remap = remapFor(stateKey);
+    final hasRemap = remap.isNotEmpty;
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.blueGrey.shade50,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '动作与命中属性（重映射）',
+            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+          ),
+          const SizedBox(height: 4),
+          if (hasRemap)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                '已重映射 → 动作 ${remap['action'] ?? '-'} · 命中属性 ${remap['property_id'] ?? '（沿用动作自带）'}',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontFamily: 'monospace',
+                  color: Colors.teal,
+                ),
+              ),
+            ),
+          Wrap(
+            spacing: 10,
+            runSpacing: 4,
+            children: [
+              OutlinedButton.icon(
+                onPressed: busy ? null : () => remapFromTemplate(stateKey),
+                icon: const Icon(Icons.content_copy, size: 16),
+                label: const Text('复用模板（武器→状态）'),
+              ),
+              OutlinedButton.icon(
+                onPressed: busy ? null : () => addPropertyFor(stateKey),
+                icon: const Icon(Icons.add_box_outlined, size: 16),
+                label: const Text('新增命中属性节点'),
+              ),
+              if (hasRemap)
+                TextButton(
+                  onPressed: busy ? null : () => clearRemap(stateKey),
+                  child: const Text('取消重映射'),
+                ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          const Text(
+            '复用模板会把所选武器该状态的动作与命中属性一并复制过来；若目标动作被其它武器共用会自动克隆隔离。'
+            '新增命中属性节点会先按模板复制一个全新编号的节点，再指定给本段（之后可在下方改伤害/BUFF）。',
+            style: TextStyle(fontSize: 11, color: Colors.black54),
+          ),
+        ],
+      ),
+    );
+  }
+
+
   Widget stageEditor(int index) {
     final rule = rules[index], stage = weapon!['stages'][index];
     final enabled = stage['supported'] == true && !busy;
@@ -776,7 +977,9 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                 stage['reason'],
                 style: const TextStyle(color: Colors.deepOrange),
               ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
+            remapSection(index, Map<String, dynamic>.from(stage as Map)),
+            const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
@@ -2055,3 +2258,182 @@ class _ClientPickerDialogState extends State<_ClientPickerDialog> {
     );
   }
 }
+
+/// 复用模板：先选武器，再选它的一个状态，返回 {weapon, state}。
+class _RemapTemplateDialog extends StatefulWidget {
+  const _RemapTemplateDialog({required this.weapons, required this.self});
+
+  final List<Map<String, dynamic>> weapons;
+  final int self;
+
+  @override
+  State<_RemapTemplateDialog> createState() => _RemapTemplateDialogState();
+}
+
+class _RemapTemplateDialogState extends State<_RemapTemplateDialog> {
+  String query = '';
+  Map<String, dynamic>? selected;
+  String? chosenState;
+
+  @override
+  Widget build(BuildContext context) {
+    final matches = widget.weapons.where((w) {
+      final q = query.trim();
+      return q.isEmpty || '${w['name']} ${w['id']}'.contains(q);
+    }).toList();
+    return AlertDialog(
+      title: const Text('复用模板：先选武器，再选它的状态'),
+      content: SizedBox(
+        width: 620,
+        height: 500,
+        child: Column(
+          children: [
+            TextField(
+              decoration: const InputDecoration(
+                labelText: '搜索武器名称 / 编号',
+                prefixIcon: Icon(Icons.search),
+              ),
+              onChanged: (v) => setState(() => query = v),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 250,
+                    child: ListView.builder(
+                      itemCount: matches.length,
+                      itemBuilder: (context, i) {
+                        final w = matches[i];
+                        return ListTile(
+                          dense: true,
+                          selected: selected?['id'] == w['id'],
+                          title: Text('${w['name']}'),
+                          subtitle: Text(
+                            '${w['type'] ?? ''} · ${w['id']} · '
+                            '${(w['stages'] as List).length} 个状态',
+                          ),
+                          onTap: () => setState(() {
+                            selected = w;
+                            chosenState = null;
+                          }),
+                        );
+                      },
+                    ),
+                  ),
+                  const VerticalDivider(width: 1),
+                  Expanded(
+                    child: selected == null
+                        ? const Center(child: Text('先选择一把武器'))
+                        : ListView.builder(
+                            itemCount: (selected!['stages'] as List).length,
+                            itemBuilder: (context, i) {
+                              final s = selected!['stages'][i];
+                              final stateKey = '${s['state']}';
+                              final ids = (s['property_ids'] as List? ?? [])
+                                  .join('、');
+                              return ListTile(
+                                dense: true,
+                                selected: chosenState == stateKey,
+                                title: Text('${s['label'] ?? stateKey}'),
+                                subtitle: Text(
+                                  '状态 $stateKey · 动作 ${s['action']}'
+                                  '${ids.isEmpty ? '' : '\n命中属性 $ids'}',
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                                isThreeLine: ids.isNotEmpty,
+                                onTap: () =>
+                                    setState(() => chosenState = stateKey),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: (selected == null || chosenState == null)
+              ? null
+              : () => Navigator.pop(context, {
+                    'weapon': selected!['id'] as int,
+                    'state': int.parse(chosenState!),
+                  }),
+          child: const Text('复用此状态'),
+        ),
+      ],
+    );
+  }
+}
+
+/// 命中属性模板选择器，返回 SkillProId。
+class _PropertyPickerDialog extends StatefulWidget {
+  const _PropertyPickerDialog({required this.properties});
+
+  final List<Map<String, dynamic>> properties;
+
+  @override
+  State<_PropertyPickerDialog> createState() => _PropertyPickerDialogState();
+}
+
+class _PropertyPickerDialogState extends State<_PropertyPickerDialog> {
+  String query = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final matches = widget.properties.where((p) {
+      final q = query.trim();
+      return q.isEmpty || '${p['id']} ${p['summary']}'.contains(q);
+    }).toList();
+    return AlertDialog(
+      title: const Text('选择命中属性模板（按此复制新节点）'),
+      content: SizedBox(
+        width: 600,
+        height: 480,
+        child: Column(
+          children: [
+            TextField(
+              decoration: const InputDecoration(
+                labelText: '搜索编号 / 摘要',
+                prefixIcon: Icon(Icons.search),
+              ),
+              onChanged: (v) => setState(() => query = v),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: ListView.builder(
+                itemCount: matches.length,
+                itemBuilder: (context, i) {
+                  final p = matches[i];
+                  return ListTile(
+                    dense: true,
+                    title: Text(
+                      '${p['id']}',
+                      style: const TextStyle(fontFamily: 'monospace'),
+                    ),
+                    subtitle: Text('${p['summary']}'),
+                    onTap: () => Navigator.pop(context, '${p['id']}'),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+      ],
+    );
+  }
+}
+

@@ -196,6 +196,10 @@ func prepareClient(entry *clientBaseline, folder string, state *weaponState, pla
 	if err != nil {
 		return nil, err
 	}
+	base, err = applyRemaps(base, state, items)
+	if err != nil {
+		return nil, fmt.Errorf("状态重映射：%w", err)
+	}
 	data, err := render(base, items, plans)
 	if err != nil {
 		return nil, err
@@ -264,6 +268,13 @@ func checkAllowedWrites(source, verified *archive, state *weaponState, info *ins
 	if len(state.Created) > 0 || len(state.Combos) > 0 {
 		allowed["delayacttable.xml"] = true
 		allowed["acteffect.xml"] = true
+	}
+	for _, stages := range state.Remaps {
+		for _, remap := range stages {
+			if remap != nil && len(remap.Action) >= 4 {
+				allowed["animation/"+remap.Action[:4]+".xml"] = true
+			}
+		}
 	}
 	if info != nil {
 		for _, weapon := range info.weapons {
