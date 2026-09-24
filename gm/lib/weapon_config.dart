@@ -1335,7 +1335,6 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
     }
     await showDialog<bool>(
       context: context,
-      barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
         title: Text('定义状态 $stateKey'),
         content: SizedBox(
@@ -1357,6 +1356,12 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
             ),
           ),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('关闭'),
+          ),
+        ],
       ),
     );
     if (!mounted) return;
