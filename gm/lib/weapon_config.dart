@@ -2234,6 +2234,7 @@ class _BlueprintDialogState extends State<_BlueprintDialog> {
   late final TextEditingController number;
   late final TextEditingController name;
   final note = TextEditingController();
+  final icon = TextEditingController();
   String type = '';
   String? model;
   int? donor;
@@ -2252,6 +2253,7 @@ class _BlueprintDialogState extends State<_BlueprintDialog> {
     number.dispose();
     name.dispose();
     note.dispose();
+    icon.dispose();
     super.dispose();
   }
 
@@ -2295,6 +2297,7 @@ class _BlueprintDialogState extends State<_BlueprintDialog> {
       'type': type,
       'model': model,
       'donor': donor,
+      'icon': icon.text.trim(),
       'note': note.text.trim(),
     });
   }
@@ -2446,6 +2449,14 @@ class _BlueprintDialogState extends State<_BlueprintDialog> {
                       ),
                     ),
                   ),
+                const SizedBox(height: 14),
+                TextFormField(
+                  controller: icon,
+                  decoration: const InputDecoration(
+                    labelText: '图标（可选）',
+                    helperText: '相对 Data/UI 的路径，如 Picture\\ItemIcon\\253013.png；留空则复用供体图标',
+                  ),
+                ),
                 const SizedBox(height: 14),
                 TextFormField(
                   controller: note,

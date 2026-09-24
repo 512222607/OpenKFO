@@ -683,7 +683,7 @@ func validateRules(rules []Rule, weapon Weapon) ([]Rule, error) {
 		seen[rule.Stage] = true
 		for ref, values := range rule.Properties {
 			if !includes(stage.PropertyIDs, ref) || values == nil {
-				return nil, fmt.Errorf("命中属性不属于当前招式")
+				return nil, fmt.Errorf("命中属性 %s 不属于状态 %d（可用：%v）", ref, rule.Stage, stage.PropertyIDs)
 			}
 			for key, value := range values {
 				field, ok := fields[key]
@@ -949,6 +949,7 @@ type Blueprint struct {
 	Type  string `json:"type"`
 	Model string `json:"model"`
 	Donor int    `json:"donor"`
+	Icon  string `json:"icon,omitempty"`
 	Note  string `json:"note,omitempty"`
 }
 
@@ -1073,7 +1074,16 @@ func applyBlueprints(a *archive, created map[string]Blueprint) (*archive, error)
 		itemRow = setCell(itemRow, 2, blueprint.Type)
 		itemRow = setCell(itemRow, 3, blueprint.Name)
 		itemRow = setCell(itemRow, 7, blueprint.Model)
-		itemRow = setCell(itemRow, 9, "#")
+		// Icon: a custom path wins; otherwise inherit the donor's icon so the
+		// new weapon shows the donor's picture instead of a blank tile.
+		icon := strings.TrimSpace(blueprint.Icon)
+		if icon == "" && len(donorItem) > 9 {
+			icon = donorItem[9]
+		}
+		if icon == "" {
+			icon = "#"
+		}
+		itemRow = setCell(itemRow, 9, icon)
 		itemRow = setCell(itemRow, 16, blueprint.Name)
 		itemText = appendTabRow(itemText, strings.Join(itemRow, "\t"))
 
@@ -1117,6 +1127,12 @@ func validateBlueprint(client string, source *archive, blueprint Blueprint) erro
 	}
 	if _, err := os.Stat(filepath.Join(client, "Data", "Weapon", "Model", blueprint.Model)); err != nil {
 		return fmt.Errorf("客户端缺少模型文件 %s，自建武器必须复用已有模型", blueprint.Model)
+	}
+	if blueprint.Icon != "" {
+		icon := strings.ReplaceAll(blueprint.Icon, "\\", "/")
+		if strings.Contains(icon, ":") || strings.HasPrefix(icon, "/") || strings.Contains(icon, "..") {
+			return fmt.Errorf("图标路径无效")
+		}
 	}
 	if blueprint.Donor == blueprint.ID {
 		return fmt.Errorf("供体武器不能是自身")
@@ -1288,6 +1304,7 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 			blueprint.Name = strings.TrimSpace(blueprint.Name)
 			blueprint.Type = strings.TrimSpace(blueprint.Type)
 			blueprint.Model = strings.TrimSpace(blueprint.Model)
+			blueprint.Icon = strings.TrimSpace(blueprint.Icon)
 			blueprint.Note = strings.TrimSpace(blueprint.Note)
 			if err := validateBlueprint(client, source, blueprint); err != nil {
 				return nil, err
@@ -1530,6 +1547,13 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 					state.Remaps[key] = map[int]*StageRemap{}
 				}
 				state.Remaps[key][request.Stage] = &StageRemap{Action: action, PropertyID: propertyID}
+				// A remap that changes the action or hit property invalidates
+				// any hit-property edits already saved for this state: they
+				// referenced the old nodes and would fail validation against
+				// the remapped structure.
+				if action != "" || propertyID != "" {
+					clearStageRule(&state, key, request.Stage, action != "")
+				}
 				message = "已登记重映射；保存效果并应用后写入配置包"
 			}
 		}

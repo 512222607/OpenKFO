@@ -430,3 +430,24 @@ func itemactStates(a *archive) []string {
 	}
 	return header[2:]
 }
+
+// clearStageRule drops a state's saved edits after a remap changed its action
+// or hit property: those edits referenced the old nodes and would otherwise
+// fail validateRules against the remapped structure. When the action itself
+// changed the buff goes too, because the new action may have no hit property
+// to attach it to.
+func clearStageRule(state *weaponState, weaponKey string, stage int, resetBuff bool) {
+	for _, rules := range []map[string][]Rule{state.Drafts, state.Applied} {
+		list := rules[weaponKey]
+		for i := range list {
+			if list[i].Stage == stage {
+				list[i].Properties = nil
+				if resetBuff {
+					list[i].Buff = 0
+					list[i].Level = 1
+					list[i].Duration = 3000
+				}
+			}
+		}
+	}
+}
