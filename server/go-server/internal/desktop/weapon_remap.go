@@ -2,6 +2,9 @@ package desktop
 
 import (
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -20,6 +23,7 @@ import (
 type StageRemap struct {
 	Action     string `json:"action,omitempty"`
 	PropertyID string `json:"property_id,omitempty"`
+	Label      string `json:"label,omitempty"`
 }
 
 // ExtraProperty is a hit-property node owned by the editor: a copy of a
@@ -34,12 +38,24 @@ var (
 	anmInfoEndPattern       = regexp.MustCompile(`</AnmInfo\s*>`)
 )
 
+// ruleStageOf converts an itemact state column into the stage number used by
+// saved rules and the stage list: the standing-attack columns 2011..2016 are
+// shown as stages 1..6, every other column keeps its own id. Remaps are keyed
+// by the raw column, rules by the stage number — this is the bridge.
+func ruleStageOf(state int) int {
+	if state >= 2011 && state <= 2016 {
+		return state - 2010
+	}
+	return state
+}
+
 // applyRemaps rewires the chosen states: itemact cells for action remaps,
 // AnmDesc skillproid for property remaps (cloning a shared block first), and
-// extra property nodes cloned from their template. It runs after blueprints and
-// combo tables so the rest of the render pipeline sees the final structure.
+// extra property nodes cloned from their template. States registered as
+// cleared are zeroed out entirely. It runs after blueprints and combo tables
+// so the rest of the render pipeline sees the final structure.
 func applyRemaps(a *archive, state *weaponState, items []Item) (*archive, error) {
-	if len(state.Remaps) == 0 && len(state.ExtraProperties) == 0 {
+	if len(state.Remaps) == 0 && len(state.ExtraProperties) == 0 && len(state.Cleared) == 0 {
 		return a, nil
 	}
 	info, err := inspect(a, items)
@@ -105,13 +121,21 @@ func applyRemaps(a *archive, state *weaponState, items []Item) (*archive, error)
 		propertyClones = append(propertyClones, encoded)
 	}
 
-	// Per-weapon remaps.
-	weaponKeys := make([]string, 0, len(state.Remaps))
+	// Per-weapon remaps. Cleared states come first: the column is zeroed and
+	// any remap registered for it is ignored (the state was deleted).
+	weaponKeys := map[string]bool{}
 	for key := range state.Remaps {
-		weaponKeys = append(weaponKeys, key)
+		weaponKeys[key] = true
 	}
-	sort.Strings(weaponKeys)
-	for _, weaponKey := range weaponKeys {
+	for key := range state.Cleared {
+		weaponKeys[key] = true
+	}
+	sorted := make([]string, 0, len(weaponKeys))
+	for key := range weaponKeys {
+		sorted = append(sorted, key)
+	}
+	sort.Strings(sorted)
+	for _, weaponKey := range sorted {
 		line := rowIndex[weaponKey]
 		if line == 0 {
 			return nil, fmt.Errorf("武器 %s 不在动作表中", weaponKey)
@@ -121,8 +145,17 @@ func applyRemaps(a *archive, state *weaponState, items []Item) (*archive, error)
 			ending = "\r"
 		}
 		row := strings.Split(strings.TrimSuffix(actionLines[line], "\r"), "\t")
+		for _, column := range sortedIntKeys(state.Cleared[weaponKey]) {
+			if index, ok := columns[strconv.Itoa(column)]; ok && index < len(row) {
+				row[index] = "0"
+				tableChanged = true
+			}
+		}
 		stages := make([]int, 0, len(state.Remaps[weaponKey]))
 		for stage := range state.Remaps[weaponKey] {
+			if state.Cleared[weaponKey][stage] {
+				continue
+			}
 			stages = append(stages, stage)
 		}
 		sort.Ints(stages)
@@ -435,12 +468,13 @@ func itemactStates(a *archive) []string {
 // or hit property: those edits referenced the old nodes and would otherwise
 // fail validateRules against the remapped structure. When the action itself
 // changed the buff goes too, because the new action may have no hit property
-// to attach it to.
+// to attach it to. The stage is an itemact column; rules use ruleStageOf.
 func clearStageRule(state *weaponState, weaponKey string, stage int, resetBuff bool) {
+	ruleStage := ruleStageOf(stage)
 	for _, rules := range []map[string][]Rule{state.Drafts, state.Applied} {
 		list := rules[weaponKey]
 		for i := range list {
-			if list[i].Stage == stage {
+			if list[i].Stage == ruleStage {
 				list[i].Properties = nil
 				if resetBuff {
 					list[i].Buff = 0
@@ -450,4 +484,125 @@ func clearStageRule(state *weaponState, weaponKey string, stage int, resetBuff b
 			}
 		}
 	}
+}
+
+// sortedIntKeys lists a bool-map's keys in order (cleared states).
+func sortedIntKeys(source map[int]bool) []int {
+	keys := make([]int, 0, len(source))
+	for key := range source {
+		keys = append(keys, key)
+	}
+	sort.Ints(keys)
+	return keys
+}
+
+// pruneStaleRules drops saved edits that cannot survive the current structure:
+// rules for stages the weapon no longer plays, hit-property edits for nodes
+// that no longer belong to their stage after a remap, and rules whose stage
+// is not editable at all. Without this, one stale draft blocks every apply.
+func pruneStaleRules(state *weaponState, info *inspection) {
+	weapons := map[string]*Weapon{}
+	for index := range info.weapons {
+		weapons[strconv.Itoa(info.weapons[index].ID)] = &info.weapons[index]
+	}
+	for _, rules := range []map[string][]Rule{state.Drafts, state.Applied} {
+		for key, list := range rules {
+			weapon, ok := weapons[key]
+			if !ok {
+				delete(rules, key)
+				continue
+			}
+			stages := map[int]Stage{}
+			for _, stage := range weapon.Stages {
+				stages[stage.Stage] = stage
+			}
+			kept := make([]Rule, 0, len(list))
+			for _, rule := range list {
+				stage, exists := stages[rule.Stage]
+				if !exists || !stage.Supported {
+					continue
+				}
+				for ref := range rule.Properties {
+					if !includes(stage.PropertyIDs, ref) {
+						delete(rule.Properties, ref)
+					}
+				}
+				if !includes(weapon.BuffIDs, rule.Buff) {
+					rule.Buff = 0
+				}
+				if rule.Buff == 0 && len(rule.Properties) == 0 {
+					continue
+				}
+				kept = append(kept, rule)
+			}
+			if len(kept) == 0 {
+				delete(rules, key)
+			} else {
+				rules[key] = kept
+			}
+		}
+	}
+}
+
+// overlayRemapLabels lets an author name each state of a self-made weapon:
+// when a remap carries a label it wins over whatever the combo tips say.
+func overlayRemapLabels(state *weaponState, info *inspection) {
+	for index := range info.weapons {
+		per := state.Remaps[strconv.Itoa(info.weapons[index].ID)]
+		if per == nil {
+			continue
+		}
+		for s := range info.weapons[index].Stages {
+			stage := &info.weapons[index].Stages[s]
+			column, err := strconv.Atoi(stage.State)
+			if err != nil {
+				continue
+			}
+			if remap := per[column]; remap != nil && strings.TrimSpace(remap.Label) != "" {
+				stage.Label = strings.TrimSpace(remap.Label)
+			}
+		}
+	}
+}
+
+// uploadWeaponIcon copies a local PNG into the client's item-icon directory so
+// a self-made weapon can carry a custom picture. The returned path is relative
+// to Data/UI and goes straight into item.txt's icon column.
+func uploadWeaponIcon(client, sourcePath string) (map[string]any, error) {
+	source := strings.TrimSpace(sourcePath)
+	if source == "" {
+		return nil, fmt.Errorf("请选择本地图片")
+	}
+	info, err := os.Stat(source)
+	if err != nil || info.IsDir() {
+		return nil, fmt.Errorf("本地图片不存在")
+	}
+	if !strings.EqualFold(filepath.Ext(source), ".png") {
+		return nil, fmt.Errorf("仅支持 PNG 图片")
+	}
+	name := filepath.Base(source)
+	dir := filepath.Join(client, "Data", "UI", "Picture", "ItemIcon")
+	if err = os.MkdirAll(dir, 0700); err != nil {
+		return nil, err
+	}
+	dest := filepath.Join(dir, name)
+	if err = copyFile(source, dest); err != nil {
+		return nil, fmt.Errorf("复制图片失败：%w", err)
+	}
+	return map[string]any{"icon": "Picture\\ItemIcon\\" + name, "message": "已上传图标 " + name}, nil
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	_, err = io.Copy(out, in)
+	return err
 }

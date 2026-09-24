@@ -58,6 +58,8 @@ type Request struct {
 	Stage            int                              `json:"stage"`
 	Action           string                           `json:"action"`
 	PropertyID       string                           `json:"property_id"`
+	Label            string                           `json:"label,omitempty"`
+	SourcePath       string                           `json:"source_path,omitempty"`
 	Template         string                           `json:"template"`
 	TemplateWeapon   int                              `json:"template_weapon"`
 	TemplateStage    int                              `json:"template_stage"`

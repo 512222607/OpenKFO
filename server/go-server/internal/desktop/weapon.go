@@ -638,9 +638,10 @@ func inspect(a *archive, items []Item) (*inspection, error) {
 
 			weapon.Stages = append(weapon.Stages, Stage{number, state, label, action, refIDs, hits, reason == "", reason})
 		}
-		if len(weapon.Stages) > 0 {
-			result.weapons = append(result.weapons, weapon)
-		}
+		// A donor-less weapon starts with every state zeroed, so it has no
+		// stages yet; it must still appear in the catalogue so the author can
+		// apply it and then remap states onto it.
+		result.weapons = append(result.weapons, weapon)
 	}
 	return result, nil
 }
@@ -1012,6 +1013,31 @@ func actionRowIndex(text string) map[string][]string {
 	return index
 }
 
+// firstItemTemplate returns the first kind-25 row as a structural template for
+// a donor-less weapon: only the identity columns are later overwritten.
+func firstItemTemplate(itemText string) []string {
+	for _, row := range splitRows(itemText) {
+		if len(row) >= 2 && row[0] == "25" {
+			return row
+		}
+	}
+	return nil
+}
+
+// emptyActionRow builds a donor-less action row: weapon id and internal name
+// (filled later) plus every state column zeroed.
+func emptyActionRow(actionText string) []string {
+	rows := splitRows(actionText)
+	if len(rows) == 0 {
+		return nil
+	}
+	row := make([]string, len(rows[0]))
+	for i := 2; i < len(row); i++ {
+		row[i] = "0"
+	}
+	return row
+}
+
 // weaponItemIDs lists every item.txt id of kind 25. The reserved range must be
 // validated against this table rather than against the renderable weapon list:
 // item.txt is what validateBlueprint writes into, and a shipped id is taken
@@ -1026,6 +1052,27 @@ func weaponItemIDs(a *archive) []int {
 		if number, err := strconv.Atoi(key); err == nil {
 			ids = append(ids, number)
 		}
+	}
+	sort.Ints(ids)
+	return ids
+}
+
+// usedWeaponIDs is what the reserved-range picker must treat as taken: the
+// shipped ids from item.txt plus the ids already registered as self-made
+// weapons, which the pristine item.txt cannot know about.
+func usedWeaponIDs(a *archive, created map[string]Blueprint) []int {
+	taken := map[int]bool{}
+	for _, id := range weaponItemIDs(a) {
+		taken[id] = true
+	}
+	for key := range created {
+		if number, err := strconv.Atoi(key); err == nil {
+			taken[number] = true
+		}
+	}
+	ids := make([]int, 0, len(taken))
+	for id := range taken {
+		ids = append(ids, id)
 	}
 	sort.Ints(ids)
 	return ids
@@ -1061,12 +1108,27 @@ func applyBlueprints(a *archive, created map[string]Blueprint) (*archive, error)
 			continue
 		}
 		donorItem := itemIndex[strconv.Itoa(blueprint.Donor)]
-		if donorItem == nil {
+		if blueprint.Donor == 0 {
+			// 无供体：借用第一把 kind 25 武器的行结构，动作行全空，之后由
+			// 逐状态重映射填入动作与命中属性。
+			donorItem = firstItemTemplate(itemText)
+			if donorItem == nil {
+				return nil, fmt.Errorf("客户端缺少可用的武器行结构")
+			}
+		} else if donorItem == nil {
 			return nil, fmt.Errorf("供体武器 %d 缺少物品配置", blueprint.Donor)
 		}
-		donorAction := actionIndex[strconv.Itoa(blueprint.Donor)]
-		if donorAction == nil {
-			return nil, fmt.Errorf("供体武器 %d 缺少动作配置", blueprint.Donor)
+		var donorAction []string
+		if blueprint.Donor == 0 {
+			donorAction = emptyActionRow(actionText)
+			if donorAction == nil {
+				return nil, fmt.Errorf("动作表结构为空")
+			}
+		} else {
+			donorAction = actionIndex[strconv.Itoa(blueprint.Donor)]
+			if donorAction == nil {
+				return nil, fmt.Errorf("供体武器 %d 缺少动作配置", blueprint.Donor)
+			}
 		}
 		itemRow := append([]string(nil), donorItem...)
 		itemRow = setCell(itemRow, 0, "25")
@@ -1075,9 +1137,10 @@ func applyBlueprints(a *archive, created map[string]Blueprint) (*archive, error)
 		itemRow = setCell(itemRow, 3, blueprint.Name)
 		itemRow = setCell(itemRow, 7, blueprint.Model)
 		// Icon: a custom path wins; otherwise inherit the donor's icon so the
-		// new weapon shows the donor's picture instead of a blank tile.
+		// new weapon shows the donor's picture instead of a blank tile. A
+		// donor-less weapon only takes an explicit icon.
 		icon := strings.TrimSpace(blueprint.Icon)
-		if icon == "" && len(donorItem) > 9 {
+		if icon == "" && blueprint.Donor != 0 && len(donorItem) > 9 {
 			icon = donorItem[9]
 		}
 		if icon == "" {
@@ -1137,6 +1200,9 @@ func validateBlueprint(client string, source *archive, blueprint Blueprint) erro
 	if blueprint.Donor == blueprint.ID {
 		return fmt.Errorf("供体武器不能是自身")
 	}
+	if blueprint.Donor < 0 {
+		return fmt.Errorf("供体武器编号无效")
+	}
 	if len([]rune(blueprint.Note)) > 200 {
 		return fmt.Errorf("备注过长")
 	}
@@ -1151,9 +1217,11 @@ func validateBlueprint(client string, source *archive, blueprint Blueprint) erro
 	if itemRowIndex(itemText)[strconv.Itoa(blueprint.ID)] != nil {
 		return fmt.Errorf("武器编号 %d 已存在", blueprint.ID)
 	}
-	donor := strconv.Itoa(blueprint.Donor)
-	if itemRowIndex(itemText)[donor] == nil || actionRowIndex(actionText)[donor] == nil {
-		return fmt.Errorf("供体武器 %d 不在本客户端可用的武器表中", blueprint.Donor)
+	if blueprint.Donor != 0 {
+		donor := strconv.Itoa(blueprint.Donor)
+		if itemRowIndex(itemText)[donor] == nil || actionRowIndex(actionText)[donor] == nil {
+			return fmt.Errorf("供体武器 %d 不在本客户端可用的武器表中", blueprint.Donor)
+		}
 	}
 	return nil
 }
@@ -1171,7 +1239,10 @@ type weaponState struct {
 	// Remaps rewires individual states: which action plays there and which
 	// hit-property node it points at. ExtraProperties holds editor-authored
 	// hit-property nodes cloned from a template under a fresh SkillProId.
+	// Cleared zeroes a state column of a self-made weapon: the state vanishes
+	// from its action row, and any remap for it is ignored.
 	Remaps          map[string]map[int]*StageRemap `json:"remaps,omitempty"`
+	Cleared         map[string]map[int]bool        `json:"cleared,omitempty"`
 	ExtraProperties map[string]ExtraProperty        `json:"extra_properties,omitempty"`
 	// Chains holds an author-authored combo state machine per weapon. When a
 	// weapon has an entry here, it replaces whatever delayacttable.xml says
@@ -1180,6 +1251,9 @@ type weaponState struct {
 }
 
 func weaponHandle(request Request, client string, items []Item, folder string) (any, error) {
+	if request.Operation == "weapon_icon_upload" {
+		return uploadWeaponIcon(client, request.SourcePath)
+	}
 	if folder == "" {
 		folder = filepath.Join(filepath.Dir(client), "weapon-config")
 	}
@@ -1215,6 +1289,9 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 	}
 	if state.Remaps == nil {
 		state.Remaps = map[string]map[int]*StageRemap{}
+	}
+	if state.Cleared == nil {
+		state.Cleared = map[string]map[int]bool{}
 	}
 	if state.ExtraProperties == nil {
 		state.ExtraProperties = map[string]ExtraProperty{}
@@ -1264,6 +1341,19 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 			return nil, err
 		}
 	}
+	// The stage list, the damage editors and every validation below must see
+	// the structure the remaps will actually produce, not the raw donor row:
+	// apply them once here so saved edits can only ever bind to live nodes.
+	// A broken remap must not lock the editor shut, so the catalogue falls
+	// back to the pre-remap view and reports the failure instead.
+	remapError := ""
+	if len(state.Remaps) > 0 || len(state.ExtraProperties) > 0 || len(state.Cleared) > 0 {
+		if remapped, remapErr := applyRemaps(base, &state, items); remapErr == nil {
+			base = remapped
+		} else {
+			remapError = remapErr.Error()
+		}
+	}
 	info, err := inspect(base, items)
 	if err != nil {
 		return nil, err
@@ -1271,6 +1361,11 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 	if err = annotateComboState(info, base); err != nil {
 		return nil, err
 	}
+	// Saved edits that predate a remap reference nodes that no longer belong
+	// to their stage; drop them instead of failing every later apply, and let
+	// a remap's own label name the state in the stage list.
+	pruneStaleRules(&state, info)
+	overlayRemapLabels(&state, info)
 	current, err := os.ReadFile(packagePath)
 	if err != nil {
 		return nil, err
@@ -1281,7 +1376,11 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 		if err != nil {
 			return nil, err
 		}
-		return map[string]any{"weapons": info.weapons, "effects": effects(info), "fields": propertyFields, "buffs": buffRows, "drafts": state.Drafts, "applied": state.Applied, "created": state.Created, "combos": state.Combos, "chains": state.Chains, "remaps": state.Remaps, "extra_properties": state.ExtraProperties, "states": itemactStates(base), "client": describeClient(entry, folder), "clients": describeBaselines(&state, folder), "models": weaponModels(client), "types": weaponTypes, "used_ids": weaponItemIDs(source), "blueprint_min": blueprintMinID, "blueprint_max": blueprintMaxID, "revision": revision, "folder": folder}, nil
+		result := map[string]any{"weapons": info.weapons, "effects": effects(info), "fields": propertyFields, "buffs": buffRows, "drafts": state.Drafts, "applied": state.Applied, "created": state.Created, "combos": state.Combos, "chains": state.Chains, "remaps": state.Remaps, "extra_properties": state.ExtraProperties, "cleared": state.Cleared, "states": itemactStates(base), "client": describeClient(entry, folder), "clients": describeBaselines(&state, folder), "models": weaponModels(client), "types": weaponTypes, "used_ids": usedWeaponIDs(source, state.Created), "blueprint_min": blueprintMinID, "blueprint_max": blueprintMaxID, "revision": revision, "folder": folder}
+		if remapError != "" {
+			result["remap_error"] = remapError
+		}
+		return result, nil
 	}
 	if request.Operation == "weapon_create" || request.Operation == "weapon_forget" {
 		message := ""
@@ -1295,6 +1394,8 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 			delete(state.Applied, key)
 			delete(state.Combos, key)
 			delete(state.Remaps, key)
+			delete(state.Cleared, key)
+			delete(state.Chains, key)
 			message = "已移除自建武器；重新应用或发布后才会从配置包消失"
 		} else {
 			if request.Blueprint == nil {
@@ -1314,6 +1415,9 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 				if other != key && existing.Name == blueprint.Name {
 					return nil, fmt.Errorf("已有同名自建武器 %s", blueprint.Name)
 				}
+			}
+			if _, exists := state.Created[key]; exists {
+				return nil, fmt.Errorf("编号 %d 已经是一把自建武器；请先移除它或换一个编号", blueprint.ID)
 			}
 			state.Created[key] = blueprint
 			message = "已登记自建武器；保存效果并应用后写入配置包"
@@ -1496,6 +1600,34 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 			"revision":   revision,
 		}, nil
 	}
+	// weapon_template_resolve returns the action and hit property a donor weapon
+	// plays in a donor state, so the editor can fill them into the remap inputs
+	// for the user to see and tweak before committing.
+	if request.Operation == "weapon_template_resolve" {
+		info, err := inspect(base, items)
+		if err != nil {
+			return nil, err
+		}
+		if request.TemplateWeapon == 0 || request.TemplateStage == 0 {
+			return nil, fmt.Errorf("请选择武器和状态")
+		}
+		action, propertyID, err := resolveTemplate(base, info, strconv.Itoa(request.TemplateWeapon), request.TemplateStage)
+		if err != nil {
+			return nil, err
+		}
+		actionLabel := ""
+		for _, entry := range actionCatalog(info) {
+			if entry["id"] == action {
+				actionLabel = entry["label"]
+				break
+			}
+		}
+		return map[string]any{
+			"action":       action,
+			"property_id":  propertyID,
+			"action_label": actionLabel,
+		}, nil
+	}
 	if request.Operation == "weapon_remap" || request.Operation == "weapon_property_add" {
 		info, err := inspect(base, items)
 		if err != nil {
@@ -1542,20 +1674,28 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 					}
 				}
 				message = "已取消该状态的重映射"
-			} else {
-				if state.Remaps[key] == nil {
-					state.Remaps[key] = map[int]*StageRemap{}
-				}
-				state.Remaps[key][request.Stage] = &StageRemap{Action: action, PropertyID: propertyID}
-				// A remap that changes the action or hit property invalidates
-				// any hit-property edits already saved for this state: they
-				// referenced the old nodes and would fail validation against
-				// the remapped structure.
-				if action != "" || propertyID != "" {
-					clearStageRule(&state, key, request.Stage, action != "")
-				}
-				message = "已登记重映射；保存效果并应用后写入配置包"
+		} else {
+			if state.Remaps[key] == nil {
+				state.Remaps[key] = map[int]*StageRemap{}
 			}
+			state.Remaps[key][request.Stage] = &StageRemap{Action: action, PropertyID: propertyID, Label: strings.TrimSpace(request.Label)}
+			// Defining a state again re-activates a column the author had
+			// deleted earlier: the remap wins over the clearing.
+			if state.Cleared[key] != nil {
+				delete(state.Cleared[key], request.Stage)
+				if len(state.Cleared[key]) == 0 {
+					delete(state.Cleared, key)
+				}
+			}
+			// A remap that changes the action or hit property invalidates
+			// any hit-property edits already saved for this state: they
+			// referenced the old nodes and would fail validation against
+			// the remapped structure.
+			if action != "" || propertyID != "" {
+				clearStageRule(&state, key, request.Stage, action != "")
+			}
+			message = "已登记重映射；保存效果并应用后写入配置包"
+		}
 		}
 		encoded, err := json.MarshalIndent(state, "", "  ")
 		if err != nil {
@@ -1570,6 +1710,67 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 			"property_id":      newPropertyID,
 			"revision":         digest(append(append([]byte(nil), current...), encoded...)),
 			"message":          message,
+		}, nil
+	}
+	// weapon_state_clear deletes a state of a self-made weapon: the itemact
+	// column is zeroed, its remap and saved edits are dropped, and combo-chain
+	// transitions touching the state are removed. Re-defining the state later
+	// through weapon_remap brings the column back.
+	if request.Operation == "weapon_state_clear" {
+		key := strconv.Itoa(request.Weapon)
+		if request.Weapon == 0 || request.Stage == 0 {
+			return nil, fmt.Errorf("请选择武器和状态")
+		}
+		if _, ok := state.Created[key]; !ok {
+			return nil, fmt.Errorf("只有自建武器可以删除状态")
+		}
+		text, err := base.text("itemact.txt")
+		if err != nil {
+			return nil, err
+		}
+		if actionRowIndex(text)[key] == nil {
+			return nil, fmt.Errorf("武器 %s 不在本客户端的动作表中", key)
+		}
+		column := strconv.Itoa(request.Stage)
+		if _, err = strconv.Atoi(column); err != nil {
+			return nil, fmt.Errorf("状态编号无效")
+		}
+		if state.Remaps[key] != nil {
+			delete(state.Remaps[key], request.Stage)
+			if len(state.Remaps[key]) == 0 {
+				delete(state.Remaps, key)
+			}
+		}
+		if state.Cleared[key] == nil {
+			state.Cleared[key] = map[int]bool{}
+		}
+		state.Cleared[key][request.Stage] = true
+		clearStageRule(&state, key, request.Stage, true)
+		if transitions := state.Chains[key]; len(transitions) > 0 {
+			kept := make([]ComboTransition, 0, len(transitions))
+			for _, transition := range transitions {
+				if transition.OldState != column && transition.NewState != column {
+					kept = append(kept, transition)
+				}
+			}
+			if len(kept) == 0 {
+				delete(state.Chains, key)
+			} else {
+				state.Chains[key] = kept
+			}
+		}
+		encoded, err := json.MarshalIndent(state, "", "  ")
+		if err != nil {
+			return nil, err
+		}
+		if err = atomicWrite(statePath, encoded); err != nil {
+			return nil, err
+		}
+		return map[string]any{
+			"cleared":  state.Cleared,
+			"chains":   state.Chains,
+			"revision": digest(append(append([]byte(nil), current...), encoded...)),
+			"message":  "已删除状态 " + column + "；保存并应用后写入配置包",
 		}, nil
 	}
 	if request.Revision != revision {

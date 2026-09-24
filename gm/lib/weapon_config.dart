@@ -80,6 +80,15 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
     return value is Map ? Map<String, dynamic>.from(value) : const {};
   }
 
+  /// 自建武器的来源说明：有供体就写供体，从零创建的说明动作需要逐个定义。
+  String donorSummary(dynamic id) {
+    final donor = blueprintOf(id)['donor'];
+    if (donor == null || donor == 0) {
+      return '从零创建（无供体）· 动作与命中属性逐个状态定义';
+    }
+    return '供体 $donor · 连招随供体自动补齐';
+  }
+
   /// Combo completions recorded in settings.json: weapon id -> reference weapon.
   Map<String, dynamic> get comboFixes =>
       Map<String, dynamic>.from(data?['combos'] as Map? ?? const {});
@@ -245,6 +254,7 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
   bool chainEditing = false;
   List<Map<String, String>> chainDraft = [];
   String? chainOld, chainKey, chainNew;
+  String? addStatePick;
 
   static const chainKeys = [
     {'v': '1', 'l': '普通攻击(C)'},
@@ -867,6 +877,13 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
         usedIDs: {
           for (final id in usedIDs) '$id',
         },
+        onUploadIcon: (sourcePath) async {
+          final r = await widget.api({
+            'operation': 'weapon_icon_upload',
+            'source_path': sourcePath,
+          });
+          return '${r['icon'] ?? ''}';
+        },
       ),
     );
     if (blueprint == null || !mounted) return;
@@ -1295,6 +1312,185 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
     );
   }
 
+  /// 自建武器尚未使用的状态列：定义新状态时可选。
+  List<String> get unusedStates {
+    final states = [for (final s in (data?['states'] as List? ?? [])) '$s'];
+    final used = {
+      for (final stage in (weapon?['stages'] as List? ?? []))
+        '${(stage as Map)['state']}',
+    };
+    return states.where((s) => !used.contains(s)).toList();
+  }
+
+  /// 为自建武器定义一个新状态：选一个尚未使用的状态列，再填动作 / 命中属性 /
+  /// 动作说明（可从其它武器复用）。提交后该状态出现在招式列表里。
+  Future<void> defineState() async {
+    final stateKey = addStatePick;
+    if (stateKey == null) {
+      setState(() {
+        failed = true;
+        message = '请先选择要定义的状态列';
+      });
+      return;
+    }
+    await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('定义状态 $stateKey'),
+        content: SizedBox(
+          width: 540,
+          child: SingleChildScrollView(
+            child: _RemapEditor(
+              stateKey: stateKey,
+              weaponId: weapon!['id'] as int,
+              initial: const {},
+              busy: busy,
+              api: widget.api,
+              weapons: [
+                for (final w in (data?['weapons'] as List? ?? []))
+                  Map<String, dynamic>.from(w as Map),
+              ],
+              onSaved: () async {
+                Navigator.of(dialogContext).pop(true);
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    if (!mounted) return;
+    setState(() => addStatePick = null);
+    await load(prefer: weapon!['id']);
+  }
+
+  /// 删除自建武器的一个状态：清零该动作列，移除重映射与已保存的效果编辑，
+  /// 并清掉连招链中涉及该状态的转移。
+  Future<void> clearState(String stateKey) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('删除状态 $stateKey'),
+        content: const Text(
+          '该状态的动作列会被清零，已保存的该段效果、以及连招链里涉及这个状态的转移都会一并移除。'
+          '之后可以重新「定义状态」把它加回来。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('删除状态'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final prefer = weapon!['id'] as int?;
+    setState(() {
+      busy = true;
+      failed = false;
+      message = '正在删除状态…';
+    });
+    try {
+      final result = Map<String, dynamic>.from(await widget.api({
+        'operation': 'weapon_state_clear',
+        'weapon': weapon!['id'],
+        'stage': int.parse(stateKey),
+      }));
+      if (!mounted) return;
+      setState(() {
+        busy = false;
+        message = '${result['message'] ?? '已删除状态'}';
+      });
+      await load(prefer: prefer);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          busy = false;
+          failed = true;
+          message = '$e';
+        });
+      }
+    }
+  }
+
+  /// 自建武器的状态管理卡片：新增状态列（从零定义）与提示。
+  Widget stateBuilderCard() {
+    if (weapon == null || !isCreated(weapon!['id'])) {
+      return const SizedBox.shrink();
+    }
+    final states = unusedStates;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.addchart_outlined, size: 18),
+                const SizedBox(width: 8),
+                const Text(
+                  '状态定义（自建武器）',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '每个状态指定动作、命中属性和动作说明；动作与命中属性都能从其它武器拉取',
+                    style: TextStyle(fontSize: 11, color: Colors.black54),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                SizedBox(
+                  width: 200,
+                  child: DropdownButtonFormField<String>(
+                    key: ValueKey('add-state-$editorVersion'),
+                    initialValue: addStatePick,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: '新增状态列',
+                      isDense: true,
+                    ),
+                    items: [
+                      for (final s in states)
+                        DropdownMenuItem(value: s, child: Text(s)),
+                    ],
+                    onChanged: busy
+                        ? null
+                        : (v) => setState(() => addStatePick = v),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                FilledButton.icon(
+                  onPressed: busy || addStatePick == null ? null : defineState,
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('定义状态'),
+                ),
+                const SizedBox(width: 10),
+                if (states.isEmpty)
+                  const Expanded(
+                    child: Text(
+                      '所有状态列都已被使用',
+                      style: TextStyle(fontSize: 11, color: Colors.black54),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _callRemap(
     String stateKey, {
     required Map<String, dynamic> params,
@@ -1325,66 +1521,65 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
     }
   }
 
-  /// 结构重映射区块：复用模板 / 新增命中属性节点 / 取消。
+  /// 重映射失效告警：某个状态的映射指向了不存在的动作或命中属性，此时招式
+  /// 列表退回未映射前的结构，需要先修好或取消该映射。
+  Widget remapErrorBanner() {
+    final detail = '${data?['remap_error'] ?? ''}';
+    if (detail.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: Colors.orange.shade50,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: Colors.deepOrange.shade200),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.error_outline,
+                    size: 16, color: Colors.deepOrange.shade700),
+                const SizedBox(width: 6),
+                Text(
+                  '状态重映射暂不可用',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.deepOrange.shade800,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            SelectableText(
+              '$detail\n招式列表已退回未映射前的结构；请修好该映射或取消它。',
+              style: TextStyle(fontSize: 12, color: Colors.deepOrange.shade900),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 结构重映射区块：可编辑的动作 / 命中属性 / 说明，复用模板把结果填进输入框。
   Widget remapSection(int index, Map<String, dynamic> stage) {
     final stateKey = '${stage['state']}';
-    final remap = remapFor(stateKey);
-    final hasRemap = remap.isNotEmpty;
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Colors.blueGrey.shade50,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            '动作与命中属性（重映射）',
-            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-          ),
-          const SizedBox(height: 4),
-          if (hasRemap)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Text(
-                '已重映射 → 动作 ${remap['action'] ?? '-'} · 命中属性 ${remap['property_id'] ?? '（沿用动作自带）'}',
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontFamily: 'monospace',
-                  color: Colors.teal,
-                ),
-              ),
-            ),
-          Wrap(
-            spacing: 10,
-            runSpacing: 4,
-            children: [
-              OutlinedButton.icon(
-                onPressed: busy ? null : () => remapFromTemplate(stateKey),
-                icon: const Icon(Icons.content_copy, size: 16),
-                label: const Text('复用模板（武器→状态）'),
-              ),
-              OutlinedButton.icon(
-                onPressed: busy ? null : () => addPropertyFor(stateKey),
-                icon: const Icon(Icons.add_box_outlined, size: 16),
-                label: const Text('新增命中属性节点'),
-              ),
-              if (hasRemap)
-                TextButton(
-                  onPressed: busy ? null : () => clearRemap(stateKey),
-                  child: const Text('取消重映射'),
-                ),
-            ],
-          ),
-          const SizedBox(height: 2),
-          const Text(
-            '复用模板会把所选武器该状态的动作与命中属性一并复制过来；若目标动作被其它武器共用会自动克隆隔离。'
-            '新增命中属性节点会先按模板复制一个全新编号的节点，再指定给本段（之后可在下方改伤害/BUFF）。',
-            style: TextStyle(fontSize: 11, color: Colors.black54),
-          ),
-        ],
-      ),
+    return _RemapEditor(
+      key: ValueKey('remap-${weapon!['id']}-$stateKey'),
+      stateKey: stateKey,
+      weaponId: weapon!['id'] as int,
+      initial: remapFor(stateKey),
+      busy: busy,
+      api: widget.api,
+      weapons: [
+        for (final w in (data?['weapons'] as List? ?? []))
+          Map<String, dynamic>.from(w as Map),
+      ],
+      onSaved: () => load(prefer: weapon!['id']),
     );
   }
 
@@ -1419,6 +1614,17 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
               ),
             const SizedBox(height: 8),
             remapSection(index, Map<String, dynamic>.from(stage as Map)),
+            if (isCreated(weapon!['id']))
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: busy
+                      ? null
+                      : () => clearState('${stage['state']}'),
+                  icon: const Icon(Icons.delete_outline, size: 16),
+                  label: Text('删除状态 ${stage['state']}'),
+                ),
+              ),
             const SizedBox(height: 12),
             Row(
               children: [
@@ -1972,7 +2178,7 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                                                       const SizedBox(width: 8),
                                                       Expanded(
                                                         child: Text(
-                                                          '复用模型 ${weapon!['model'] ?? '未知'} · 供体 ${blueprintOf(weapon!['id'])['donor'] ?? '未知'} · 连招随供体自动补齐',
+                                                          '复用模型 ${weapon!['model'] ?? '未知'} · ${donorSummary(weapon!['id'])}',
                                                           style: Theme.of(context)
                                                               .textTheme
                                                               .bodySmall,
@@ -2014,6 +2220,8 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                                 const SizedBox(height: 8),
                                 comboBanner(),
                                 comboChainCard(),
+                                remapErrorBanner(),
+                                stateBuilderCard(),
                                 Text(
                                   '连招与命中效果',
                                   style: Theme.of(context)
@@ -2217,6 +2425,7 @@ class _BlueprintDialog extends StatefulWidget {
     required this.maxID,
     required this.suggestedID,
     required this.usedIDs,
+    required this.onUploadIcon,
   });
 
   final List types;
@@ -2224,6 +2433,7 @@ class _BlueprintDialog extends StatefulWidget {
   final List<Map<String, dynamic>> donors;
   final int minID, maxID, suggestedID;
   final Set<String> usedIDs;
+  final Future<String?> Function(String sourcePath) onUploadIcon;
 
   @override
   State<_BlueprintDialog> createState() => _BlueprintDialogState();
@@ -2265,12 +2475,13 @@ class _BlueprintDialogState extends State<_BlueprintDialog> {
   }
 
   /// Reusing the donor's appearance is the whole point: an unknown model name
-  /// would leave the client rendering nothing.
+  /// would leave the client rendering nothing. Donor 0 means "no template": the
+  /// author picks the model and every state by hand.
   void adoptDonor(int? value) {
     setState(() {
       donor = value;
       modelNotice = '';
-      if (value == null) return;
+      if (value == null || value == 0) return;
       final weapon = widget.donors.firstWhere((w) => w['id'] == value);
       final candidate = '${weapon['model'] ?? ''}';
       if (widget.models.contains(candidate)) {
@@ -2287,6 +2498,27 @@ class _BlueprintDialogState extends State<_BlueprintDialog> {
         name.text = '自建${weapon['name']}';
       }
     });
+  }
+
+  /// Lets the author pick a local PNG, upload it into the client's item-icon
+  /// directory, and drop the resulting icon path into the icon field.
+  Future<void> pickAndUploadIcon() async {
+    final source = await showDialog<String>(
+      context: context,
+      builder: (context) => _IconUploadDialog(),
+    );
+    if (source == null || !mounted) return;
+    try {
+      final result = await widget.onUploadIcon(source);
+      if (!mounted || result == null || result.isEmpty) return;
+      icon.text = result;
+      setState(() {});
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
   }
 
   void submit() {
@@ -2372,9 +2604,13 @@ class _BlueprintDialogState extends State<_BlueprintDialog> {
                   initialValue: donor,
                   decoration: const InputDecoration(
                     labelText: '供体武器（复制其招式结构）',
-                    helperText: '从客户端已有武器中选一件作为动作模板',
+                    helperText: '选一件作为动作模板；选「无供体」则从零创建',
                   ),
                   items: [
+                    const DropdownMenuItem<int>(
+                      value: 0,
+                      child: Text('无供体（从零创建，动作与命中属性全空）'),
+                    ),
                     for (final weapon in sorted)
                       DropdownMenuItem<int>(
                         value: weapon['id'] as int,
@@ -2450,12 +2686,28 @@ class _BlueprintDialogState extends State<_BlueprintDialog> {
                     ),
                   ),
                 const SizedBox(height: 14),
-                TextFormField(
-                  controller: icon,
-                  decoration: const InputDecoration(
-                    labelText: '图标（可选）',
-                    helperText: '相对 Data/UI 的路径，如 Picture\\ItemIcon\\253013.png；留空则复用供体图标',
-                  ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: icon,
+                        decoration: const InputDecoration(
+                          labelText: '图标（可选）',
+                          helperText: '相对 Data/UI 的路径；留空则复用供体图标',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: OutlinedButton.icon(
+                        onPressed: pickAndUploadIcon,
+                        icon: const Icon(Icons.upload_file, size: 16),
+                        label: const Text('上传图片'),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 14),
                 TextFormField(
@@ -2885,6 +3137,288 @@ class _PropertyPickerDialogState extends State<_PropertyPickerDialog> {
           child: const Text('取消'),
         ),
       ],
+    );
+  }
+}
+
+
+/// 本地图片路径输入框：选择要上传的 PNG 文件路径。
+class _IconUploadDialog extends StatefulWidget {
+  const _IconUploadDialog();
+
+  @override
+  State<_IconUploadDialog> createState() => _IconUploadDialogState();
+}
+
+class _IconUploadDialogState extends State<_IconUploadDialog> {
+  final path = TextEditingController();
+
+  @override
+  void dispose() {
+    path.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('上传本地图片'),
+      content: SizedBox(
+        width: 480,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('填写本地 PNG 图片的完整路径，会复制到客户端的图标目录。'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: path,
+              decoration: const InputDecoration(
+                labelText: '图片路径',
+                hintText: r'例如 D:\icon\myweapon.png',
+                prefixIcon: Icon(Icons.image_outlined),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, path.text.trim()),
+          child: const Text('上传'),
+        ),
+      ],
+    );
+  }
+}
+
+/// 每个状态的可编辑重映射：动作 / 命中属性 / 说明三个输入框；复用模板把结果
+/// 填进输入框，用户可再改，然后提交或取消。
+class _RemapEditor extends StatefulWidget {
+  const _RemapEditor({
+    required this.stateKey,
+    required this.weaponId,
+    required this.initial,
+    required this.busy,
+    required this.api,
+    required this.weapons,
+    required this.onSaved,
+    super.key,
+  });
+
+  final String stateKey;
+  final int weaponId;
+  final Map<String, dynamic> initial;
+  final bool busy;
+  final Future<dynamic> Function(Map<String, dynamic>) api;
+  final List<Map<String, dynamic>> weapons;
+  final Future<void> Function() onSaved;
+
+  @override
+  State<_RemapEditor> createState() => _RemapEditorState();
+}
+
+class _RemapEditorState extends State<_RemapEditor> {
+  late final TextEditingController action;
+  late final TextEditingController property;
+  late final TextEditingController label;
+  bool saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    action = TextEditingController(text: '${widget.initial['action'] ?? ''}');
+    property =
+        TextEditingController(text: '${widget.initial['property_id'] ?? ''}');
+    label = TextEditingController(text: '${widget.initial['label'] ?? ''}');
+  }
+
+  @override
+  void dispose() {
+    action.dispose();
+    property.dispose();
+    label.dispose();
+    super.dispose();
+  }
+
+  bool get engaged => saving || widget.busy;
+
+  Future<void> pickTemplate() async {
+    final picked = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (_) => _RemapTemplateDialog(
+        weapons: widget.weapons,
+        self: widget.weaponId,
+      ),
+    );
+    if (picked == null || !mounted) return;
+    try {
+      final r = Map<String, dynamic>.from(await widget.api({
+        'operation': 'weapon_template_resolve',
+        'template_weapon': picked['weapon'],
+        'template_stage': picked['state'],
+      }));
+      if (!mounted) return;
+      setState(() {
+        action.text = '${r['action'] ?? ''}';
+        property.text = '${r['property_id'] ?? ''}';
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
+  }
+
+  Future<void> addProperty() async {
+    Map<String, dynamic> catalog = {};
+    try {
+      catalog = Map<String, dynamic>.from(
+        await widget.api({'operation': 'weapon_remap_options'}),
+      );
+    } catch (_) {}
+    final properties = [
+      for (final p in (catalog['properties'] as List? ?? []))
+        Map<String, dynamic>.from(p as Map),
+    ];
+    final template = await showDialog<String>(
+      context: context,
+      builder: (_) => _PropertyPickerDialog(properties: properties),
+    );
+    if (template == null || !mounted) return;
+    try {
+      final result = Map<String, dynamic>.from(await widget.api({
+        'operation': 'weapon_property_add',
+        'template': template,
+      }));
+      if (!mounted) return;
+      final newId = '${result['property_id'] ?? ''}';
+      if (newId.isEmpty) return;
+      setState(() => property.text = newId);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
+  }
+
+  Future<void> commit({bool clear = false}) async {
+    setState(() => saving = true);
+    try {
+      final result = Map<String, dynamic>.from(await widget.api({
+        'operation': 'weapon_remap',
+        'weapon': widget.weaponId,
+        'stage': int.parse(widget.stateKey),
+        'action': clear ? '' : action.text.trim(),
+        'property_id': clear ? '' : property.text.trim(),
+        'label': clear ? '' : label.text.trim(),
+      }));
+      if (!mounted) return;
+      if (clear) {
+        setState(() {
+          action.clear();
+          property.clear();
+          label.clear();
+        });
+      }
+      setState(() => saving = false);
+      await widget.onSaved();
+      if (mounted && result['message'] != null) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('${result['message']}')));
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => saving = false);
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.blueGrey.shade50,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '动作与命中属性（重映射）',
+            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: action,
+                  decoration: const InputDecoration(
+                    labelText: '动作 ID',
+                    isDense: true,
+                    helperText: '如 2001130；留空沿用原动作',
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextField(
+                  controller: property,
+                  decoration: const InputDecoration(
+                    labelText: '命中属性 ID',
+                    isDense: true,
+                    helperText: '如 80810；留空沿用动作自带',
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: label,
+            decoration: const InputDecoration(
+              labelText: '动作说明（可选）',
+              isDense: true,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              OutlinedButton.icon(
+                onPressed: engaged ? null : pickTemplate,
+                icon: const Icon(Icons.content_copy, size: 16),
+                label: const Text('复用模板填入'),
+              ),
+              OutlinedButton.icon(
+                onPressed: engaged ? null : addProperty,
+                icon: const Icon(Icons.add_box_outlined, size: 16),
+                label: const Text('新增命中属性节点'),
+              ),
+              FilledButton.icon(
+                onPressed: engaged ? null : () => commit(),
+                icon: const Icon(Icons.check, size: 16),
+                label: const Text('提交重映射'),
+              ),
+              TextButton(
+                onPressed: engaged ? null : () => commit(clear: true),
+                child: const Text('取消重映射'),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
