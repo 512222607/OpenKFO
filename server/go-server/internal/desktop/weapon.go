@@ -1006,7 +1006,11 @@ type Blueprint struct {
 	Model string `json:"model"`
 	Donor int    `json:"donor"`
 	Icon  string `json:"icon,omitempty"`
-	Note  string `json:"note,omitempty"`
+	// Description feeds item.txt's description column (16), which is what the
+	// client shows as the weapon blurb. Empty keeps the pre-description
+	// behaviour of reusing the name.
+	Description string `json:"description,omitempty"`
+	Note        string `json:"note,omitempty"`
 }
 
 const blueprintMinID, blueprintMaxID = 253000, 253999
@@ -1036,6 +1040,37 @@ func appendTabRow(text, row string) string {
 		return row + ending
 	}
 	return body + ending + row + ending
+}
+
+// dropTabRow removes every table row whose given cell equals value, keeping
+// the file's line ending style. Header rows never match a weapon id, so they
+// survive untouched.
+func dropTabRow(text string, column int, value string) string {
+	crlf := strings.Contains(text, "\r\n")
+	lines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
+	kept := make([]string, 0, len(lines))
+	for _, line := range lines {
+		cells := strings.Split(line, "\t")
+		if column < len(cells) && cells[column] == value {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	ending := "\n"
+	if crlf {
+		ending = "\r\n"
+	}
+	return strings.Join(kept, ending)
+}
+
+// blueprintDescription returns what item.txt's description column (16) should
+// carry. An empty description keeps the pre-description behaviour of showing
+// the weapon name.
+func blueprintDescription(blueprint Blueprint) string {
+	if strings.TrimSpace(blueprint.Description) == "" {
+		return blueprint.Name
+	}
+	return blueprint.Description
 }
 
 func setCell(row []string, index int, value string) []string {
@@ -1159,8 +1194,15 @@ func applyBlueprints(a *archive, created map[string]Blueprint) (*archive, error)
 		blueprint := created[key]
 		number := strconv.Itoa(blueprint.ID)
 		if itemIndex[number] != nil {
-			// Already emitted by an earlier apply; never duplicate a row.
-			continue
+			// The row already shipped in an earlier render (a re-captured
+			// baseline after the client's own updater, or a package read
+			// before any baseline exists). Drop it and rebuild from the
+			// current blueprint below, otherwise renaming, re-iconing or
+			// re-describing the weapon would never reach the client.
+			itemText = dropTabRow(itemText, 1, number)
+			actionText = dropTabRow(actionText, 0, number)
+			itemIndex = itemRowIndex(itemText)
+			actionIndex = actionRowIndex(actionText)
 		}
 		donorItem := itemIndex[strconv.Itoa(blueprint.Donor)]
 		if blueprint.Donor == 0 {
@@ -1202,13 +1244,18 @@ func applyBlueprints(a *archive, created map[string]Blueprint) (*archive, error)
 			icon = "#"
 		}
 		itemRow = setCell(itemRow, 9, icon)
-		itemRow = setCell(itemRow, 16, blueprint.Name)
+		itemRow = setCell(itemRow, 16, blueprintDescription(blueprint))
 		itemText = appendTabRow(itemText, strings.Join(itemRow, "\t"))
 
 		actionRow := append([]string(nil), donorAction...)
 		actionRow = setCell(actionRow, 0, number)
 		actionRow = setCell(actionRow, 1, blueprint.Name)
 		actionText = appendTabRow(actionText, strings.Join(actionRow, "\t"))
+		// Register the emitted rows back into the indexes: a later blueprint
+		// may borrow this one as its donor, and a weapon created after another
+		// must see the donor's fresh row, not the state before this loop.
+		itemIndex[number] = itemRow
+		actionIndex[number] = actionRow
 	}
 	items, err := encodeText(itemText)
 	if err != nil {
@@ -1225,6 +1272,32 @@ func applyBlueprints(a *archive, created map[string]Blueprint) (*archive, error)
 	return parseArchive(data)
 }
 
+// validateBlueprintInfo checks the editable identity fields of a blueprint:
+// name, icon, description and note. Unlike validateBlueprint it never consults
+// item.txt, so editing an already-applied weapon does not trip over its own
+// row living in the client package.
+func validateBlueprintInfo(blueprint Blueprint) error {
+	if name := blueprint.Name; name == "" || len([]rune(name)) > 24 || strings.ContainsAny(name, "\t\r\n") {
+		return fmt.Errorf("武器名称需为 1..24 个字符且不含制表符")
+	}
+	if blueprint.Icon != "" {
+		icon := strings.ReplaceAll(blueprint.Icon, "\\", "/")
+		if strings.Contains(icon, ":") || strings.HasPrefix(icon, "/") || strings.Contains(icon, "..") {
+			return fmt.Errorf("图标路径无效")
+		}
+	}
+	if len([]rune(blueprint.Description)) > 200 {
+		return fmt.Errorf("武器简介过长（最多 200 字）")
+	}
+	if strings.ContainsAny(blueprint.Description, "\t\r\n") {
+		return fmt.Errorf("武器简介不能包含制表符或换行")
+	}
+	if len([]rune(blueprint.Note)) > 200 {
+		return fmt.Errorf("备注过长")
+	}
+	return nil
+}
+
 // validateBlueprint rejects anything the untouched client could not render or
 // resolve. The model must already exist on disk: new RenderWare clumps cannot be
 // authored from here.
@@ -1232,8 +1305,8 @@ func validateBlueprint(client string, source *archive, blueprint Blueprint) erro
 	if blueprint.ID < blueprintMinID || blueprint.ID > blueprintMaxID {
 		return fmt.Errorf("武器编号需在 %d..%d 之间", blueprintMinID, blueprintMaxID)
 	}
-	if name := blueprint.Name; name == "" || len([]rune(name)) > 24 || strings.ContainsAny(name, "\t\r\n") {
-		return fmt.Errorf("武器名称需为 1..24 个字符且不含制表符")
+	if err := validateBlueprintInfo(blueprint); err != nil {
+		return err
 	}
 	switch blueprint.Type {
 	case "1", "2", "3", "4", "5", "6", "7":
@@ -1246,20 +1319,11 @@ func validateBlueprint(client string, source *archive, blueprint Blueprint) erro
 	if _, err := os.Stat(filepath.Join(client, "Data", "Weapon", "Model", blueprint.Model)); err != nil {
 		return fmt.Errorf("客户端缺少模型文件 %s，自建武器必须复用已有模型", blueprint.Model)
 	}
-	if blueprint.Icon != "" {
-		icon := strings.ReplaceAll(blueprint.Icon, "\\", "/")
-		if strings.Contains(icon, ":") || strings.HasPrefix(icon, "/") || strings.Contains(icon, "..") {
-			return fmt.Errorf("图标路径无效")
-		}
-	}
 	if blueprint.Donor == blueprint.ID {
 		return fmt.Errorf("供体武器不能是自身")
 	}
 	if blueprint.Donor < 0 {
 		return fmt.Errorf("供体武器编号无效")
-	}
-	if len([]rune(blueprint.Note)) > 200 {
-		return fmt.Errorf("备注过长")
 	}
 	itemText, err := source.text("item.txt")
 	if err != nil {
@@ -1532,6 +1596,43 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 			return nil, err
 		}
 		return map[string]any{"created": state.Created, "revision": digest(append(append([]byte(nil), current...), encoded...)), "message": message}, nil
+	}
+	// weapon_blueprint_update renames, re-icons or re-describes a registered
+	// self-made weapon. Only the identity fields move: id, donor, subtype and
+	// model stay fixed, because the action row was cloned from the donor and
+	// swapping the structure amounts to inventing a different weapon. The
+	// change lands in settings.json only; the next render (apply or publish)
+	// rebuilds the item/itemact rows from the updated blueprint.
+	if request.Operation == "weapon_blueprint_update" {
+		key := strconv.Itoa(request.Weapon)
+		existing, ok := state.Created[key]
+		if !ok {
+			return nil, fmt.Errorf("只有自建武器可以编辑信息")
+		}
+		blueprint := existing
+		if request.Blueprint != nil {
+			blueprint.Name = strings.TrimSpace(request.Blueprint.Name)
+			blueprint.Icon = strings.TrimSpace(request.Blueprint.Icon)
+			blueprint.Description = strings.TrimSpace(request.Blueprint.Description)
+			blueprint.Note = strings.TrimSpace(request.Blueprint.Note)
+		}
+		if err := validateBlueprintInfo(blueprint); err != nil {
+			return nil, err
+		}
+		for other, created := range state.Created {
+			if other != key && created.Name == blueprint.Name {
+				return nil, fmt.Errorf("已有同名自建武器 %s", blueprint.Name)
+			}
+		}
+		state.Created[key] = blueprint
+		encoded, err := json.MarshalIndent(state, "", "  ")
+		if err != nil {
+			return nil, err
+		}
+		if err = atomicWrite(statePath, encoded); err != nil {
+			return nil, err
+		}
+		return map[string]any{"created": state.Created, "revision": digest(append(append([]byte(nil), current...), encoded...)), "message": "已更新武器信息；应用到游戏后写入配置包"}, nil
 	}
 	// weapon_combo completes the combo registration of an existing weapon. A
 	// shipped weapon can carry a full action row yet own no transitions in

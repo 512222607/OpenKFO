@@ -1939,6 +1939,54 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
     }
   }
 
+  /// Edits the identity fields (name / icon / description) of a registered
+  /// self-made weapon. The change only lands in settings.json; the next
+  /// 「应用到游戏」 rebuilds the client rows from the updated blueprint.
+  Future<void> editBlueprintInfo() async {
+    if (!(await discard()) || !mounted) return;
+    final id = weapon!['id'];
+    final updated = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (_) => _BlueprintInfoDialog(
+        initial: blueprintOf(id),
+        onUploadIcon: (sourcePath) async {
+          final r = await widget.api({
+            'operation': 'weapon_icon_upload',
+            'source_path': sourcePath,
+          });
+          return '${r['icon'] ?? ''}';
+        },
+      ),
+    );
+    if (updated == null || !mounted) return;
+    setState(() {
+      busy = true;
+      failed = false;
+      message = '正在更新武器信息…';
+    });
+    try {
+      final result = await widget.api({
+        'operation': 'weapon_blueprint_update',
+        'weapon': id,
+        'blueprint': updated,
+      });
+      if (!mounted) return;
+      setState(() {
+        dirty = false;
+        message = '${result['message']}';
+      });
+      await load(prefer: id);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          busy = false;
+          failed = true;
+          message = '$e';
+        });
+      }
+    }
+  }
+
   /// Registers (or clears) a combo-table completion for the current weapon.
   /// A donor of 0 clears it.
   Future<void> setCombo(int donor) async {
@@ -3515,6 +3563,17 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                                       child: const Text('恢复原效果'),
                                     ),
                                     if (isCreated(weapon!['id']))
+                                      TextButton.icon(
+                                        onPressed: busy
+                                            ? null
+                                            : editBlueprintInfo,
+                                        icon: const Icon(
+                                          Icons.edit_outlined,
+                                          size: 18,
+                                        ),
+                                        label: const Text('编辑信息'),
+                                      ),
+                                    if (isCreated(weapon!['id']))
                                       TextButton(
                                         onPressed: busy ? null : forget,
                                         child: const Text('移除自建武器'),
@@ -3736,6 +3795,7 @@ class _BlueprintDialogState extends State<_BlueprintDialog> {
   late final TextEditingController name;
   final note = TextEditingController();
   final icon = TextEditingController();
+  final description = TextEditingController();
   String type = '';
   String? model;
   int? donor;
@@ -3755,6 +3815,7 @@ class _BlueprintDialogState extends State<_BlueprintDialog> {
     name.dispose();
     note.dispose();
     icon.dispose();
+    description.dispose();
     super.dispose();
   }
 
@@ -3821,6 +3882,7 @@ class _BlueprintDialogState extends State<_BlueprintDialog> {
       'model': model,
       'donor': donor,
       'icon': icon.text.trim(),
+      'description': description.text.trim(),
       'note': note.text.trim(),
     });
   }
@@ -4002,6 +4064,17 @@ class _BlueprintDialogState extends State<_BlueprintDialog> {
                 ),
                 const SizedBox(height: 14),
                 TextFormField(
+                  controller: description,
+                  maxLength: 200,
+                  minLines: 1,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: '武器简介（可选）',
+                    helperText: '游戏内展示的武器说明；留空则显示武器名称',
+                  ),
+                ),
+                const SizedBox(height: 14),
+                TextFormField(
                   controller: note,
                   maxLength: 200,
                   decoration: const InputDecoration(
@@ -4019,6 +4092,173 @@ class _BlueprintDialogState extends State<_BlueprintDialog> {
           child: const Text('取消'),
         ),
         FilledButton(onPressed: submit, child: const Text('登记自建武器')),
+      ],
+    );
+  }
+}
+
+/// Edits the identity fields of an already-registered self-made weapon.
+///
+/// Only name, icon, description and note are editable: id, donor, subtype and
+/// model stay fixed because the action row was cloned from the donor. Leaving
+/// the icon empty inherits the donor's picture again.
+class _BlueprintInfoDialog extends StatefulWidget {
+  const _BlueprintInfoDialog({
+    required this.initial,
+    required this.onUploadIcon,
+  });
+
+  final Map<String, dynamic> initial;
+  final Future<String?> Function(String sourcePath) onUploadIcon;
+
+  @override
+  State<_BlueprintInfoDialog> createState() => _BlueprintInfoDialogState();
+}
+
+class _BlueprintInfoDialogState extends State<_BlueprintInfoDialog> {
+  final form = GlobalKey<FormState>();
+  late final TextEditingController name;
+  late final TextEditingController icon;
+  late final TextEditingController description;
+  late final TextEditingController note;
+
+  @override
+  void initState() {
+    super.initState();
+    name = TextEditingController(text: '${widget.initial['name'] ?? ''}');
+    icon = TextEditingController(text: '${widget.initial['icon'] ?? ''}');
+    description = TextEditingController(
+      // 旧蓝图没有简介字段，当时简介列就是武器名；编辑时也这样回填，
+      // 免得用户一保存就把简介改没了。
+      text: '${widget.initial['description'] ?? ''}',
+    );
+    note = TextEditingController(text: '${widget.initial['note'] ?? ''}');
+  }
+
+  @override
+  void dispose() {
+    name.dispose();
+    icon.dispose();
+    description.dispose();
+    note.dispose();
+    super.dispose();
+  }
+
+  Future<void> pickAndUploadIcon() async {
+    final source = await showDialog<String>(
+      context: context,
+      builder: (context) => _IconUploadDialog(),
+    );
+    if (source == null || !mounted) return;
+    try {
+      final result = await widget.onUploadIcon(source);
+      if (!mounted || result == null || result.isEmpty) return;
+      icon.text = result;
+      setState(() {});
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
+  }
+
+  void submit() {
+    if (!(form.currentState?.validate() ?? false)) return;
+    Navigator.pop(context, <String, dynamic>{
+      'name': name.text.trim(),
+      'icon': icon.text.trim(),
+      'description': description.text.trim(),
+      'note': note.text.trim(),
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('编辑武器信息（${widget.initial['id']}）'),
+      content: SizedBox(
+        width: 480,
+        child: Form(
+          key: form,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '编号、供体、子类与模型不可修改；改动在「应用到游戏」后写入配置包。',
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: name,
+                  decoration: const InputDecoration(
+                    labelText: '武器名称',
+                    helperText: '1–24 字',
+                  ),
+                  validator: (text) {
+                    final value = (text ?? '').trim();
+                    if (value.isEmpty || value.runes.length > 24) {
+                      return '名称需为 1–24 个字符';
+                    }
+                    if (value.contains('\t')) return '名称不能包含制表符';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: icon,
+                        decoration: const InputDecoration(
+                          labelText: '图标',
+                          helperText: '相对 Data/UI 的路径；留空则复用供体图标',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: OutlinedButton.icon(
+                        onPressed: pickAndUploadIcon,
+                        icon: const Icon(Icons.upload_file, size: 16),
+                        label: const Text('上传图片'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                TextFormField(
+                  controller: description,
+                  maxLength: 200,
+                  minLines: 1,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: '武器简介',
+                    helperText: '游戏内展示的武器说明；留空则显示武器名称',
+                  ),
+                ),
+                const SizedBox(height: 14),
+                TextFormField(
+                  controller: note,
+                  maxLength: 200,
+                  decoration: const InputDecoration(
+                    labelText: '备注（仅本地记录）',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        FilledButton(onPressed: submit, child: const Text('保存修改')),
       ],
     );
   }

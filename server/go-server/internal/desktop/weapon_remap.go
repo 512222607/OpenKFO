@@ -1,8 +1,13 @@
 package desktop
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
-	"io"
+	"image"
+	"image/draw"
+	"image/png"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -573,6 +578,92 @@ func overlayRemapLabels(state *weaponState, info *inspection) {
 	}
 }
 
+// iconSize is the shipped item-icon dimension: every standard PNG in
+// Picture/ItemIcon is 80x80 RGBA. The client's UI texture loader predates
+// rescale-on-load, so a larger upload fails to render exactly like a broken
+// filename does.
+const iconSize = 80
+
+// normalizeIcon decodes a PNG and box-filters it into an 80x80 RGBA icon,
+// matching the shipped convention. Images already at the target size are
+// re-encoded as-is. Box filtering is the ideal downscale for large factors:
+// every target pixel is the plain average of its source footprint.
+func normalizeIcon(data []byte, size int) ([]byte, error) {
+	src, err := png.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("解析 PNG 失败：%w", err)
+	}
+	bounds := src.Bounds()
+	if bounds.Dx() == size && bounds.Dy() == size {
+		flat := image.NewRGBA(bounds)
+		draw.Draw(flat, flat.Bounds(), src, bounds.Min, draw.Src)
+		return encodeIconRGBA(flat)
+	}
+	flat := image.NewRGBA(image.Rect(0, 0, bounds.Dx(), bounds.Dy()))
+	draw.Draw(flat, flat.Bounds(), src, bounds.Min, draw.Src)
+	dst := image.NewRGBA(image.Rect(0, 0, size, size))
+	for y := 0; y < size; y++ {
+		sy0, sy1 := y*bounds.Dy()/size, (y+1)*bounds.Dy()/size
+		if sy1 <= sy0 {
+			sy1 = sy0 + 1
+		}
+		for x := 0; x < size; x++ {
+			sx0, sx1 := x*bounds.Dx()/size, (x+1)*bounds.Dx()/size
+			if sx1 <= sx0 {
+				sx1 = sx0 + 1
+			}
+			// Alpha-weighted average: un-premultiply per sample so semi
+			// transparent edges do not darken against a phantom black.
+			var r, g, bl, a float64
+			for sy := sy0; sy < sy1; sy++ {
+				row := flat.Pix[sy*flat.Stride:]
+				for sx := sx0; sx < sx1; sx++ {
+					off := sx * 4
+					w := float64(row[off+3]) / 255
+					r += float64(row[off]) * w
+					g += float64(row[off+1]) * w
+					bl += float64(row[off+2]) * w
+					a += w
+				}
+			}
+			n := float64((sy1 - sy0) * (sx1 - sx0))
+			off := dst.PixOffset(x, y)
+			if a > 0 {
+				dst.Pix[off] = clampByte(r / a)
+				dst.Pix[off+1] = clampByte(g / a)
+				dst.Pix[off+2] = clampByte(bl / a)
+			}
+			dst.Pix[off+3] = clampByte(a / n * 255)
+		}
+	}
+	return encodeIconRGBA(dst)
+}
+
+// encodeIconRGBA writes the icon as colortype 6 (truecolor + alpha), the
+// format every shipped icon uses. Go's encoder silently drops the alpha
+// channel for fully opaque images, so nudge one pixel's alpha to keep the
+// client loader on its expected code path.
+func encodeIconRGBA(img *image.RGBA) ([]byte, error) {
+	if img.Opaque() {
+		img.Pix[img.PixOffset(0, 0)+3] = 254
+	}
+	var out bytes.Buffer
+	if err := png.Encode(&out, img); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
+}
+
+func clampByte(v float64) byte {
+	if v <= 0 {
+		return 0
+	}
+	if v >= 255 {
+		return 255
+	}
+	return byte(v + 0.5)
+}
+
 // uploadWeaponIcon copies a local PNG into the client's item-icon directory so
 // a self-made weapon can carry a custom picture. The returned path is relative
 // to Data/UI and goes straight into item.txt's icon column.
@@ -588,29 +679,55 @@ func uploadWeaponIcon(client, sourcePath string) (map[string]any, error) {
 	if !strings.EqualFold(filepath.Ext(source), ".png") {
 		return nil, fmt.Errorf("仅支持 PNG 图片")
 	}
+	raw, err := os.ReadFile(source)
+	if err != nil {
+		return nil, fmt.Errorf("读取图片失败：%w", err)
+	}
+	// Bring the picture to the shipped icon format first: the hash (and thus
+	// the file name) is computed over the normalized bytes, so re-uploading
+	// the same picture stays idempotent even if the source resolution differs.
+	data, err := normalizeIcon(raw, iconSize)
+	if err != nil {
+		return nil, err
+	}
 	name := filepath.Base(source)
+	// The client resolves item.txt's icon column with a conservative loader:
+	// every shipped name is [A-Za-z0-9_-], and a name carrying spaces,
+	// parentheses or CJK (everything a browser download appends) fails to
+	// load in game, which then falls back to the donor's picture. Keep a
+	// name that already follows the shipped convention; otherwise rename by
+	// content hash.
+	if !safeIconName(name) {
+		sum := sha256.Sum256(data)
+		name = "custom_" + hex.EncodeToString(sum[:5]) + ".png"
+	}
 	dir := filepath.Join(client, "Data", "UI", "Picture", "ItemIcon")
 	if err = os.MkdirAll(dir, 0700); err != nil {
 		return nil, err
 	}
 	dest := filepath.Join(dir, name)
-	if err = copyFile(source, dest); err != nil {
+	if err = os.WriteFile(dest, data, 0600); err != nil {
 		return nil, fmt.Errorf("复制图片失败：%w", err)
 	}
 	return map[string]any{"icon": "Picture\\ItemIcon\\" + name, "message": "已上传图标 " + name}, nil
 }
 
-func copyFile(src, dst string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
+// safeIconName mirrors the shipped icon naming: plain ASCII letters, digits,
+// underscore and dash in the stem, any-case .png extension.
+func safeIconName(name string) bool {
+	if !strings.EqualFold(filepath.Ext(name), ".png") {
+		return false
 	}
-	defer in.Close()
-	out, err := os.Create(dst)
-	if err != nil {
-		return err
+	stem := strings.TrimSuffix(name, filepath.Ext(name))
+	if stem == "" {
+		return false
 	}
-	defer out.Close()
-	_, err = io.Copy(out, in)
-	return err
+	for _, r := range stem {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_', r == '-':
+		default:
+			return false
+		}
+	}
+	return true
 }
