@@ -222,10 +222,18 @@ func applyRemaps(a *archive, state *weaponState, items []Item) (*archive, error)
 						return "\n" + encoded + "\n</AnmInfo>"
 					})
 				} else {
-					if strings.Count(animation, block.original) != 1 {
-						return nil, fmt.Errorf("动作定义无法唯一替换")
+					target := block.original
+					if strings.Count(animation, target) != 1 {
+						// An earlier stage of this same pass may already have
+						// rewritten this very block (two states can remap onto
+						// one action), so the pristine text is gone: match by id.
+						found, ok := currentBlock(animation, strings.TrimSpace(block.node.get("id")))
+						if !ok {
+							return nil, fmt.Errorf("动作定义无法唯一替换")
+						}
+						target = found
 					}
-					animation = strings.Replace(animation, block.original, encoded, 1)
+					animation = strings.Replace(animation, target, encoded, 1)
 				}
 				animations[file] = animation
 			}

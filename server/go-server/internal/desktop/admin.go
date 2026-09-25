@@ -64,12 +64,15 @@ type Request struct {
 	TemplateWeapon   int                              `json:"template_weapon"`
 	TemplateStage    int                              `json:"template_stage"`
 	Transitions      []ComboTransition                `json:"transitions"`
+	ComboRule        *ComboRuleSet                    `json:"combo_rule,omitempty"`
 	Target           string                           `json:"target"`
 	Path             string                           `json:"path"`
 	Directory        string                           `json:"directory"`
 	Blueprint        *Blueprint                       `json:"blueprint,omitempty"`
 	Revision         string                           `json:"revision"`
 	Rules            []Rule                           `json:"rules"`
+	Include          []string                         `json:"include,omitempty"`
+	AppliedOnly      bool                             `json:"applied_only,omitempty"`
 }
 type Admin struct {
 	Root          string

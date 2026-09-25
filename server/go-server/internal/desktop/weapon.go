@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 )
 
@@ -159,6 +160,10 @@ func (a *archive) xml(name string) (*xmlNode, error) {
 type Buff struct {
 	ID   int    `json:"id"`
 	Name string `json:"name"`
+	// Desc 是 ustate.xml 注释里"名字"后面的那段效果说明。游戏配置经常在这一句里
+	// 写明副作用（type=27 就写着「被动状态，level值无效 操作键都乱掉」），
+	// 不显示出来的话，用户选了个让操作失灵的状态也看不出来。
+	Desc string `json:"desc,omitempty"`
 }
 
 func buffs(a *archive) ([]Buff, error) {
@@ -166,7 +171,10 @@ func buffs(a *archive) ([]Buff, error) {
 	if err != nil {
 		return nil, err
 	}
-	result := []Buff{{0, "保持原效果"}, {-1, "清除原有 BUFF"}}
+	result := []Buff{
+		{ID: 0, Name: "保持原效果"},
+		{ID: -1, Name: "清除原有 BUFF"},
+	}
 	label := ""
 	for _, node := range root.children {
 		if node.comment {
@@ -187,20 +195,37 @@ func buffs(a *archive) ([]Buff, error) {
 			if err != nil {
 				return nil, err
 			}
-			name := label
+			// 注释形如「恐惧，被动状态，level值无效操作键都乱掉」：
+			// 第一个标点前是名字，后面全是效果说明。
+			// 必须按 rune 切：全角逗号占 3 字节，用字节索引切会留下半个字。
+			name, desc := strings.TrimSpace(label), ""
+			runes := []rune(label)
+			cut := -1
+			for i, r := range runes {
+				if r == '，' || r == ',' || r == '、' {
+					cut = i
+					break
+				}
+			}
+			if cut > 0 && cut+1 < len(runes) {
+				name = strings.TrimSpace(string(runes[:cut]))
+				desc = strings.TrimSpace(string(runes[cut+1:]))
+			}
 			if id == 1 {
 				name = "中毒"
 			} else if id == 37 {
 				name = "燃烧（献祭燃烧）"
 			}
-			runes := []rune(name)
-			if len(runes) > 35 {
-				name = string(runes[:35])
+			if runes := []rune(name); len(runes) > 20 {
+				name = string(runes[:20])
+			}
+			if runes := []rune(desc); len(runes) > 60 {
+				desc = string(runes[:60])
 			}
 			if name == "" {
 				name = fmt.Sprintf("异常状态 %d", id)
 			}
-			result = append(result, Buff{id, name})
+			result = append(result, Buff{ID: id, Name: name, Desc: desc})
 		}
 		label = ""
 	}
@@ -404,6 +429,28 @@ func actionKey(action string) string {
 		return ""
 	}
 	return action[:4] + "/" + strconv.Itoa(id)
+}
+
+// currentBlock returns the text of the one <AnmDesc> block inside animation
+// whose id equals want. A single pass can rewrite the same block more than
+// once — two states of one weapon may remap onto the same action — and each
+// rewrite starts from the file as it stands *now*, so the pristine text
+// inspect() captured is gone by the second visit. Matching by id keeps that
+// rewrite working instead of failing with "动作定义无法唯一替换".
+func currentBlock(animation, want string) (string, bool) {
+	found := ""
+	count := 0
+	for _, candidate := range animationPattern.FindAllString(animation, -1) {
+		node, err := parseXML(candidate)
+		if err != nil {
+			continue
+		}
+		if strings.TrimSpace(node.get("id")) == want {
+			found = candidate
+			count++
+		}
+	}
+	return found, count == 1
 }
 
 func inspect(a *archive, items []Item) (*inspection, error) {
@@ -863,8 +910,16 @@ func render(a *archive, items []Item, plans map[string][]Rule) ([]byte, error) {
 					node.set("skillproid", id)
 				}
 			})
-			if strings.Count(animation, source.original) != 1 {
-				return nil, fmt.Errorf("动作定义无法唯一替换")
+			target := source.original
+			if strings.Count(animation, target) != 1 {
+				// An earlier rule in this pass may already have rewritten the
+				// block, so the pristine text is gone: fall back to matching by
+				// id against the current file contents.
+				found, ok := currentBlock(animation, strings.TrimSpace(source.node.get("id")))
+				if !ok {
+					return nil, fmt.Errorf("动作定义无法唯一替换")
+				}
+				target = found
 			}
 			encoded, err := changed.serialize()
 			if err != nil {
@@ -877,7 +932,7 @@ func render(a *archive, items []Item, plans map[string][]Rule) ([]byte, error) {
 				}
 				animation = ending.ReplaceAllStringFunc(animation, func(string) string { return "\n" + encoded + "\n</AnmInfo>" })
 			} else {
-				animation = strings.Replace(animation, source.original, encoded, 1)
+				animation = strings.Replace(animation, target, encoded, 1)
 			}
 			animations[file] = animation
 		}
@@ -1243,11 +1298,56 @@ type weaponState struct {
 	// from its action row, and any remap for it is ignored.
 	Remaps          map[string]map[int]*StageRemap `json:"remaps,omitempty"`
 	Cleared         map[string]map[int]bool        `json:"cleared,omitempty"`
-	ExtraProperties map[string]ExtraProperty        `json:"extra_properties,omitempty"`
+	ExtraProperties map[string]ExtraProperty       `json:"extra_properties,omitempty"`
 	// Chains holds an author-authored combo state machine per weapon. When a
 	// weapon has an entry here, it replaces whatever delayacttable.xml says
 	// (including a borrowed donor table) with exactly these transitions.
 	Chains map[string][]ComboTransition `json:"chains,omitempty"`
+	// ComboRules holds an author-authored rule set per weapon for
+	// comborule.xml (per-skill hit limits and the black/white connection
+	// lists). Unlike Chains it is additive: an entry replaces only the blocks
+	// that weapon owns, and the shipped rules of other weapons stay intact.
+	ComboRules map[string]ComboRuleSet `json:"combo_rules,omitempty"`
+}
+
+// 武器配置操作的独占锁。两个细节缺一不可：
+//
+//   - **排队重试**：GM 前端每发一个 RPC 就新起一个后端进程，页面选中一把武器
+//     时 weapon_combo_chain 与 weapon_combo_rule 是并发发出的，两个都要这把锁。
+//     以前谁先创建成功谁赢，后到的直接返回错误——表现为「连招限制卡片时有时无」，
+//     而且失败信息只在前端 catch 里被吞掉，看起来就像这把武器没有限制。
+//   - **接管陈锁**：进程被强杀（taskkill /F）时 defer 不会执行，锁文件会留成
+//     永久路障，之后每一次操作都失败。锁文件比 staleLockAge 还旧就认为持有者
+//     已经没了（正常操作最多几十秒）。
+const (
+	weaponLockWait  = 30 * time.Second
+	weaponLockRetry = 50 * time.Millisecond
+	staleLockAge    = 2 * time.Minute
+)
+
+func acquireWeaponLock(folder string) (func(), error) {
+	lockPath := filepath.Join(folder, "editing.lock")
+	deadline := time.Now().Add(weaponLockWait)
+	for {
+		file, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+		if err == nil {
+			fmt.Fprintf(file, "pid %d\n%s\n", os.Getpid(), time.Now().Format(time.RFC3339))
+			file.Close()
+			return func() { os.Remove(lockPath) }, nil
+		}
+		if !os.IsExist(err) {
+			return nil, err
+		}
+		if info, statErr := os.Stat(lockPath); statErr == nil &&
+			time.Since(info.ModTime()) > staleLockAge {
+			os.Remove(lockPath)
+			continue
+		}
+		if time.Now().After(deadline) {
+			return nil, fmt.Errorf("另一项武器配置操作正在进行，请稍后重试：%w", err)
+		}
+		time.Sleep(weaponLockRetry)
+	}
 }
 
 func weaponHandle(request Request, client string, items []Item, folder string) (any, error) {
@@ -1260,13 +1360,11 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 	if err := os.MkdirAll(folder, 0700); err != nil {
 		return nil, err
 	}
-	lockPath := filepath.Join(folder, "editing.lock")
-	lock, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	release, err := acquireWeaponLock(folder)
 	if err != nil {
-		return nil, fmt.Errorf("另一项武器配置操作正在进行，请稍后重试：%w", err)
+		return nil, err
 	}
-	lock.Close()
-	defer os.Remove(lockPath)
+	defer release()
 	statePath := filepath.Join(folder, "settings.json")
 	state := weaponState{Drafts: map[string][]Rule{}, Applied: map[string][]Rule{}, Created: map[string]Blueprint{}}
 	stateBytes, err := os.ReadFile(statePath)
@@ -1298,6 +1396,9 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 	}
 	if state.Chains == nil {
 		state.Chains = map[string][]ComboTransition{}
+	}
+	if state.ComboRules == nil {
+		state.ComboRules = map[string]ComboRuleSet{}
 	}
 	// The edit set is rendered onto whichever client the GM currently points at,
 	// each client directory keeping its own baseline: the user can switch
@@ -1376,7 +1477,7 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 		if err != nil {
 			return nil, err
 		}
-		result := map[string]any{"weapons": info.weapons, "effects": effects(info), "fields": propertyFields, "buffs": buffRows, "drafts": state.Drafts, "applied": state.Applied, "created": state.Created, "combos": state.Combos, "chains": state.Chains, "remaps": state.Remaps, "extra_properties": state.ExtraProperties, "cleared": state.Cleared, "states": itemactStates(base), "client": describeClient(entry, folder), "clients": describeBaselines(&state, folder), "models": weaponModels(client), "types": weaponTypes, "used_ids": usedWeaponIDs(source, state.Created), "blueprint_min": blueprintMinID, "blueprint_max": blueprintMaxID, "revision": revision, "folder": folder}
+		result := map[string]any{"weapons": info.weapons, "effects": effects(info), "fields": propertyFields, "buffs": buffRows, "drafts": state.Drafts, "applied": state.Applied, "created": state.Created, "combos": state.Combos, "chains": state.Chains, "combo_rules": state.ComboRules, "remaps": state.Remaps, "extra_properties": state.ExtraProperties, "cleared": state.Cleared, "states": itemactStates(base), "client": describeClient(entry, folder), "clients": describeBaselines(&state, folder), "models": weaponModels(client), "types": weaponTypes, "used_ids": usedWeaponIDs(source, state.Created), "blueprint_min": blueprintMinID, "blueprint_max": blueprintMaxID, "revision": revision, "folder": folder}
 		if remapError != "" {
 			result["remap_error"] = remapError
 		}
@@ -1396,6 +1497,7 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 			delete(state.Remaps, key)
 			delete(state.Cleared, key)
 			delete(state.Chains, key)
+			delete(state.ComboRules, key)
 			message = "已移除自建武器；重新应用或发布后才会从配置包消失"
 		} else {
 			if request.Blueprint == nil {
@@ -1569,6 +1671,74 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 			"revision":  revision,
 		}, nil
 	}
+	// weapon_combo_rule returns the comborule.xml limits of one weapon: the
+	// per-skill hit limits, the black/white connection lists, the rules the
+	// client ships with, and every skillproid the weapon's action blocks
+	// actually declare. Offering the last one is what lets the editor hand out
+	// a dropdown instead of a free-text box, because a rule naming a skill no
+	// block references simply never fires.
+	if request.Operation == "weapon_combo_rule" {
+		if request.Weapon == 0 {
+			return nil, fmt.Errorf("请选择武器")
+		}
+		return comboRuleView(source, info, &state, strconv.Itoa(request.Weapon), revision), nil
+	}
+	// weapon_combo_rule_set replaces the rule blocks a weapon owns. It refuses
+	// to rewrite a block that ships in the client, so official data stays
+	// recoverable from the baseline alone; adding limits to a weapon the client
+	// does not constrain yet is allowed.
+	if request.Operation == "weapon_combo_rule_set" {
+		if request.Weapon == 0 {
+			return nil, fmt.Errorf("请选择武器")
+		}
+		key := strconv.Itoa(request.Weapon)
+		actionText, err := base.text("itemact.txt")
+		if err != nil {
+			return nil, err
+		}
+		if actionRowIndex(actionText)[key] == nil {
+			return nil, fmt.Errorf("武器 %s 不在本客户端的动作表中", key)
+		}
+		set := ComboRuleSet{}
+		if request.ComboRule != nil {
+			set = *request.ComboRule
+		}
+		if err := validateComboRuleSet(set); err != nil {
+			return nil, err
+		}
+		_, overridden := state.ComboRules[key]
+		official := false
+		if text, err := source.text("comborule.xml"); err == nil {
+			official = comboRuleWeapons(text)[key]
+		}
+		if !comboRuleEditable(&state, key, official, overridden) {
+			return nil, fmt.Errorf("武器 %s 的连招限制由客户端内置，编辑器只读；不会改写官方数据", key)
+		}
+		if set.empty() {
+			delete(state.ComboRules, key)
+		} else {
+			state.ComboRules[key] = set
+		}
+		encoded, err := json.MarshalIndent(state, "", "  ")
+		if err != nil {
+			return nil, err
+		}
+		if err = atomicWrite(statePath, encoded); err != nil {
+			return nil, err
+		}
+		message := fmt.Sprintf("已保存连招限制（%d 条命中上限 / %d 条黑名单 / %d 条白名单）；应用后生效",
+			len(set.Max), len(set.Black), len(set.White))
+		if set.empty() {
+			message = "已清除定制的连招限制"
+			if !overridden && !official {
+				message = "该武器没有定制或内置的连招限制，未做改动"
+			}
+		}
+		view := comboRuleView(source, info, &state, key,
+			digest(append(append([]byte(nil), current...), encoded...)))
+		view["message"] = message
+		return view, nil
+	}
 	// weapon_clients reports the selected client and every client we have a
 	// baseline for. weapon_client_rebase re-captures the selected client's
 	// baseline after something else replaced its config.spf2 — its own updater
@@ -1690,28 +1860,28 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 					}
 				}
 				message = "已取消该状态的重映射"
-		} else {
-			if state.Remaps[key] == nil {
-				state.Remaps[key] = map[int]*StageRemap{}
-			}
-			state.Remaps[key][request.Stage] = &StageRemap{Action: action, PropertyID: propertyID, Label: strings.TrimSpace(request.Label)}
-			// Defining a state again re-activates a column the author had
-			// deleted earlier: the remap wins over the clearing.
-			if state.Cleared[key] != nil {
-				delete(state.Cleared[key], request.Stage)
-				if len(state.Cleared[key]) == 0 {
-					delete(state.Cleared, key)
+			} else {
+				if state.Remaps[key] == nil {
+					state.Remaps[key] = map[int]*StageRemap{}
 				}
+				state.Remaps[key][request.Stage] = &StageRemap{Action: action, PropertyID: propertyID, Label: strings.TrimSpace(request.Label)}
+				// Defining a state again re-activates a column the author had
+				// deleted earlier: the remap wins over the clearing.
+				if state.Cleared[key] != nil {
+					delete(state.Cleared[key], request.Stage)
+					if len(state.Cleared[key]) == 0 {
+						delete(state.Cleared, key)
+					}
+				}
+				// A remap that changes the action or hit property invalidates
+				// any hit-property edits already saved for this state: they
+				// referenced the old nodes and would fail validation against
+				// the remapped structure.
+				if action != "" || propertyID != "" {
+					clearStageRule(&state, key, request.Stage, action != "")
+				}
+				message = "已登记重映射；保存效果并应用后写入配置包"
 			}
-			// A remap that changes the action or hit property invalidates
-			// any hit-property edits already saved for this state: they
-			// referenced the old nodes and would fail validation against
-			// the remapped structure.
-			if action != "" || propertyID != "" {
-				clearStageRule(&state, key, request.Stage, action != "")
-			}
-			message = "已登记重映射；保存效果并应用后写入配置包"
-		}
 		}
 		encoded, err := json.MarshalIndent(state, "", "  ")
 		if err != nil {
@@ -1846,6 +2016,27 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 			return nil, err
 		}
 		return weaponRelease{Data: data, Notes: "包含武器：" + strings.Join(names, "、") + "\n\n" + request.Notes}, nil
+	}
+	// 导出发版包：配置和素材一起给，解压即覆盖客户端根目录。weapon_publish
+	// 只传 Data/config.spf2，自制武器一旦带自己的模型/动作就会缺文件。
+	if request.Operation == "weapon_package" {
+		plans := make(map[string][]Rule)
+		for id, saved := range state.Applied {
+			plans[id] = saved
+		}
+		// 默认和「更新到线上」一致：草稿也进包。勾选"只包含已应用"时
+		// 只发本机客户端里已经验证过的那部分，未应用的编辑不带走。
+		if !request.AppliedOnly {
+			for id, saved := range state.Drafts {
+				plans[id] = saved
+			}
+		}
+		// 只有页面里真的有规则时才覆盖：导包时传空 rules 是常见情况，
+		// 拿它覆盖会把这把武器已保存的方案抹掉（包里就少了一套效果）。
+		if len(rules) > 0 {
+			plans[key] = rules
+		}
+		return weaponPackage(request, client, folder, source, base, items, &state, info, plans)
 	}
 	backup := ""
 	message := "方案已保存，尚未应用到游戏"

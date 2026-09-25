@@ -10,6 +10,18 @@ class WeaponConfigPage extends StatefulWidget {
   State<WeaponConfigPage> createState() => _WeaponConfigPageState();
 }
 
+/// 发版包可勾选的内容分组，和后端 weapon_package.go 的 packageSections 一致。
+/// 顺序即界面上的勾选顺序。
+const packageSections = <String, String>{
+  'config': '配置包（config.spf2）',
+  'model': '模型 .dff',
+  'texture': '贴图 .png',
+  'icon': '图标',
+  'animation': '动作 .anm',
+  'audio': '音效 .wav',
+  'effect': '特效',
+};
+
 class _WeaponConfigPageState extends State<WeaponConfigPage> {
   Map<String, dynamic>? data, weapon;
   Map<String, dynamic> _clientInfo = {};
@@ -20,6 +32,8 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
   bool busy = true, dirty = false, failed = false;
   String? selectedAction;
   int editorVersion = 0;
+  /// 最近一次导出发版包的结果（后端 packageResult）；空 map 表示还没导出过。
+  Map<String, dynamic> exportResult = {};
 
   @override
   void initState() {
@@ -261,6 +275,24 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
   String? chainOld, chainKey, chainNew;
   String? addStatePick;
 
+  /// 连招限制（comborule.xml）的当前视图：某一招最多命中几次，以及
+  /// 「两招不能连」（黑名单）/「只能接指定招」（白名单）。
+  /// 它不是连招链的替代品——连招链决定按键能不能推到下一段，这里决定推到
+  /// 下一段之后还能不能打中。规则里的编号是动作块的被动编号
+  /// （skillproid），不是状态号，所以下拉选项必须来自服务端解析结果。
+  Map<String, dynamic> comboRuleInfo = {};
+  bool comboRuleEditing = false;
+  List<Map<String, dynamic>> comboRuleMaxDraft = [];
+  List<Map<String, dynamic>> comboRuleBlackDraft = [];
+  List<Map<String, dynamic>> comboRuleWhiteDraft = [];
+  /// 下拉框用 initialValue 只在创建时生效，草稿整体换掉时必须换 key，
+  /// 否则取消编辑后界面还留着被丢弃的选择。
+  int comboRuleVersion = 0;
+  /// 读取失败的原因。以前这里静默清空 comboRuleInfo，卡片直接消失，看起来
+  /// 和「这把武器没有限制」一模一样——后端还是旧二进制（不认识
+  /// weapon_combo_rule）时会这样，极难自查。现在把原因留在卡片上。
+  String comboRuleFailure = '';
+
   /// 兜底按键表：客户端表读不出来时用（编号与 delayacttable.xml 注释一致）。
   static const chainKeys = [
     {'v': '1', 'l': '普通攻击'},
@@ -428,6 +460,190 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
     }
   }
 
+  /// 读取某把武器在 comborule.xml 里的限制。只在选中武器时调用：
+  /// 选项表（本武器动作块真正用到的被动编号）只有服务端解得出来。
+  Future<void> refreshComboRule(dynamic weaponId) async {
+    try {
+      final result = Map<String, dynamic>.from(
+        await widget.api({'operation': 'weapon_combo_rule', 'weapon': weaponId}),
+      );
+      if (!mounted) return;
+      setState(() {
+        comboRuleInfo = result;
+        comboRuleFailure = '';
+        comboRuleEditing = false;
+        syncComboRuleDraft();
+      });
+    } catch (error) {
+      // 读不出来时不再静默隐藏：把原因显示在卡片上。否则「后端是旧二进制」
+      // 和「这把武器本来就没有限制」在界面上完全一样，只能靠猜。
+      if (mounted) {
+        setState(() {
+          comboRuleInfo = {};
+          comboRuleFailure = '$error';
+          comboRuleEditing = false;
+          syncComboRuleDraft();
+        });
+      }
+    }
+  }
+
+  String _comboText(dynamic value) => value == null ? '' : '$value';
+
+  /// 把服务端返回的规则摊平进三份草稿。编辑自建武器时，官方已经写好的块
+  /// 会作为起点（服务端只允许改写自建武器与未登记限制的武器）。
+  void syncComboRuleDraft() {
+    comboRuleVersion++;
+    final rules = Map<String, dynamic>.from(
+      comboRuleInfo['rules'] as Map? ?? const {},
+    );
+    comboRuleMaxDraft = [
+      for (final e in (rules['max'] as List? ?? []))
+        {
+          'skill': _comboText(e['skill']),
+          'max_combo': _comboText(e['max_combo']),
+          'exceed_state': _comboText(e['exceed_state']),
+          'exceed_skill_pro_id': _comboText(e['exceed_skill_pro_id']),
+        },
+    ];
+    comboRuleBlackDraft = [
+      for (final e in (rules['black'] as List? ?? []))
+        {'prev': _comboText(e['prev']), 'cur': _comboText(e['cur'])},
+    ];
+    comboRuleWhiteDraft = [
+      for (final e in (rules['white'] as List? ?? []))
+        {'prev': _comboText(e['prev']), 'cur': _comboText(e['cur'])},
+    ];
+  }
+
+  bool get comboRuleEditable => comboRuleInfo['editable'] == true;
+
+  bool get comboRuleCustomised => comboRuleInfo['overridden'] == true;
+
+  int get comboRuleCount =>
+      comboRuleMaxDraft.length +
+      comboRuleBlackDraft.length +
+      comboRuleWhiteDraft.length;
+
+  void startComboRuleEdit() {
+    setState(() {
+      comboRuleEditing = true;
+    });
+  }
+
+  void cancelComboRuleEdit() {
+    setState(() {
+      comboRuleEditing = false;
+      syncComboRuleDraft();
+    });
+  }
+
+  /// 保存（或清空）本武器的连招限制。清空走同一接口：后端收到空规则集就
+  /// 把编辑器自己写的那一块整体删掉，官方块仍然原样保留。
+  Future<void> saveComboRule({bool clear = false}) async {
+    final prefer = weapon!['id'] as int?;
+    setState(() {
+      busy = true;
+      failed = false;
+      message = clear ? '正在清除连招限制…' : '正在保存连招限制…';
+    });
+    try {
+      final result = Map<String, dynamic>.from(await widget.api({
+        'operation': 'weapon_combo_rule_set',
+        'weapon': weapon!['id'],
+        'combo_rule': clear
+            ? const {'max': [], 'black': [], 'white': []}
+            : {
+                'max': [
+                  for (final e in comboRuleMaxDraft)
+                    {
+                      'skill': e['skill'],
+                      'max_combo': e['max_combo'],
+                      'exceed_state': e['exceed_state'] ?? '',
+                      'exceed_skill_pro_id': e['exceed_skill_pro_id'] ?? '',
+                    },
+                ],
+                'black': [
+                  for (final e in comboRuleBlackDraft)
+                    {'prev': e['prev'], 'cur': e['cur']},
+                ],
+                'white': [
+                  for (final e in comboRuleWhiteDraft)
+                    {'prev': e['prev'], 'cur': e['cur']},
+                ],
+              },
+      }));
+      if (!mounted) return;
+      setState(() {
+        busy = false;
+        comboRuleEditing = false;
+        message = '${result['message'] ?? '已保存'}';
+      });
+      await load(prefer: prefer);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          busy = false;
+          failed = true;
+          message = '$e';
+        });
+      }
+    }
+  }
+
+  /// 招式下拉选项。编号不是状态号也不是武器号，而是动作块里 <Anm> 上的
+  /// skillproid；官方数据里还有一批编号在本武器的动作块里找不到（多半是
+  /// 老版本留下的），它们必须照原样出现在下拉里，否则一是会显示成空值，
+  /// 二是用户一保存就悄悄改掉了官方语义。
+  List<DropdownMenuItem<String>> comboRuleSkillItems(Set<String> extra) {
+    final items = <Map<String, String>>[
+      for (final o in (comboRuleInfo['skills'] as List? ?? []))
+        {
+          'v': '${o['skill']}',
+          'l': '${o['skill']} · ${o['state']} · ${o['label']}',
+          'known': '1',
+        },
+    ];
+    final seen = {for (final o in items) o['v']!};
+    for (final value in extra) {
+      if (value.isEmpty || seen.contains(value)) continue;
+      seen.add(value);
+      items.add({'v': value, 'l': '$value ⚠ 本武器动作块没有引用', 'known': '0'});
+    }
+    return [
+      for (final o in items)
+        DropdownMenuItem(
+          value: o['v'],
+          child: Text(
+            o['l']!,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              color: o['known'] == '1' ? null : Colors.deepOrange.shade800,
+            ),
+          ),
+        ),
+    ];
+  }
+
+  Set<String> get comboRuleUsedSkills => {
+    for (final e in comboRuleMaxDraft) ...[
+      _comboText(e['skill']),
+      _comboText(e['exceed_skill_pro_id']),
+    ],
+    for (final e in [...comboRuleBlackDraft, ...comboRuleWhiteDraft]) ...[
+      _comboText(e['prev']),
+      _comboText(e['cur']),
+    ],
+  };
+
+  /// 官方数据里编号对不上本武器动作块的条目，服务端会列出来。只提示、
+  /// 不阻止保存：纪念版/克隆武器沿用供体编号就是这种情况，是合法的。
+  List<String> get comboRuleUnknownSkills => [
+    for (final v in (comboRuleInfo['unknown_skills'] as List? ?? [])) '$v',
+  ];
+
   /// 连招链：按「老状态」分组展示 delayacttable.xml 的状态转移，可编辑。
   /// 自建武器即使一条转移都没有也要显示这张卡片，否则没法从零开始编连招。
   Widget comboChainCard() {
@@ -516,6 +732,477 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
               ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// 连招限制读不出来时的占位卡片。只提示、不挡住别的卡片；原因原文放在
+  /// 下面，方便直接看出是「exe 旁边的后端还是旧版本」还是别的报错。
+  Widget comboRuleUnavailable() {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.rule_folder_outlined, size: 18),
+                const SizedBox(width: 8),
+                const Text(
+                  '连招限制 · 读取失败',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              '读不到这把武器的连招限制表。刚更新过 GM 的话，先完全关闭再重新打开'
+              '（旧实例仍在跑启动时加载的那份代码）；也可能是 GM 目录旁边的 '
+              'kungfu-desktop-admin.exe 还是旧版本。',
+              style: TextStyle(fontSize: 12, color: Colors.deepOrange),
+            ),
+            const SizedBox(height: 4),
+            SelectableText(
+              comboRuleFailure,
+              style: const TextStyle(fontSize: 11, color: Colors.black54),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 连招限制（comborule.xml）卡片。
+  ///
+  /// 和连招链的分工值得写在卡片上：连招链决定「按下这个键能不能推到下一段」，
+  /// 这张表决定「推过去之后还能不能打中」。玩家反馈的「第二下挥空、没有伤害」
+  /// 通常出在这里——某一招的命中次数用完了。
+  ///
+  /// 规则里的编号是动作块的 skillproid，既不是状态号也不是武器号，所以只给
+  /// 下拉、不给手填：手填一个客户端根本不引用的编号，规则会静默失效。
+  Widget comboRuleCard() {
+    if (comboRuleInfo.isEmpty && comboRuleFailure.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    if (comboRuleInfo.isEmpty) return comboRuleUnavailable();
+    final editing = comboRuleEditing;
+    final editable = comboRuleEditable;
+    final skillItems = comboRuleSkillItems(comboRuleUsedSkills);
+    // 两种模式共用同一份草稿：只读时它就是从服务端同步下来的规则，编辑时
+    // 它才是真正的草稿。分开渲染就会出现「有官方条目却显示（无）」这类偏差。
+    final maxRows = comboRuleMaxDraft;
+    final blackRows = comboRuleBlackDraft;
+    final whiteRows = comboRuleWhiteDraft;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.rule_folder_outlined, size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  '连招限制 · $comboRuleCount 条',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    '一招最多命中几次 / 两招不能连 / 只能接指定招',
+                    style: TextStyle(fontSize: 11, color: Colors.black54),
+                  ),
+                ),
+                if (!editing && editable)
+                  TextButton.icon(
+                    onPressed: busy ? null : startComboRuleEdit,
+                    icon: const Icon(Icons.edit, size: 16),
+                    label: const Text('编辑'),
+                  ),
+                if (editing) ...[
+                  TextButton(
+                    onPressed: busy ? null : cancelComboRuleEdit,
+                    child: const Text('取消'),
+                  ),
+                  FilledButton.icon(
+                    onPressed: busy ? null : () => saveComboRule(),
+                    icon: const Icon(Icons.check, size: 16),
+                    label: const Text('保存限制'),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 6),
+            if (!editable)
+              comboRuleNotice(
+                '本客户端已内置这把武器的连招限制（官方数据），编辑器只读。'
+                '下面是游戏当前真正生效的条目。',
+                Colors.blueGrey,
+              ),
+            if (comboRuleUnknownSkills.isNotEmpty)
+              comboRuleNotice(
+                '这些编号在本武器的动作块里找不到：${comboRuleUnknownSkills.join('、')}。'
+                '克隆/纪念版武器沿用供体编号属正常；若是自己填错的，这条规则不会生效。',
+                Colors.orange,
+              ),
+            if (!editing && comboRuleCount == 0)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 4),
+                child: Text(
+                  '没有限制：本武器所有招式的命中次数都不受这张表约束。',
+                  style: TextStyle(fontSize: 12, color: Colors.black54),
+                ),
+              ),
+            comboRuleGroup(
+              title: '命中上限',
+              hint: '某一招打满几次后不再命中',
+              editing: editing,
+              count: maxRows.length,
+              onAdd: () => setState(() => comboRuleMaxDraft.add({
+                'skill': '',
+                'max_combo': '1',
+                'exceed_state': '',
+                'exceed_skill_pro_id': '',
+              })),
+              rows: [
+                if (editing)
+                  for (var i = 0; i < maxRows.length; i++)
+                    comboRuleMaxRow(i, maxRows[i], skillItems),
+                if (!editing)
+                  for (final e in maxRows) comboRuleBullet(comboRuleMaxSummary(e)),
+              ],
+            ),
+            comboRuleGroup(
+              title: '黑名单',
+              hint: '这两招不能连着出；前后填同一个 = 禁止连续放同一招',
+              editing: editing,
+              count: blackRows.length,
+              onAdd: () => setState(
+                () => comboRuleBlackDraft.add({'prev': '', 'cur': ''}),
+              ),
+              rows: [
+                if (editing)
+                  for (var i = 0; i < blackRows.length; i++)
+                    comboRuleLinkRow(
+                      'black',
+                      i,
+                      blackRows,
+                      blackRows[i],
+                      skillItems,
+                    ),
+                if (!editing)
+                  for (final e in blackRows)
+                    comboRuleBullet(
+                      '不能连：${_comboText(e['prev'])} → ${_comboText(e['cur'])}',
+                    ),
+              ],
+            ),
+            comboRuleGroup(
+              title: '白名单',
+              hint: '前一招之后只能接这几招',
+              editing: editing,
+              count: whiteRows.length,
+              onAdd: () => setState(
+                () => comboRuleWhiteDraft.add({'prev': '', 'cur': ''}),
+              ),
+              rows: [
+                if (editing)
+                  for (var i = 0; i < whiteRows.length; i++)
+                    comboRuleLinkRow(
+                      'white',
+                      i,
+                      whiteRows,
+                      whiteRows[i],
+                      skillItems,
+                    ),
+                if (!editing)
+                  for (final e in whiteRows)
+                    comboRuleBullet(
+                      '只能接：${_comboText(e['prev'])} → ${_comboText(e['cur'])}',
+                    ),
+              ],
+            ),
+            if (!editing && editable && comboRuleCustomised)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: TextButton(
+                  onPressed: busy ? null : () => saveComboRule(clear: true),
+                  child: const Text(
+                    '清除定制（回到客户端原样）',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ),
+              ),
+            if (!editing && editable && !comboRuleCustomised)
+              const Padding(
+                padding: EdgeInsets.only(top: 4),
+                child: Text(
+                  '保存后需要点「应用到游戏」才会写进配置包；那一步会连带把本武器'
+                  '「连招与命中效果」里已保存的伤害方案一起写入。',
+                  style: TextStyle(fontSize: 11, color: Colors.black54),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget comboRuleNotice(String text, MaterialColor tone) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: tone.shade50,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(fontSize: 12, color: tone.shade900),
+      ),
+    );
+  }
+
+  Widget comboRuleBullet(String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1),
+      child: Text(
+        '· $text',
+        style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+      ),
+    );
+  }
+
+  String comboRuleMaxSummary(Map e) {
+    var text =
+        '${_comboText(e['skill'])} → 最多命中 ${_comboText(e['max_combo'])} 次';
+    final state = _comboText(e['exceed_state']);
+    final skill = _comboText(e['exceed_skill_pro_id']);
+    if (state.isNotEmpty) text += '；超出后改用状态 $state';
+    if (skill.isNotEmpty) text += ' / 被动 $skill';
+    return text;
+  }
+
+  /// 三组条目共用的外壳：标题 + 说明 + 添加按钮 + 行。
+  Widget comboRuleGroup({
+    required String title,
+    required String hint,
+    required bool editing,
+    required int count,
+    required VoidCallback onAdd,
+    required List<Widget> rows,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  hint,
+                  style: const TextStyle(fontSize: 11, color: Colors.black54),
+                ),
+              ),
+              if (editing)
+                TextButton.icon(
+                  onPressed: busy ? null : onAdd,
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('添加', style: TextStyle(fontSize: 12)),
+                ),
+            ],
+          ),
+          if (!editing && count == 0)
+            const Text(
+              '· （无）',
+              style: TextStyle(fontSize: 12, color: Colors.black54),
+            ),
+          ...rows,
+        ],
+      ),
+    );
+  }
+
+  Widget comboRuleMaxRow(
+    int index,
+    Map<String, dynamic> row,
+    List<DropdownMenuItem<String>> skillItems,
+  ) {
+    final skill = _comboText(row['skill']);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  key: ValueKey('crf-max-skill-$comboRuleVersion-$index'),
+                  initialValue: skill.isEmpty ? null : skill,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: '招式（动作块被动编号）',
+                    isDense: true,
+                  ),
+                  items: skillItems,
+                  onChanged: (v) => setState(() => row['skill'] = v ?? ''),
+                ),
+              ),
+              IconButton(
+                onPressed: busy
+                    ? null
+                    : () => setState(() => comboRuleMaxDraft.removeAt(index)),
+                icon: const Icon(Icons.close, size: 16, color: Colors.deepOrange),
+                tooltip: '删除这一条',
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 2),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                SizedBox(
+                  width: 112,
+                  child: TextFormField(
+                    key: ValueKey('crf-max-count-$comboRuleVersion-$index'),
+                    initialValue: _comboText(row['max_combo']),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: const InputDecoration(
+                      labelText: '最多命中',
+                      isDense: true,
+                    ),
+                    onChanged: (v) => row['max_combo'] = v,
+                  ),
+                ),
+                SizedBox(
+                  width: 140,
+                  child: TextFormField(
+                    key: ValueKey('crf-max-state-$comboRuleVersion-$index'),
+                    initialValue: _comboText(row['exceed_state']),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(4),
+                    ],
+                    decoration: const InputDecoration(
+                      labelText: '超出后状态',
+                      hintText: '可空',
+                      isDense: true,
+                    ),
+                    onChanged: (v) => row['exceed_state'] = v,
+                  ),
+                ),
+                SizedBox(
+                  width: 240,
+                  child: DropdownButtonFormField<String>(
+                    key: ValueKey('crf-max-exceed-$comboRuleVersion-$index'),
+                    initialValue: _comboText(row['exceed_skill_pro_id']),
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: '超出后改用',
+                      isDense: true,
+                    ),
+                    items: [
+                      const DropdownMenuItem(
+                        value: '',
+                        child: Text('（不指定）', style: TextStyle(fontSize: 12)),
+                      ),
+                      ...skillItems,
+                    ],
+                    onChanged: (v) =>
+                        setState(() => row['exceed_skill_pro_id'] = v ?? ''),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget comboRuleLinkRow(
+    String kind,
+    int index,
+    List<Map<String, dynamic>> rows,
+    Map<String, dynamic> row,
+    List<DropdownMenuItem<String>> skillItems,
+  ) {
+    final prev = _comboText(row['prev']);
+    final cur = _comboText(row['cur']);
+    // 白名单的"后一招"允许为空：含义是这一招之后什么都不许接（官方 253147 就
+    // 靠它实现 ZC/ZX 只能接爆气）。不加这个选项，那种数据在编辑态会显示成
+    // "未选择"，看着像丢数据。
+    final curItems = kind == 'white'
+        ? <DropdownMenuItem<String>>[
+            const DropdownMenuItem<String>(
+              value: '',
+              child: Text('（空）之后不许接任何招'),
+            ),
+            ...skillItems,
+          ]
+        : skillItems;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Expanded(
+            child: DropdownButtonFormField<String>(
+              key: ValueKey('crf-$kind-prev-$comboRuleVersion-$index'),
+              initialValue: prev.isEmpty ? null : prev,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: '前一招',
+                isDense: true,
+              ),
+              items: skillItems,
+              onChanged: (v) => setState(() => row['prev'] = v ?? ''),
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4),
+            child: Icon(Icons.arrow_forward, size: 14),
+          ),
+          Expanded(
+            child: DropdownButtonFormField<String>(
+              key: ValueKey('crf-$kind-cur-$comboRuleVersion-$index'),
+              initialValue: cur.isEmpty
+                  ? (kind == 'white' ? '' : null)
+                  : cur,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: '后一招',
+                isDense: true,
+              ),
+              items: curItems,
+              onChanged: (v) => setState(() => row['cur'] = v ?? ''),
+            ),
+          ),
+          IconButton(
+            onPressed: busy ? null : () => setState(() => rows.removeAt(index)),
+            icon: const Icon(Icons.close, size: 16, color: Colors.deepOrange),
+            tooltip: '删除这一条',
+          ),
+        ],
       ),
     );
   }
@@ -774,6 +1461,9 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
     }).toList();
     dirty = false;
     refreshChain(value['id']);
+    // 换武器时先清掉上一把的读取失败，免得旧报错挂在新武器上。
+    comboRuleFailure = '';
+    refreshComboRule(value['id']);
   }
 
   Future<bool> discard() async =>
@@ -928,6 +1618,223 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
         });
       }
     }
+  }
+
+  /// 导出发版包。
+  ///
+  /// 产出的 zip 里路径就是客户端根目录下的相对路径（Data/config.spf2、
+  /// Data/Weapon/Model/...），交给运维后**整包解压、覆盖到客户端根目录**即可，
+  /// 不用挑文件、也不用知道哪个素材该放哪。
+  ///
+  /// 和「更新到线上」的区别：那个只把 Data/config.spf2 传上去，自制武器一旦
+  /// 带自己的模型/贴图/动作，玩家端就会缺文件 —— 这个包解决的就是这件事。
+  Future<void> exportPackage() async {
+    if (!(form.currentState?.validate() ?? false)) return;
+    final options = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (_) => _ExportDialog(
+        weaponName: '${weapon!['name']}',
+        createdCount: created.length,
+      ),
+    );
+    if (options == null || !mounted) return;
+    final include = [for (final s in (options['include'] as List? ?? [])) '$s'];
+    if (include.isEmpty) return;
+    setState(() {
+      busy = true;
+      failed = false;
+      exportResult = {};
+      message = '正在收集素材并打包，武器多、动作多时会慢一点…';
+    });
+    try {
+      final result = Map<String, dynamic>.from(
+        await widget.api({
+          'operation': 'weapon_package',
+          'weapon': weapon!['id'],
+          'all': options['all'] == true,
+          'include': include,
+          'applied_only': options['applied_only'] == true,
+          'rules': rules,
+          'revision': data!['revision'],
+        }) as Map,
+      );
+      if (!mounted) return;
+      setState(() {
+        exportResult = result;
+        busy = false;
+        message = '已导出 ${result['name']}（${sizeText(result['size'])}，'
+            '${(result['files'] as List? ?? []).length} 个素材文件）。'
+            '把包解压后覆盖到客户端根目录即可。';
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          busy = false;
+          failed = true;
+          message = '导出失败：$e';
+        });
+      }
+    }
+  }
+
+  static String sizeText(dynamic bytes) {
+    final value = (bytes is num) ? bytes.toDouble() : 0.0;
+    if (value >= 1024 * 1024) {
+      return '${(value / 1024 / 1024).toStringAsFixed(2)} MB';
+    }
+    if (value >= 1024) return '${(value / 1024).toStringAsFixed(1)} KB';
+    return '${value.toStringAsFixed(0)} B';
+  }
+
+  /// 发版包导出结果卡片：路径、分组统计、配置改动、文件清单。
+  Widget exportCard() {
+    final files = [
+      for (final f in (exportResult['files'] as List? ?? []))
+        Map<String, dynamic>.from(f as Map),
+    ];
+    final missing = [for (final m in (exportResult['missing'] as List? ?? [])) '$m'];
+    final config = [
+      for (final c in (exportResult['config_changes'] as List? ?? [])) '$c',
+    ];
+    final plans = [
+      for (final p in (exportResult['plans'] as List? ?? []))
+        Map<String, dynamic>.from(p as Map),
+    ];
+    final counts = Map<String, dynamic>.from(exportResult['counts'] as Map? ?? {});
+    final byKind = <String, List<Map<String, dynamic>>>{};
+    for (final file in files) {
+      byKind.putIfAbsent('${file['kind']}', () => []).add(file);
+    }
+    final kinds = [for (final k in packageSections.keys) if (byKind.containsKey(k)) k];
+    for (final k in byKind.keys) {
+      if (!kinds.contains(k)) kinds.add(k);
+    }
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.inventory_2_outlined, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '发版包 · ${exportResult['name']}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                Text(
+                  '${sizeText(exportResult['size'])} · ${files.length} 个素材',
+                  style: const TextStyle(fontSize: 12, color: Colors.black54),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            SelectableText(
+              '${exportResult['path']}',
+              style: const TextStyle(fontSize: 11, color: Colors.black54),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'SHA256 ${exportResult['sha256']} · 生成于 ${exportResult['generated']}',
+              style: const TextStyle(fontSize: 11, color: Colors.black54),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final kind in kinds)
+                  Chip(
+                    visualDensity: VisualDensity.compact,
+                    label: Text(
+                      '${packageSections[kind] ?? kind} ${counts[kind] ?? byKind[kind]!.length}',
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                  ),
+              ],
+            ),
+            if (missing.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                '有 ${missing.length} 个必需素材没找到，装到客户端后这把武器会显示异常：',
+                style: const TextStyle(fontSize: 12, color: Colors.deepOrange),
+              ),
+              const SizedBox(height: 2),
+              for (final m in missing)
+                Text(
+                  '  · $m',
+                  style: const TextStyle(fontSize: 11, color: Colors.deepOrange),
+                ),
+            ],
+            if (config.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              const Text(
+                '配置包里改动的文件（和客户端当前版本的差异）：',
+                style: TextStyle(fontSize: 12),
+              ),
+              const SizedBox(height: 2),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: [
+                  for (final c in config)
+                    Text(
+                      c,
+                      style: const TextStyle(fontSize: 11, color: Colors.black54),
+                    ),
+                ],
+              ),
+            ],
+            if (plans.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                '包里带着方案的武器（配置是整包发的，别的武器已保存方案也会一起进包）：'
+                '${plans.map((p) => p['name']).join('、')}',
+                style: const TextStyle(fontSize: 11, color: Colors.black54),
+              ),
+            ],
+            const SizedBox(height: 6),
+            ExpansionTile(
+              dense: true,
+              tilePadding: EdgeInsets.zero,
+              title: Text(
+                '文件清单（${files.length}）',
+                style: const TextStyle(fontSize: 12),
+              ),
+              children: [
+                for (final kind in kinds) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4, bottom: 2),
+                    child: Text(
+                      packageSections[kind] ?? kind,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  for (final file in byKind[kind]!)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8, bottom: 1),
+                      child: Text(
+                        '${file['path']}  (${sizeText(file['size'])})',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Colors.black54,
+                        ),
+                      ),
+                    ),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> createWeapon() async {
@@ -1127,6 +2034,38 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
       for (final h in (stage['hits'] as List? ?? [])) buffName(h['buff']),
     };
     return names.isEmpty ? '无' : names.join(' / ');
+  }
+
+  /// DEBUFF 下拉的一项：状态名字 + ustate.xml 注释里那句效果说明。
+  ///
+  /// 只显示名字时看不出副作用 —— type=27「恐惧」的注释是
+  /// 「被动状态，level值无效 操作键都乱掉」，选了它进游戏就表现为技能放不出来。
+  Widget buffChoice(Map<dynamic, dynamic> buff, dynamic stage) {
+    final id = buff['id'];
+    final desc = '${buff['desc'] ?? ''}';
+    final title = id == 0 ? '默认（${originalDebuff(stage)}）' : '${buff['name']}';
+    final risky = desc.contains('操作键') ||
+        desc.contains('乱掉') ||
+        desc.contains('无效') ||
+        desc.contains('被动状态');
+    if (desc.isEmpty) {
+      return Text(title, overflow: TextOverflow.ellipsis);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(title, overflow: TextOverflow.ellipsis),
+        Text(
+          risky ? '$desc　⚠ 可能影响操作' : desc,
+          style: TextStyle(
+            fontSize: 11,
+            color: risky ? Colors.deepOrange : Colors.black54,
+          ),
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
   }
 
   Widget numberEditors(
@@ -1387,6 +2326,60 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
         '${(stage as Map)['state']}',
     };
     return states.where((s) => !used.contains(s)).toList();
+  }
+
+  /// 「连招与命中效果」列表标题旁的「添加动作」入口：先选一个尚未使用的
+  /// 状态列，然后走 defineState（同一套定义对话框）。与「状态定义」卡片
+  /// 是同一个功能，只是离列表更近。
+  Future<void> addAction() async {
+    final states = unusedStates;
+    if (states.isEmpty) {
+      setState(() {
+        failed = true;
+        message = '所有状态列都已被使用，不能再添加动作了';
+      });
+      return;
+    }
+    final picked = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('添加动作'),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('选择一个尚未使用的状态列：'),
+              const SizedBox(height: 8),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      for (final s in states)
+                        ListTile(
+                          dense: true,
+                          title: Text(s),
+                          onTap: () => Navigator.pop(dialogContext, s),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+        ],
+      ),
+    );
+    if (picked == null || !mounted) return;
+    setState(() => addStatePick = picked);
+    await defineState();
   }
 
   /// 为自建武器定义一个新状态：选一个尚未使用的状态列，再填动作 / 命中属性 /
@@ -1709,15 +2702,24 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                     ),
                     initialValue: rule['buff'],
                     decoration: const InputDecoration(labelText: 'DEBUFF'),
+                    // 收起状态只显示名字，展开菜单才带效果说明，免得输入框挤两行。
+                    selectedItemBuilder: (_) => [
+                      for (final b in (data!['buffs'] as List))
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            b['id'] == 0
+                                ? '默认（${originalDebuff(stage)}）'
+                                : '${b['name']}',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
                     items: (data!['buffs'] as List)
                         .map(
                           (b) => DropdownMenuItem<int>(
                             value: b['id'],
-                            child: Text(
-                              b['id'] == 0
-                                  ? '默认（${originalDebuff(stage)}）'
-                                  : b['name'],
-                            ),
+                            child: buffChoice(b, stage),
                           ),
                         )
                         .toList(),
@@ -1797,6 +2799,8 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
   }
 
   Widget actionChoice(String key, int? index, String label) {
+    // 自建武器的每条动作都可以直接删掉（= 删除该状态列），不用先点进编辑卡。
+    final deletable = index != null && isCreated(weapon!['id']);
     return Column(
       children: [
         ListTile(
@@ -1808,7 +2812,23 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                   style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
                 ),
           selected: selectedAction == key,
-          trailing: index == null ? null : const Icon(Icons.edit_outlined),
+          trailing: index == null
+              ? null
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (deletable)
+                      IconButton(
+                        tooltip: '删除动作',
+                        icon: const Icon(Icons.delete_outline, size: 18),
+                        onPressed: busy
+                            ? null
+                            : () => clearState(
+                                '${(weapon!['stages'][index!] as Map)['state']}'),
+                      ),
+                    const Icon(Icons.edit_outlined),
+                  ],
+                ),
           onTap: index == null || busy
               ? null
               : () {
@@ -2308,6 +3328,7 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                                                 CrossAxisAlignment.stretch,
                                             children: [
                                               comboChainCard(),
+                                              comboRuleCard(),
                                             ],
                                           ),
                                         ),
@@ -2319,11 +3340,33 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                                               CrossAxisAlignment.start,
                                           children: [
                                             stateBuilderCard(),
-                                            Text(
-                                              '连招与命中效果',
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .titleMedium,
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    '连招与命中效果',
+                                                    style: Theme.of(context)
+                                                        .textTheme
+                                                        .titleMedium,
+                                                  ),
+                                                ),
+                                                if (isCreated(weapon!['id']))
+                                                  TextButton.icon(
+                                                    onPressed: busy
+                                                        ? null
+                                                        : addAction,
+                                                    icon: const Icon(
+                                                      Icons.add,
+                                                      size: 16,
+                                                    ),
+                                                    label: const Text(
+                                                      '添加动作',
+                                                      style: TextStyle(
+                                                        fontSize: 12,
+                                                      ),
+                                                    ),
+                                                  ),
+                                              ],
                                             ),
                                             const SizedBox(height: 4),
                                             Text(
@@ -2483,6 +3526,13 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                                       ),
                                       label: const Text('更新到线上'),
                                     ),
+                                    OutlinedButton.icon(
+                                      onPressed: busy ? null : exportPackage,
+                                      icon: const Icon(
+                                        Icons.inventory_2_outlined,
+                                      ),
+                                      label: const Text('导出发版包'),
+                                    ),
                                     if (dirty)
                                       const Text(
                                         '有未保存修改',
@@ -2492,6 +3542,10 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                                       ),
                                   ],
                                 ),
+                                if (exportResult.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  exportCard(),
+                                ],
                               ],
                             ),
                           ),
@@ -2514,6 +3568,116 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// 发版包导出选项：导出哪把（这把 / 全部自建）、带哪些素材、要不要带草稿。
+class _ExportDialog extends StatefulWidget {
+  const _ExportDialog({required this.weaponName, required this.createdCount});
+  final String weaponName;
+  final int createdCount;
+
+  @override
+  State<_ExportDialog> createState() => _ExportDialogState();
+}
+
+class _ExportDialogState extends State<_ExportDialog> {
+  final selected = <String>{for (final k in packageSections.keys) k};
+  bool all = false;
+  bool appliedOnly = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final disabled = selected.isEmpty;
+    return AlertDialog(
+      title: const Text('导出发版包'),
+      content: SizedBox(
+        width: 560,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '把武器用到的配置包和素材打成一个 zip，包里的路径就是客户端根目录下的'
+                '相对路径（Data/config.spf2、Data/Weapon/Model/...），运维拿到后'
+                '整包解压、覆盖到客户端根目录即可。',
+              ),
+              const SizedBox(height: 12),
+              // 单选/开关类控件在这个界面上容易被压变形，一律用复选框。
+              CheckboxListTile(
+                value: all,
+                onChanged: widget.createdCount == 0
+                    ? null
+                    : (v) => setState(() => all = v == true),
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: Text('导出全部自建武器（${widget.createdCount} 把）'),
+                subtitle: Text(
+                  all
+                      ? '包里带上每一把自建武器的素材'
+                      : '不勾则只导出「${widget.weaponName}」',
+                  style: const TextStyle(fontSize: 11),
+                ),
+              ),
+              CheckboxListTile(
+                value: appliedOnly,
+                onChanged: (v) => setState(() => appliedOnly = v == true),
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: const Text('只包含已应用到客户端的方案'),
+                subtitle: const Text(
+                  '默认和「更新到线上」一致：草稿也进包。勾上则只发本机客户端里'
+                  '已经验证过的那部分，未应用的编辑不带走。',
+                  style: TextStyle(fontSize: 11),
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text('带上的内容：', style: TextStyle(fontSize: 12)),
+              for (final entry in packageSections.entries)
+                CheckboxListTile(
+                  value: selected.contains(entry.key),
+                  onChanged: (v) => setState(
+                    () => v == true
+                        ? selected.add(entry.key)
+                        : selected.remove(entry.key),
+                  ),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: Text(entry.value, style: const TextStyle(fontSize: 13)),
+                ),
+              if (disabled)
+                const Padding(
+                  padding: EdgeInsets.only(top: 6),
+                  child: Text(
+                    '至少勾一项。',
+                    style: TextStyle(fontSize: 12, color: Colors.deepOrange),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: disabled
+              ? null
+              : () => Navigator.pop(context, {
+                  'all': all,
+                  'applied_only': appliedOnly,
+                  'include': [for (final k in packageSections.keys) if (selected.contains(k)) k],
+                }),
+          child: const Text('导出'),
+        ),
+      ],
     );
   }
 }

@@ -267,6 +267,11 @@ func buildWeaponBase(source *archive, state *weaponState) (*archive, error) {
 			return nil, err
 		}
 	}
+	if len(state.ComboRules) > 0 {
+		if base, err = applyComboRules(base, state.ComboRules); err != nil {
+			return nil, err
+		}
+	}
 	return base, nil
 }
 
@@ -280,6 +285,9 @@ func checkAllowedWrites(source, verified *archive, state *weaponState, info *ins
 	if len(state.Created) > 0 || len(state.Combos) > 0 || len(state.Chains) > 0 {
 		allowed["delayacttable.xml"] = true
 		allowed["acteffect.xml"] = true
+	}
+	if len(state.ComboRules) > 0 {
+		allowed["comborule.xml"] = true
 	}
 	for _, stages := range state.Remaps {
 		for _, remap := range stages {
