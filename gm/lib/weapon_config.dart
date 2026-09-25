@@ -251,19 +251,44 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
 
   List<Map<String, String>> comboChain = [];
   List<Map<String, String>> comboDeadEnds = [];
+
+  /// 客户端 delayacttable.xml 的 <KeyInputList>：按键编号不是连续的
+  /// （1..6 基础键、8..13 双键组合、19..24 方向组合、31..33 站/跑/跳技），
+  /// 所以只认客户端自己的表，不能写死。
+  List<Map<String, String>> comboKeys = [];
   bool chainEditing = false;
   List<Map<String, String>> chainDraft = [];
   String? chainOld, chainKey, chainNew;
   String? addStatePick;
 
+  /// 兜底按键表：客户端表读不出来时用（编号与 delayacttable.xml 注释一致）。
   static const chainKeys = [
-    {'v': '1', 'l': '普通攻击(C)'},
-    {'v': '2', 'l': '特殊攻击(X)'},
-    {'v': '3', 'l': '瞄准(Z)'},
+    {'v': '1', 'l': '普通攻击'},
+    {'v': '2', 'l': '特殊攻击'},
+    {'v': '3', 'l': '瞄准'},
     {'v': '4', 'l': '跳跃'},
     {'v': '5', 'l': '前'},
     {'v': '6', 'l': '后'},
+    {'v': '8', 'l': 'Z+Z'},
+    {'v': '9', 'l': 'C+C'},
+    {'v': '10', 'l': 'X+X'},
+    {'v': '11', 'l': 'X+C'},
+    {'v': '12', 'l': 'Z+X+C'},
+    {'v': '13', 'l': 'C+X'},
+    {'v': '19', 'l': '前前普通'},
+    {'v': '20', 'l': '前前特殊'},
+    {'v': '21', 'l': '前特殊'},
+    {'v': '22', 'l': '前普通'},
+    {'v': '23', 'l': '后特殊'},
+    {'v': '24', 'l': '后普通'},
+    {'v': '31', 'l': '站技 Z+X+C'},
+    {'v': '32', 'l': '跑技 前前C+X'},
+    {'v': '33', 'l': '跳技 跳C+X'},
   ];
+
+  /// 可用按键：优先客户端表。
+  List<Map<String, String>> get usableKeys =>
+      comboKeys.isNotEmpty ? comboKeys : chainKeys;
 
   Future<void> refreshChain(dynamic weaponId) async {
     try {
@@ -279,6 +304,10 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
         comboDeadEnds = [
           for (final e in (result['dead_ends'] as List? ?? []))
             Map<String, String>.from(e as Map),
+        ];
+        comboKeys = [
+          for (final e in (result['keys'] as List? ?? []))
+            {'v': '${(e as Map)['id']}', 'l': '${e['label']}'},
         ];
       });
     } catch (_) {
@@ -620,83 +649,108 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
   }
 
   String keyName(String key) {
-    for (final k in chainKeys) {
+    for (final k in usableKeys) {
       if (k['v'] == key) return '${k['l']}';
     }
     return '按键$key';
   }
 
+  /// 新增转移。
+  ///
+  /// 这里刻意用 Wrap + 带文字按钮：左侧栏只有 560 宽，三个 150 的下拉框加一个
+  /// 纯图标 IconButton 正好会顶到卡片右边缘，按钮被挤到裁剪区外就既看不见也点不到
+  /// （用户看到的现象就是"连招链改了没作用"）。Wrap 会在必要时把按钮换到下一行，
+  /// 带文字也保证它不依赖图标字体渲染出来。
   Widget chainAddRow(List<String> states) {
-    final canAdd =
-        chainOld != null && chainKey != null && chainNew != null;
+    final canAdd = chainOld != null && chainKey != null && chainNew != null;
     return Padding(
       padding: const EdgeInsets.only(top: 8),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('添加：', style: TextStyle(fontSize: 12)),
-          const SizedBox(width: 6),
-          SizedBox(
-            width: 150,
-            child: DropdownButtonFormField<String>(
-              key: ValueKey('chain-old-$chainEditing'),
-              initialValue: chainOld,
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: '老状态', isDense: true),
-              items: [
-                for (final s in states)
-                  DropdownMenuItem(value: s, child: Text(s)),
-              ],
-              onChanged: (v) => setState(() => chainOld = v),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              const Text('添加转移：', style: TextStyle(fontSize: 12)),
+              SizedBox(
+                width: 150,
+                child: DropdownButtonFormField<String>(
+                  key: ValueKey('chain-old-$chainEditing'),
+                  initialValue: chainOld,
+                  isExpanded: true,
+                  decoration:
+                      const InputDecoration(labelText: '老状态', isDense: true),
+                  items: [
+                    for (final s in states)
+                      DropdownMenuItem(value: s, child: Text(s)),
+                  ],
+                  onChanged: (v) => setState(() => chainOld = v),
+                ),
+              ),
+              SizedBox(
+                width: 150,
+                child: DropdownButtonFormField<String>(
+                  key: ValueKey('chain-key-$chainEditing'),
+                  initialValue: chainKey,
+                  isExpanded: true,
+                  decoration:
+                      const InputDecoration(labelText: '按键', isDense: true),
+                  // 带上编号：客户端表里有几个编号的注释是同一个按键序列
+                  // （12 与 31 都是 Z+X+C），只显示注释会分不清。
+                  items: [
+                    for (final k in usableKeys)
+                      DropdownMenuItem(
+                        value: k['v'],
+                        child: Text('${k['v']} · ${k['l']}'),
+                      ),
+                  ],
+                  onChanged: (v) => setState(() => chainKey = v),
+                ),
+              ),
+              SizedBox(
+                width: 150,
+                child: DropdownButtonFormField<String>(
+                  key: ValueKey('chain-new-$chainEditing'),
+                  initialValue: chainNew,
+                  isExpanded: true,
+                  decoration:
+                      const InputDecoration(labelText: '新状态', isDense: true),
+                  items: [
+                    for (final s in states)
+                      DropdownMenuItem(value: s, child: Text(s)),
+                  ],
+                  onChanged: (v) => setState(() => chainNew = v),
+                ),
+              ),
+              FilledButton.icon(
+                onPressed: canAdd
+                    ? () {
+                        setState(() {
+                          chainDraft.add({
+                            'old': chainOld!,
+                            'new': chainNew!,
+                            'key': chainKey!,
+                            'key_label': keyName(chainKey!),
+                          });
+                          chainOld = chainKey = chainNew = null;
+                        });
+                      }
+                    : null,
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('添加转移'),
+              ),
+            ],
+          ),
+          if (!canAdd)
+            const Padding(
+              padding: EdgeInsets.only(top: 6),
+              child: Text(
+                '三个都选好后「添加转移」才会亮起；按键只列出本客户端按键表里的编号。',
+                style: TextStyle(fontSize: 11, color: Colors.black54),
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 150,
-            child: DropdownButtonFormField<String>(
-              key: ValueKey('chain-key-$chainEditing'),
-              initialValue: chainKey,
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: '按键', isDense: true),
-              items: [
-                for (final k in chainKeys)
-                  DropdownMenuItem(value: k['v'], child: Text('${k['l']}')),
-              ],
-              onChanged: (v) => setState(() => chainKey = v),
-            ),
-          ),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 150,
-            child: DropdownButtonFormField<String>(
-              key: ValueKey('chain-new-$chainEditing'),
-              initialValue: chainNew,
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: '新状态', isDense: true),
-              items: [
-                for (final s in states)
-                  DropdownMenuItem(value: s, child: Text(s)),
-              ],
-              onChanged: (v) => setState(() => chainNew = v),
-            ),
-          ),
-          const SizedBox(width: 8),
-          IconButton(
-            onPressed: canAdd
-                ? () {
-                    setState(() {
-                      chainDraft.add({
-                        'old': chainOld!,
-                        'new': chainNew!,
-                        'key': chainKey!,
-                        'key_label': keyName(chainKey!),
-                      });
-                      chainOld = chainKey = chainNew = null;
-                    });
-                  }
-                : null,
-            icon: const Icon(Icons.add_circle_outline),
-            tooltip: '添加转移',
-          ),
         ],
       ),
     );

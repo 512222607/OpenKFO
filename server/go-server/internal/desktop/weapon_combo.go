@@ -32,7 +32,64 @@ var (
 	effectBlockPattern  = regexp.MustCompile(
 		`(?s)<WeaponEffect\s+ItemID\s*=\s*"(\d+)"\s*>(.*?)</WeaponEffect\s*>`)
 	effectRootEndPattern = regexp.MustCompile(`</ActEffect\s*>`)
+	keyInputBlockPattern = regexp.MustCompile(
+		`(?s)<KeyInput\s+Id\s*=\s*"(\d+)"\s*>(.*?)</KeyInput\s*>`)
+	keyInputCommentPattern = regexp.MustCompile(`(?s)<!--(.*?)-->`)
+	keyInputValuePattern   = regexp.MustCompile(`<Key\s+value\s*=\s*"(\d+)"\s*/>`)
+	keyInputListEndPattern = regexp.MustCompile(`</KeyInputList\s*>`)
 )
+
+// KeyInput is one entry of the client's own <KeyInputList>: the id stored in a
+// transition row's KeyInput attribute, the label the client's file gives it
+// (e.g. "普通攻击" for 1, "C+X" for 13) and the physical key sequence it means.
+// The ids are not contiguous — the client uses 1..6 for the basic attacks, 8..13
+// for the two-key combinations, 19..24 for the direction combinations and
+// 31..33 for the standing/running/jumping skills — and the numbering in the
+// banner comment at the top of the file is a *different* code (BATTLEKEY_*),
+// so the only trustworthy source is this list itself.
+type KeyInput struct {
+	ID    string   `json:"id"`
+	Label string   `json:"label"`
+	Keys  []string `json:"keys"`
+}
+
+// keyInputs parses <KeyInputList> so the editor can offer exactly the keys the
+// client understands, labelled the way the client's own table labels them.
+func keyInputs(a *archive) []KeyInput {
+	text, err := a.text("delayacttable.xml")
+	if err != nil {
+		return nil
+	}
+	if at := keyInputListEndPattern.FindStringIndex(text); at != nil {
+		text = text[:at[0]]
+	}
+	entries := []KeyInput{}
+	for _, match := range keyInputBlockPattern.FindAllStringSubmatch(text, -1) {
+		body := match[2]
+		label := ""
+		if comment := keyInputCommentPattern.FindStringSubmatch(body); comment != nil {
+			label = strings.Join(strings.Fields(comment[1]), " ")
+		}
+		keys := []string{}
+		for _, value := range keyInputValuePattern.FindAllStringSubmatch(body, -1) {
+			keys = append(keys, value[1])
+		}
+		if label == "" {
+			label = "按键" + match[1]
+		}
+		entries = append(entries, KeyInput{ID: match[1], Label: label, Keys: keys})
+	}
+	return entries
+}
+
+// keyInputLabels indexes keyInputs by id for the flat transition views.
+func keyInputLabels(a *archive) map[string]string {
+	labels := map[string]string{}
+	for _, entry := range keyInputs(a) {
+		labels[entry.ID] = entry.Label
+	}
+	return labels
+}
 
 // comboRow is one parsed transition; keeping the fields instead of the raw text
 // lets a cloned row be re-emitted with a consistent attribute shape.
@@ -297,8 +354,11 @@ func comboSuggestions(actionLines [][]string, counts map[string]int) map[int]int
 	return suggestions
 }
 
-// keyInputNames maps a delayacttable KeyInput id to its human label (see the
-// <KeyInputList> comments in the same file).
+// keyInputNames is the fallback label table for clients whose
+// delayacttable.xml has no readable <KeyInputList>; the parsed table always
+// wins. The values below mirror the comments in the shipped file (1..6 are the
+// basic inputs, 8..13 the two-key combinations, 19..24 the direction
+// combinations, 31..33 the standing/running/jumping skills).
 var keyInputNames = map[string]string{
 	"1":  "普通攻击",
 	"2":  "特殊攻击",
@@ -306,15 +366,21 @@ var keyInputNames = map[string]string{
 	"4":  "跳跃",
 	"5":  "前",
 	"6":  "后",
-	"7":  "必杀",
-	"8":  "C+C",
+	"8":  "Z+Z",
 	"9":  "C+C",
-	"10": "防御",
-	"11": "C+X",
-	"12": "C+Z",
+	"10": "X+X",
+	"11": "X+C",
+	"12": "Z+X+C",
 	"13": "C+X",
-	"20": "向前",
-	"21": "向后",
+	"19": "前前普通",
+	"20": "前前特殊",
+	"21": "前特殊",
+	"22": "前普通",
+	"23": "后特殊",
+	"24": "后普通",
+	"31": "站技Z+X+C",
+	"32": "跑技前前C+X",
+	"33": "跳技跳C+X",
 }
 
 func keyInputLabel(key string) string {
@@ -352,13 +418,22 @@ func comboChain(a *archive, info *inspection, weaponID string) []map[string]stri
 		}
 		return state
 	}
+	// Prefer the client's own labels: the ids are not contiguous and several of
+	// them (8 = Z+Z, 11 = X+C, 13 = C+X) are easy to get backwards.
+	keyLabels := keyInputLabels(a)
+	keyLabel := func(key string) string {
+		if text, ok := keyLabels[key]; ok && text != "" {
+			return text
+		}
+		return keyInputLabel(key)
+	}
 	result := make([]map[string]string, 0, len(rows))
 	for _, row := range rows {
 		result = append(result, map[string]string{
 			"old":       row.OldState,
 			"new":       row.NewState,
 			"key":       row.KeyInput,
-			"key_label": keyInputLabel(row.KeyInput),
+			"key_label": keyLabel(row.KeyInput),
 			"old_label": label(row.OldState),
 			"new_label": label(row.NewState),
 		})

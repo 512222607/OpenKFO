@@ -1503,6 +1503,7 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 		if actionRowIndex(actionText)[key] == nil {
 			return nil, fmt.Errorf("武器 %s 不在本客户端的动作表中", key)
 		}
+		valid := keyInputLabels(base)
 		for _, transition := range request.Transitions {
 			for _, field := range []string{transition.OldState, transition.NewState} {
 				number, err := strconv.Atoi(field)
@@ -1512,6 +1513,17 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 			}
 			if number, err := strconv.Atoi(transition.KeyInput); err != nil || number < 1 || number > 99 {
 				return nil, fmt.Errorf("按键编号无效")
+			}
+			// <KeyInputList> is the only authority on which ids exist; a key the
+			// client cannot read leaves a transition that never fires.
+			if len(valid) > 0 && valid[transition.KeyInput] == "" {
+				known := make([]string, 0, len(valid))
+				for id := range valid {
+					known = append(known, id)
+				}
+				sort.Strings(known)
+				return nil, fmt.Errorf("按键 %s 不在本客户端的按键表里（可用：%s）",
+					transition.KeyInput, strings.Join(known, " "))
 			}
 		}
 		if len(request.Transitions) == 0 {
@@ -1546,10 +1558,14 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 		if err != nil {
 			return nil, err
 		}
+		// The key ids are non-contiguous and the editor must offer exactly the
+		// ones this client understands, so ship the client's own table along
+		// with the chain instead of a hardcoded list.
 		return map[string]any{
 			"weapon":    request.Weapon,
 			"chain":     comboChain(base, info, strconv.Itoa(request.Weapon)),
 			"dead_ends": comboDeadEnds(base, info, strconv.Itoa(request.Weapon)),
+			"keys":      keyInputs(base),
 			"revision":  revision,
 		}, nil
 	}
