@@ -2775,6 +2775,112 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
     );
   }
 
+  /// 「高级设置」下拉的一项：中文名 + 该档位的实际后果。
+  ///
+  /// 这些字段以前是裸数字框，作者只能猜 11 是什么意思。中文名与说明由后端
+  /// hit_options 给出（取自官方 skillproperty.xml 实际用过的档位，配合
+  /// animation/300501.xml 的策划注释反查），所以下拉里永远不会出现客户端
+  /// 没有对应动画的数字。
+  Widget hitOptionChoice(Map<dynamic, dynamic> option) {
+    final value = option['value'];
+    final label = '${option['label'] ?? ''}';
+    final detail = '${option['detail'] ?? ''}';
+    final risky = label.contains('勿用') ||
+        label.contains('错配') ||
+        label.contains('无受击') ||
+        label.contains('无动作') ||
+        label.contains('无倒地') ||
+        label.contains('无落地') ||
+        label.contains('不播放');
+    if (detail.isEmpty) {
+      return Text('$value　$label', overflow: TextOverflow.ellipsis);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('$value　$label', overflow: TextOverflow.ellipsis),
+        Text(
+          risky ? '$detail　⚠ 慎用' : detail,
+          style: TextStyle(
+            fontSize: 11,
+            color: risky ? Colors.deepOrange : Colors.black54,
+          ),
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+  }
+
+  /// 客户端在用、但选项表没收录的值。不能悄悄丢掉，否则一打开这个招式
+  /// 下拉框就会把原值改掉。
+  List<Map<String, dynamic>> extraHitOptions(
+    dynamic field,
+    int current,
+  ) {
+    final known = (data?['hit_options']?[field['key']] as List? ?? [])
+        .map((o) => o['value'] as int)
+        .toSet();
+    if (known.contains(current)) return const [];
+    return [
+      {
+        'value': current,
+        'label': '客户端原生值（未收录音译）',
+        'detail': '这个编号在官方配置里用到了，但暂无中文说明，保留原值更安全',
+      },
+    ];
+  }
+
+  Widget hitOptionEditor(
+    dynamic hit,
+    Map<String, dynamic> rule,
+    bool enabled,
+    dynamic field,
+    int current,
+  ) {
+    final options = [
+      ...(data?['hit_options']?[field['key']] as List? ?? []),
+      ...extraHitOptions(field, current),
+    ];
+    return SizedBox(
+      width: 300,
+      child: DropdownButtonFormField<int>(
+        key: ValueKey(
+          '$editorVersion-${rule['stage']}-${hit['id']}-${field['key']}-$current',
+        ),
+        isExpanded: true,
+        initialValue: current,
+        decoration: InputDecoration(
+          labelText: '${field['name']}（${field['key']}）',
+          helperText: '默认 ${hit['values'][field['key']]}',
+          helperMaxLines: 2,
+        ),
+        items: [
+          for (final option in options)
+            DropdownMenuItem<int>(
+              value: option['value'] as int,
+              child: hitOptionChoice(option as Map<dynamic, dynamic>),
+            ),
+        ],
+        onChanged: !enabled
+            ? null
+            : (value) => setState(() {
+                final changes = rule.putIfAbsent(
+                  'properties',
+                  () => <String, dynamic>{},
+                ) as Map;
+                final values = changes.putIfAbsent(
+                  hit['id'],
+                  () => <String, dynamic>{},
+                ) as Map;
+                values[field['key']] = value;
+                editorVersion++;
+                dirty = true;
+              }),
+      ),
+    );
+  }
+
   Widget numberEditors(
     dynamic hit,
     Map<String, dynamic> rule,
@@ -2791,49 +2897,61 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
               damage ==
               ['SkillDamage', 'SkillEnhanceDamage'].contains(f['key']),
         ))
-          SizedBox(
-            width: 170,
-            child: TextFormField(
-              key: ValueKey(
-                '$editorVersion-${rule['stage']}-${hit['id']}-${field['key']}',
+          if (!damage && field['oneshot'] == true)
+            hitOptionEditor(
+              hit,
+              rule,
+              enabled,
+              field,
+              int.tryParse(
+                    '${rule['properties']?[hit['id']]?[field['key']] ?? hit['values'][field['key']]}',
+                  ) ??
+                  0,
+            )
+          else
+            SizedBox(
+              width: 170,
+              child: TextFormField(
+                key: ValueKey(
+                  '$editorVersion-${rule['stage']}-${hit['id']}-${field['key']}',
+                ),
+                initialValue:
+                    '${rule['properties']?[hit['id']]?[field['key']] ?? hit['values'][field['key']]}',
+                enabled: enabled,
+                decoration: InputDecoration(
+                  labelText: field['name'],
+                  helperText: '默认 ${hit['values'][field['key']]}',
+                ),
+                keyboardType: TextInputType.number,
+                validator: (text) {
+                  final v = num.tryParse(text ?? '');
+                  return v == null ||
+                          !v.isFinite ||
+                          v < field['min'] ||
+                          v > field['max'] ||
+                          (!damage &&
+                              (v != v.roundToDouble() ||
+                                  ((weapon?['allowed_values']?[field['key']]
+                                              as List?)
+                                          ?.contains(v.toInt()) ==
+                                      false)))
+                      ? '数值超出范围'
+                      : null;
+                },
+                onChanged: (text) => setState(() {
+                  final changes = rule.putIfAbsent(
+                    'properties',
+                    () => <String, dynamic>{},
+                  ) as Map;
+                  final values = changes.putIfAbsent(
+                    hit['id'],
+                    () => <String, dynamic>{},
+                  ) as Map;
+                  values[field['key']] = num.tryParse(text) ?? -1;
+                  dirty = true;
+                }),
               ),
-              initialValue:
-                  '${rule['properties']?[hit['id']]?[field['key']] ?? hit['values'][field['key']]}',
-              enabled: enabled,
-              decoration: InputDecoration(
-                labelText: field['name'],
-                helperText: '默认 ${hit['values'][field['key']]}',
-              ),
-              keyboardType: TextInputType.number,
-              validator: (text) {
-                final v = num.tryParse(text ?? '');
-                return v == null ||
-                        !v.isFinite ||
-                        v < field['min'] ||
-                        v > field['max'] ||
-                        (!damage &&
-                            (v != v.roundToDouble() ||
-                                ((weapon?['allowed_values']?[field['key']]
-                                            as List?)
-                                        ?.contains(v.toInt()) ==
-                                    false)))
-                    ? '数值超出范围'
-                    : null;
-              },
-              onChanged: (text) => setState(() {
-                final changes = rule.putIfAbsent(
-                  'properties',
-                  () => <String, dynamic>{},
-                ) as Map;
-                final values = changes.putIfAbsent(
-                  hit['id'],
-                  () => <String, dynamic>{},
-                ) as Map;
-                values[field['key']] = num.tryParse(text) ?? -1;
-                dirty = true;
-              }),
             ),
-          ),
       ],
     ),
   );

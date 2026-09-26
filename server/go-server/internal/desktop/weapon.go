@@ -26,9 +26,13 @@ type field struct {
 	Name string `json:"name"`
 	Min  int    `json:"min"`
 	Max  int    `json:"max"`
+	// Oneshot marks a non-numeric field: the editor shows a labelled picker
+	// instead of a free text box, so the author cannot type a number the
+	// client has no animation for.
+	Oneshot bool `json:"oneshot,omitempty"`
 }
 
-var propertyFields = []field{{"SkillDamage", "基础伤害", 0, 10000}, {"SkillEnhanceDamage", "强化伤害", 0, 10000}, {"RepulseTarget", "击退参数", 0, 120}, {"TripTarget", "击倒参数", 0, 2}, {"TargetFlurr", "浮空参数", 0, 3}, {"StandHurt", "站立受击动作", 0, 255}, {"StandHurtDown", "倒地受击动作", 0, 255}, {"StandHurtFly", "站立受击飞行动作", 0, 255}, {"FlyHurt", "飞行受击动作", 0, 255}, {"JumpHurtDown", "空中受击动作", 0, 255}, {"JumpHurtFall", "空中落地动作", 0, 255}}
+var propertyFields = []field{{"SkillDamage", "基础伤害", 0, 10000, false}, {"SkillEnhanceDamage", "强化伤害", 0, 10000, false}, {"RepulseTarget", "击退参数", 0, 120, true}, {"TripTarget", "击倒参数", 0, 2, true}, {"TargetFlurr", "浮空参数", 0, 3, true}, {"StandHurt", "站立受击动作", 0, 255, true}, {"StandHurtDown", "倒地受击动作", 0, 255, true}, {"StandHurtFly", "站立受击飞行动作", 0, 255, true}, {"FlyHurt", "飞行受击动作", 0, 255, true}, {"JumpHurtDown", "空中受击动作", 0, 255, true}, {"JumpHurtFall", "空中落地动作", 0, 255, true}}
 
 type xmlNode struct {
 	tag      string
@@ -756,6 +760,120 @@ func validateRules(rules []Rule, weapon Weapon) ([]Rule, error) {
 	sort.Slice(result, func(i, j int) bool { return result[i].Stage < result[j].Stage })
 	return result, nil
 }
+
+// option is one choice of a non-numeric hit field. The editor renders the
+// label (with the raw number appended) so an author picks "常规被击飞" instead
+// of guessing what 11 means. Detail carries the consequence of the choice.
+type option struct {
+	Value  int    `json:"value"`
+	Label  string `json:"label"`
+	Detail string `json:"detail,omitempty"`
+}
+
+// hitOptions translates the enumerated hit parameters into readable choices.
+// Values are drawn from what the official skillproperty.xml actually ships, so
+// the picker can never offer a number the client has no animation for. The
+// labels below were reverse-engineered from the action blocks the numbers point
+// at (animation/300501.xml and neighbours), not invented.
+var hitOptions = map[string][]option{
+	"RepulseTarget": {
+		{0, "不击退", "原地不动，只结算伤害与受击动作"},
+		{1, "标准击退", "横向推开一小段距离"},
+		{2, "强力击退", "推得更远，对手落地更晚"},
+		{120, "极限击退", "官方最大值，龙拳跑 X1、合金双臂跑 X1 在用"},
+	},
+	"TargetFlurr": {
+		{0, "不浮空", "对手不离地。击倒/击退要靠本字段以外的开关"},
+		{1, "标准浮空（最常用）", "打成击飞。必须配合「站立受击飞行动作」= 常规被击飞"},
+		{2, "高浮空", "飞得更高，滞空更久。空手重击、棒球类在用"},
+		{3, "超高浮空", "最高档。棒球 C、跑动 C4 在用"},
+	},
+	"TripTarget": {
+		{0, "不击倒", "对手不会摔趴"},
+		{1, "标准击倒", "直接打倒趴地。要同时把「浮空参数」设为 0，否则判定成击飞"},
+		{2, "强击倒", "倒地更重，起身更慢。徒手 3 段、跳轻 2/4 段在用"},
+	},
+	"StandHurt": {
+		{0, "无受击动作", "不播受击动画，效果会很怪，慎用"},
+		{1, "站立硬直（默认）", "最普通的挨打抖动"},
+		{2, "侧翻 / 被打歪", "身体侧向踉跄"},
+		{4, "轻微后仰", "位移很小的挨打姿势"},
+		{5, "站姿被击倒（轻）", "较轻的倒地"},
+		{7, "站立被击倒", "较重的倒地"},
+		{11, "不击飞效果", "官方策划注释原话，用于「击飞版」招式的对照组"},
+		{12, "受击变体 12", "变体动画，按招式风格挑"},
+		{13, "受击变体 13", "变体动画，按招式风格挑"},
+		{14, "受击变体 14", "变体动画，按招式风格挑"},
+		{15, "受击变体 15", "变体动画，按招式风格挑"},
+		{21, "受击变体 21", "变体动画，按招式风格挑"},
+	},
+	"StandHurtDown": {
+		{0, "无倒地动作", "打倒后没有倒地动画，会卡住，勿用"},
+		{1, "常规倒地（默认）", "最通用的摔趴"},
+		{2, "较矮倒地", "倒地姿态更贴地"},
+		{5, "侧向倒地", "往侧面摔"},
+		{6, "倒地变体 6", "变体动画"},
+		{7, "常规被击倒", "最常用的「被击倒」专用倒地"},
+		{8, "倒地变体 8", "变体动画"},
+		{9, "蜷缩滑行倒地", "倒地后带一段滑行"},
+		{10, "倒地变体 10", "变体动画"},
+		{23, "倒地变体 23", "变体动画"},
+	},
+	"StandHurtFly": {
+		{0, "不播放飞行动作", "浮空却没有飞行动画，对手会原地抖动，勿用"},
+		{1, "站立硬直（错配档）", "这是硬直不是飞行。配浮空会原地抖动"},
+		{2, "小浮空飞行", "飞得矮、位移小，常配「不浮空」做短距离击飞"},
+		{5, "中距击飞", "常见的中等距离飞出去"},
+		{6, "击飞变体 6", "变体飞行轨迹"},
+		{7, "常规击飞（最常用）", "标准飞出去，配「标准浮空」"},
+		{9, "击飞变体 9", "变体飞行轨迹"},
+		{10, "击飞变体 10", "变体飞行轨迹"},
+		{11, "常规被击飞", "「上升 / 悬空击飞」三件套用的就是这个"},
+		{12, "击飞变体 12", "变体飞行轨迹"},
+		{20, "超远击飞", "飞得最远，回马枪类在用"},
+	},
+	"FlyHurt": {
+		{0, "无动作", "已在飞行中被再次打中没有反应，勿用"},
+		{1, "飞行中受击（默认）", "空中连击续接的通用档"},
+		{2, "飞行中受击变体", "变体动画"},
+		{5, "飞行中受击变体 5", "变体动画"},
+		{6, "飞行中受击变体 6", "变体动画"},
+		{7, "飞行中受击变体 7", "变体动画"},
+		{11, "飞行中击飞", "被打得继续飞"},
+		{12, "飞行中受击变体 12", "变体动画"},
+	},
+	"JumpHurtDown": {
+		{0, "无动作", "空中被打没有反应，勿用"},
+		{1, "空中受击倒地", "被打落后倒地（最常用之一）"},
+		{2, "空中受击变体", "变体动画"},
+		{4, "空中被打落（默认）", "最常见：跳到一半被打下来"},
+		{5, "空中受击变体 5", "变体动画"},
+		{6, "空中受击变体 6", "变体动画"},
+		{7, "空中重击落", "坠得更快更重"},
+		{10, "空中受击变体 10", "变体动画"},
+		{23, "空中受击变体 23", "变体动画"},
+	},
+	"JumpHurtFall": {
+		{0, "无落地动作", "落地无动画，勿用"},
+		{1, "快速落地", "下落快、僵直短"},
+		{3, "常规空中落地（默认）", "99% 招式使用的默认档"},
+		{5, "落地变体 5", "变体动画"},
+		{6, "落地变体 6", "变体动画"},
+		{7, "落地变体 7", "变体动画"},
+	},
+}
+
+// fieldMetaLabel keeps the picker honest: a value the client uses but this
+// table does not name still shows up, marked rather than silently dropped.
+func fieldOptionLabel(field string, value int) string {
+	for _, item := range hitOptions[field] {
+		if item.Value == value {
+			return item.Label
+		}
+	}
+	return ""
+}
+
 func effects(info *inspection) []map[string]any {
 	result := []map[string]any{}
 	for _, choice := range [][2]string{{"repulse", "击退"}, {"float", "上升 / 悬空击飞"}, {"fall", "击倒"}} {
@@ -1386,15 +1504,15 @@ type weaponState struct {
 	// hit-property nodes cloned from a template under a fresh SkillProId.
 	// Cleared zeroes a state column of a self-made weapon: the state vanishes
 	// from its action row, and any remap for it is ignored.
-	Remaps          map[string]map[int]*StageRemap `json:"remaps,omitempty"`
+	Remaps map[string]map[int]*StageRemap `json:"remaps,omitempty"`
 	// FrameSwitches authors the frame-level combo channel: which
 	// <CustomStateSwitch> nodes each state's action block declares. A state
 	// present here is authoritative (an empty list means "no switches at all");
 	// a state absent keeps whatever the block already ships. Shared blocks are
 	// cloned before the rewrite, so the donor weapon is never touched.
-	FrameSwitches map[string]map[int]frameSwitchStageEdit `json:"frame_switches,omitempty"`
-	Cleared         map[string]map[int]bool        `json:"cleared,omitempty"`
-	ExtraProperties map[string]ExtraProperty       `json:"extra_properties,omitempty"`
+	FrameSwitches   map[string]map[int]frameSwitchStageEdit `json:"frame_switches,omitempty"`
+	Cleared         map[string]map[int]bool                 `json:"cleared,omitempty"`
+	ExtraProperties map[string]ExtraProperty                `json:"extra_properties,omitempty"`
 	// Chains holds an author-authored combo state machine per weapon. When a
 	// weapon has an entry here, it replaces whatever delayacttable.xml says
 	// (including a borrowed donor table) with exactly these transitions.
@@ -1609,7 +1727,7 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 		// file itself (not the baseline) and report the ids it does not ship, so
 		// the list can mark them instead of claiming they are installed here.
 		undeployed := undeployedWeaponIDs(current, info.weapons)
-		result := map[string]any{"weapons": info.weapons, "effects": effects(info), "fields": propertyFields, "buffs": buffRows, "drafts": state.Drafts, "applied": state.Applied, "created": state.Created, "combos": state.Combos, "chains": state.Chains, "combo_rules": state.ComboRules, "remaps": state.Remaps, "extra_properties": state.ExtraProperties, "cleared": state.Cleared, "states": itemactStates(base), "client": describeClient(entry, folder), "clients": describeBaselines(&state, folder), "models": weaponModels(client), "types": weaponTypes, "used_ids": usedWeaponIDs(source, state.Created), "undeployed": undeployed, "blueprint_min": blueprintMinID, "blueprint_max": blueprintMaxID, "revision": revision, "folder": folder}
+		result := map[string]any{"weapons": info.weapons, "effects": effects(info), "fields": propertyFields, "hit_options": hitOptions, "buffs": buffRows, "drafts": state.Drafts, "applied": state.Applied, "created": state.Created, "combos": state.Combos, "chains": state.Chains, "combo_rules": state.ComboRules, "remaps": state.Remaps, "extra_properties": state.ExtraProperties, "cleared": state.Cleared, "states": itemactStates(base), "client": describeClient(entry, folder), "clients": describeBaselines(&state, folder), "models": weaponModels(client), "types": weaponTypes, "used_ids": usedWeaponIDs(source, state.Created), "undeployed": undeployed, "blueprint_min": blueprintMinID, "blueprint_max": blueprintMaxID, "revision": revision, "folder": folder}
 		if remapError != "" {
 			result["remap_error"] = remapError
 		}
