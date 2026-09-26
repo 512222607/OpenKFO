@@ -81,11 +81,31 @@ func frameSwitchText(sw FrameSwitch) string {
 	return strings.Join(parts, " ") + " />"
 }
 
-// rewriteFrameSwitches replaces every <CustomStateSwitch> of a block with the
-// given list, keeping the position of the first one: sibling order decides which
-// of several overlapping windows the client honours, so it must not move.
+// insideComment reports whether the match starting at offset falls inside a
+// <!-- --> region. The shipped data leaves disabled switches commented out as
+// planner notes (e.g. 253300 state 2016 carries a commented "接C → 2091"), and
+// rewriting one of those would put our edit back inside the comment: it looks
+// saved but the client never reads it, and the read side stays empty.
+func insideComment(text string, offset int) bool {
+	open := strings.LastIndex(text[:offset], "<!--")
+	if open < 0 {
+		return false
+	}
+	return strings.LastIndex(text[:offset], "-->") < open
+}
+
+// rewriteFrameSwitches replaces every live <CustomStateSwitch> of a block with
+// the given list, keeping the position of the first one: sibling order decides
+// which of several overlapping windows the client honours, so it must not move.
+// Commented-out switches are left exactly as they are.
 func rewriteFrameSwitches(block string, fresh []FrameSwitch) (string, bool) {
-	locs := frameSwitchPattern.FindAllStringIndex(block, -1)
+	matches := frameSwitchPattern.FindAllStringIndex(block, -1)
+	locs := make([][]int, 0, len(matches))
+	for _, loc := range matches {
+		if !insideComment(block, loc[0]) {
+			locs = append(locs, loc)
+		}
+	}
 	if len(locs) == 0 && len(fresh) == 0 {
 		return block, false
 	}

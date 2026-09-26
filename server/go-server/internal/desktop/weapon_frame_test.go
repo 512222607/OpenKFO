@@ -275,6 +275,127 @@ func TestRewriteFrameSwitches(t *testing.T) {
 	if changed || same != `<AnmDesc id="1"><Anm/></AnmDesc>` {
 		t.Fatal("无改动时不该重写")
 	}
+	// 注释里的切换不算数：不能把新内容写回注释，注释本身也不能动。
+	commented := `<AnmDesc id="998">` + "\n" +
+		`<!--接C` + "\n" +
+		`	<CustomStateSwitch keycode="5" switchstartframe="35" switchendframe="50" nextstate="2091" />-->` + "\n" +
+		`</AnmDesc>`
+	out2, changed := rewriteFrameSwitches(commented, fresh)
+	if !changed {
+		t.Fatal("应当把新切换加到注释之外")
+	}
+	if !strings.Contains(out2, commented[strings.Index(commented, "<!--"):strings.Index(commented, "-->")+3]) {
+		t.Fatalf("注释被改动了：%s", out2)
+	}
+	node, err := parseXML(out2)
+	if err != nil {
+		t.Fatalf("重写后不再是合法 XML：%v", err)
+	}
+	live := 0
+	node.walk(func(n *xmlNode) {
+		if n.tag == "CustomStateSwitch" {
+			live++
+		}
+	})
+	if live != 1 {
+		t.Fatalf("注释外应当只有 1 条切换，实际 %d：%s", live, out2)
+	}
+	if !strings.Contains(out2, `keycode="9"`) {
+		t.Fatalf("新切换没写进去：%s", out2)
+	}
+}
+
+// 真实数据里的同一个坑：253300 的 2016 动作块把「接C → 2091」注释掉了，
+// 往这个状态加帧级连招时不能把内容写进注释（写进去就是"保存了但读不到"）。
+func TestFrameSwitchEditSkipsCommentedNote(t *testing.T) {
+	source, items := frameTestSource(t)
+	info, err := inspect(source, items)
+	if err != nil {
+		t.Fatal(err)
+	}
+	weaponID, column, note := 0, 0, ""
+	for _, w := range info.weapons {
+		for _, s := range w.Stages {
+			blocks := info.blocks[actionKey(s.Action)]
+			if len(blocks) != 1 || !frameSwitchPattern.MatchString(blocks[0].original) {
+				continue
+			}
+			// 只挑"读侧看不到任何切换（说明都在注释里）"的状态。
+			live := 0
+			blocks[0].node.walk(func(n *xmlNode) {
+				if n.tag == "CustomStateSwitch" {
+					live++
+				}
+			})
+			if live != 0 {
+				continue
+			}
+			start := strings.Index(blocks[0].original, "<!--")
+			end := strings.Index(blocks[0].original, "-->")
+			if start < 0 || end < start {
+				continue
+			}
+			column, err = strconv.Atoi(s.State)
+			if err != nil {
+				continue
+			}
+			weaponID, note = w.ID, blocks[0].original[start:end+3]
+			break
+		}
+		if weaponID != 0 {
+			break
+		}
+	}
+	if weaponID == 0 {
+		t.Skip("本客户端没有「切换被注释掉」的动作块")
+	}
+
+	state := &weaponState{FrameSwitches: map[string]map[int]frameSwitchStageEdit{
+		strconv.Itoa(weaponID): {column: {{Attrs: []FrameSwitchAttr{
+			{Key: "keycode", Value: "8"},
+			{Key: "switchstartframe", Value: "10"},
+			{Key: "switchendframe", Value: "20"},
+			{Key: "nextstate", Value: "2091"},
+		}}}},
+	}}
+	edited, err := applyFrameSwitches(source, state, items)
+	if err != nil {
+		t.Fatal(err)
+	}
+	editedInfo, err := inspect(edited, items)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, f := range comboFrameSwitches(edited, editedInfo, strconv.Itoa(weaponID)) {
+		if f.State == strconv.Itoa(column) {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("武器 %d 状态 %d 加进去的帧级连招读不到（多半写进注释了）", weaponID, column)
+	}
+	// 注释必须原样保留。
+	after := editedInfo.blocks[actionKey(mustStageAction(t, editedInfo, weaponID, column))][0].original
+	if !strings.Contains(after, note) {
+		t.Fatalf("原本的注释被改动或删掉了：\n%s", after)
+	}
+}
+
+func mustStageAction(t *testing.T, info *inspection, weaponID, column int) string {
+	t.Helper()
+	for _, w := range info.weapons {
+		if w.ID != weaponID {
+			continue
+		}
+		for _, s := range w.Stages {
+			if s.State == strconv.Itoa(column) {
+				return s.Action
+			}
+		}
+	}
+	t.Fatalf("找不到武器 %d 状态 %d", weaponID, column)
+	return ""
 }
 
 // 校验要挡住会让客户端读不到的写法。
