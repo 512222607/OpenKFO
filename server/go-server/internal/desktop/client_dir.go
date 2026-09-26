@@ -31,6 +31,7 @@ func (admin *Admin) clientDirectory(request Request) (any, error) {
 		return map[string]any{
 			"directory":   resolved,
 			"valid":       isClientDirectory(resolved),
+			"problem":     clientDirectoryProblem(resolved),
 			"config_hash": configHash(resolved),
 			"detected":    detectClients(admin.Root, resolved),
 			"servers":     describeConfigHashFiles(admin.Root, configHash(resolved)),
@@ -41,8 +42,8 @@ func (admin *Admin) clientDirectory(request Request) (any, error) {
 		return nil, fmt.Errorf("请选择客户端目录")
 	}
 	directory = resolveDirectory(admin.Root, directory)
-	if !isClientDirectory(directory) {
-		return nil, fmt.Errorf("%s 不是客户端目录：找不到可解析的 Data/config.spf2", directory)
+	if problem := clientDirectoryProblem(directory); problem != "" {
+		return nil, fmt.Errorf("%s 不能作为客户端：%s", directory, problem)
 	}
 	encoded, err := encodeClientPath(directory)
 	if err != nil {
@@ -211,22 +212,39 @@ func configHash(directory string) string {
 // passes its own checksums, so a wrong pick is rejected before anything else
 // tries to use it.
 func isClientDirectory(directory string) bool {
-	if directory == "" {
-		return false
+	return clientDirectoryProblem(directory) == ""
+}
+
+// clientDirectoryProblem explains *why* a folder cannot be used, so the picker
+// can say more than the old catch-all "找不到可解析的 Data/config.spf2".
+// Real case: a client's config.spf2 had its 40-byte header zeroed and its
+// checksum table overwritten with a copy of the index (some third-party
+// repacker), which reads as "文件在那儿但用不了" — indistinguishable from
+// "文件根本不存在" under the old message.
+func clientDirectoryProblem(directory string) string {
+	if strings.TrimSpace(directory) == "" {
+		return "没有填路径"
 	}
 	info, err := os.Stat(directory)
-	if err != nil || !info.IsDir() {
-		return false
-	}
-	data, err := os.ReadFile(configPath(directory))
 	if err != nil {
-		return false
+		return "这个目录不存在或打不开"
+	}
+	if !info.IsDir() {
+		return "这不是一个目录"
+	}
+	path := configPath(directory)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "这个目录里没有 Data/config.spf2"
 	}
 	archive, err := parseArchive(data)
 	if err != nil {
-		return false
+		return fmt.Sprintf("Data/config.spf2 不是可解析的配置包（%v；文件 %d 字节）", err, len(data))
 	}
-	return archive.verify() == nil
+	if err := archive.verify(); err != nil {
+		return fmt.Sprintf("Data/config.spf2 内容校验不通过（%v）——文件很可能被第三方工具改坏了，换回原始文件或让工具重新导出", err)
+	}
+	return ""
 }
 
 // detectClients lists plausible client folders next to the server tree, marking
@@ -263,15 +281,16 @@ func detectClients(root, current string) []map[string]any {
 	sort.Strings(candidates)
 	result := []map[string]any{}
 	for _, directory := range candidates {
-		valid := isClientDirectory(directory)
+		problem := clientDirectoryProblem(directory)
 		entry := map[string]any{
 			"directory":   directory,
 			"label":       filepath.Base(directory),
-			"valid":       valid,
+			"valid":       problem == "",
+			"problem":     problem,
 			"current":     normalizeDir(directory) == normalizeDir(current),
 			"config_hash": "",
 		}
-		if valid {
+		if problem == "" {
 			entry["config_hash"] = configHash(directory)
 		}
 		result = append(result, entry)

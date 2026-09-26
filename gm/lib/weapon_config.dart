@@ -5508,6 +5508,7 @@ class _ClientPickerDialogState extends State<_ClientPickerDialog> {
                         final directory = '${entry['directory']}';
                         final valid = entry['valid'] == true;
                         final hash = '${entry['config_hash'] ?? ''}';
+                        final problem = '${entry['problem'] ?? ''}';
                         final selected = chosen.trim() == directory;
                         return ListTile(
                           dense: true,
@@ -5535,7 +5536,7 @@ class _ClientPickerDialogState extends State<_ClientPickerDialog> {
                               if (!valid) ...[
                                 const SizedBox(width: 8),
                                 const Text(
-                                  '（不是客户端目录）',
+                                  '（客户端不可用）',
                                   style: TextStyle(
                                     fontSize: 11,
                                     color: Colors.deepOrange,
@@ -5545,12 +5546,21 @@ class _ClientPickerDialogState extends State<_ClientPickerDialog> {
                             ],
                           ),
                           subtitle: Text(
-                            hash.isEmpty
-                                ? directory
-                                : '$directory\nconfig.spf2  ${hash.substring(0, 12)}…',
-                            style: const TextStyle(fontSize: 11),
+                            // 不可用时把后端给的具体原因显示出来，否则「不是客户端目录」
+                            // 会把"文件不存在""文件被改坏"混成一句，只能靠猜。
+                            !valid
+                                ? '$directory\n${problem.isEmpty ? '无法作为客户端目录' : problem}'
+                                : (hash.isEmpty
+                                      ? directory
+                                      : '$directory\nconfig.spf2  ${hash.substring(0, 12)}…'),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: valid
+                                  ? null
+                                  : Colors.deepOrange.shade900,
+                            ),
                           ),
-                          isThreeLine: hash.isNotEmpty,
+                          isThreeLine: hash.isNotEmpty || !valid,
                           onTap: valid
                               ? () => setState(() {
                                     chosen = directory;
