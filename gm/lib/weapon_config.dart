@@ -34,6 +34,10 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
   int editorVersion = 0;
   /// 最近一次导出发版包的结果（后端 packageResult）；空 map 表示还没导出过。
   Map<String, dynamic> exportResult = {};
+  /// 最近一次导出是不是合并包（只含当前武器的配置）。
+  bool lastExportMerge = false;
+  /// 最近一次「导入武器包」的结果（后端 mergeImportReport）；空 map 表示还没导入过。
+  Map<String, dynamic> mergeImportResult = {};
 
   @override
   void initState() {
@@ -87,6 +91,24 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
       Map<String, dynamic>.from(data?['created'] as Map? ?? const {});
 
   bool isCreated(dynamic id) => created.containsKey('$id');
+
+  /// 编辑集里有、当前客户端自己的 config.spf2 里还没有的武器编号。
+  /// 武器列表是「客户端 + 全局编辑集」渲染出来的，编辑集不随客户端切换，
+  /// 所以自建武器会在每个客户端上都显示；这些编号就是"尚未部署到本客户端"的。
+  Set<String> get undeployedIDs => {
+    for (final id in (data?['undeployed'] as List? ?? [])) '$id',
+  };
+
+  bool isDeployed(dynamic id) => !undeployedIDs.contains('$id');
+
+  /// 「共 N 件武器 · 本客户端实有 X · 编辑集额外 Y」。编辑集全局共享、换客户端
+  /// 不会清掉自建武器，所以要把"客户端真有的"和"只是编辑集里的"分开报清楚。
+  String deploySummary(List allWeapons) {
+    final extra = allWeapons.where((w) => !isDeployed(w['id'])).length;
+    if (extra == 0) return '共 ${allWeapons.length} 件武器';
+    return '共 ${allWeapons.length} 件武器 · 本客户端实有 '
+        '${allWeapons.length - extra} · 编辑集额外 $extra（未部署）';
+  }
 
   /// The registered blueprint behind a self-made weapon, empty for shipped ones.
   Map<String, dynamic> blueprintOf(dynamic id) {
@@ -265,6 +287,18 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
 
   List<Map<String, String>> comboChain = [];
   List<Map<String, String>> comboDeadEnds = [];
+  /// 动作块内的帧级按键切换（CustomStateSwitch），第二条连招通道。
+  /// 这份是渲染后的现状（含已保存的编辑），编辑器据此展示。
+  /// 元素里除了 state/next/keycode/window 这些展示字段，还有 attrs（原始属性表），
+  /// 所以不能收窄成 Map<String, String>。
+  List<Map<String, dynamic>> frameSwitches = [];
+  /// 本次编辑中改过的状态 → 该状态要写的切换列表。
+  Map<String, List<Map<String, dynamic>>> frameEdits = {};
+  /// 后端已保存的帧级连招（用于判断某状态是否被定制过）。
+  Map<String, List<Map<String, dynamic>>> frameSaved = {};
+  /// 底层按键码可选项（后端 frame_keys；与 delayacttable 的按键编号是两套）。
+  List<Map<String, String>> frameKeys = [];
+  bool frameEditing = false;
 
   /// 客户端 delayacttable.xml 的 <KeyInputList>：按键编号不是连续的
   /// （1..6 基础键、8..13 双键组合、19..24 方向组合、31..33 站/跑/跳技），
@@ -337,6 +371,23 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
           for (final e in (result['dead_ends'] as List? ?? []))
             Map<String, String>.from(e as Map),
         ];
+        frameSwitches = [
+          for (final e in (result['frame_switches'] as List? ?? []))
+            Map<String, dynamic>.from(e as Map),
+        ];
+        frameSaved = {
+          for (final e in (result['frame_switches_saved'] as Map? ?? {}).entries)
+            '${e.key}': [
+              for (final sw in (e.value as List? ?? []))
+                Map<String, dynamic>.from(sw as Map),
+            ],
+        };
+        frameKeys = [
+          for (final e in (result['frame_keys'] as List? ?? []))
+            {'v': '${(e as Map)['value']}', 'l': '${e['label']}'},
+        ];
+        frameEdits = {};
+        frameEditing = false;
         comboKeys = [
           for (final e in (result['keys'] as List? ?? []))
             {'v': '${(e as Map)['id']}', 'l': '${e['label']}'},
@@ -346,6 +397,12 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
       if (mounted) {
         setState(() => comboChain = []);
         setState(() => comboDeadEnds = []);
+        setState(() => frameSwitches = []);
+        setState(() {
+          frameSaved = {};
+          frameEdits = {};
+          frameEditing = false;
+        });
       }
     }
   }
@@ -376,6 +433,159 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
       chainDraft = [];
     });
   }
+
+  /// 该武器有帧级连招（或被定制过）的状态，按状态号排序。
+  List<String> get frameStates {
+    final states = <String>{
+      ...frameEdits.keys,
+      ...frameSaved.keys,
+      for (final f in frameSwitches) '${f['state']}',
+    }.toList();
+    states.sort(
+      (a, b) => (int.tryParse(a) ?? 0).compareTo(int.tryParse(b) ?? 0),
+    );
+    return states;
+  }
+
+  /// 某状态当前要展示的切换列表：改过用改动，否则用渲染后的现状。
+  List<Map<String, dynamic>> frameListFor(String state) {
+    final edit = frameEdits[state];
+    if (edit != null) return edit;
+    return [
+      for (final f in frameSwitches)
+        if ('${f['state']}' == state) Map<String, dynamic>.from(f),
+    ];
+  }
+
+  /// 某状态是否被本次编辑动过（动过就标出来，免得以为改动丢了）。
+  bool frameTouched(String state) => frameEdits.containsKey(state);
+
+  bool get frameDirty => frameEdits.isNotEmpty;
+
+  void startFrameEdit() {
+    setState(() {
+      frameEdits = {};
+      frameEditing = true;
+    });
+  }
+
+  void cancelFrameEdit() {
+    setState(() {
+      frameEdits = {};
+      frameEditing = false;
+    });
+  }
+
+  void frameRemove(String state, int index) {
+    final list = [for (final e in frameListFor(state)) e];
+    if (index < 0 || index >= list.length) return;
+    list.removeAt(index);
+    setState(() => frameEdits[state] = list);
+  }
+
+  Future<void> frameAdd(String state) async {
+    final added = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (_) => _FrameSwitchDialog(
+        state: state,
+        states: [
+          for (final s in (data?['states'] as List? ?? [])) '$s',
+        ],
+        keys: frameKeys,
+      ),
+    );
+    if (added == null || !mounted) return;
+    final list = [for (final e in frameListFor(state)) e]..add(added);
+    setState(() => frameEdits[state] = list);
+  }
+
+  /// 保存：整把武器一次性替换。没动过的状态原样带上，后端按 map 里有什么写什么。
+  Future<void> saveFrameSwitches() async {
+    final payload = <String, dynamic>{};
+    for (final entry in frameSaved.entries) {
+      payload[entry.key] = _encodeFrameList(entry.value);
+    }
+    for (final entry in frameEdits.entries) {
+      payload[entry.key] = _encodeFrameList(entry.value);
+    }
+    final prefer = weapon!['id'] as int?;
+    setState(() {
+      busy = true;
+      failed = false;
+      message = '正在保存帧级连招…';
+    });
+    try {
+      final result = Map<String, dynamic>.from(await widget.api({
+        'operation': 'weapon_frame_switch_set',
+        'weapon': weapon!['id'],
+        'frame_switches': payload,
+      }));
+      if (!mounted) return;
+      setState(() {
+        busy = false;
+        frameEditing = false;
+        frameEdits = {};
+        message = '${result['message'] ?? '已保存帧级连招'}';
+      });
+      await load(prefer: prefer);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          busy = false;
+          failed = true;
+          message = '$e';
+        });
+      }
+    }
+  }
+
+  /// 清掉这把武器的全部帧级连招定制，动作块回到原样。
+  Future<void> clearFrameSwitches() async {
+    final prefer = weapon!['id'] as int?;
+    setState(() {
+      busy = true;
+      failed = false;
+      message = '正在清除帧级连招定制…';
+    });
+    try {
+      final result = Map<String, dynamic>.from(await widget.api({
+        'operation': 'weapon_frame_switch_set',
+        'weapon': weapon!['id'],
+        'frame_switches': <String, dynamic>{},
+      }));
+      if (!mounted) return;
+      setState(() {
+        busy = false;
+        frameEditing = false;
+        frameEdits = {};
+        message = '${result['message'] ?? '已清除'}';
+      });
+      await load(prefer: prefer);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          busy = false;
+          failed = true;
+          message = '$e';
+        });
+      }
+    }
+  }
+
+  List<Map<String, dynamic>> _encodeFrameList(
+    List<Map<String, dynamic>> list,
+  ) => [
+    for (final item in list)
+      {
+        'attrs': [
+          for (final attr in (item['attrs'] as List? ?? []))
+            {
+              'key': '${(attr as Map)['key']}',
+              'value': '${attr['value']}',
+            },
+        ],
+      },
+  ];
 
   Future<void> saveChain() async {
     final prefer = weapon!['id'] as int?;
@@ -648,7 +858,7 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
   /// 自建武器即使一条转移都没有也要显示这张卡片，否则没法从零开始编连招。
   Widget comboChainCard() {
     final created = weapon != null && isCreated(weapon!['id']);
-    if (comboChain.isEmpty && !chainEditing && !created) {
+    if (comboChain.isEmpty && frameSwitches.isEmpty && !chainEditing && !created) {
       return const SizedBox.shrink();
     }
     final states = [for (final s in (data?['states'] as List? ?? [])) '$s'];
@@ -1267,6 +1477,206 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
     );
   }
 
+  /// 帧级按键切换（动作块内 CustomStateSwitch）：第二条连招通道，可增可删。
+  /// 动作块被别的武器共用时会先克隆成这把武器独占的块，所以增删不影响原武器。
+  Widget frameSwitchCard() {
+    final states = frameStates;
+    final hasEdit = frameSaved.isNotEmpty;
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.blueGrey.shade50,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.animation, size: 16, color: Colors.blueGrey.shade700),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    frameEditing
+                        ? '帧级按键切换 · 编辑中'
+                            '${frameEdits.isEmpty ? '' : '（改过 ${frameEdits.length} 个状态）'}'
+                        : '帧级按键切换 · ${frameSwitches.length} 条',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.blueGrey.shade800,
+                    ),
+                  ),
+                ),
+                if (frameEditing) ...[
+                  TextButton(
+                    onPressed: busy ? null : cancelFrameEdit,
+                    child: const Text('取消'),
+                  ),
+                  FilledButton.icon(
+                    onPressed: busy ? null : saveFrameSwitches,
+                    icon: const Icon(Icons.check, size: 16),
+                    label: const Text('保存帧级连招'),
+                  ),
+                ] else
+                  TextButton.icon(
+                    onPressed: busy ? null : startFrameEdit,
+                    icon: const Icon(Icons.edit, size: 15),
+                    label: Text(states.isEmpty ? '添加' : '编辑'),
+                  ),
+              ],
+            ),
+            if (states.isEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                frameEditing
+                    ? '点下面「给某个状态添加帧级连招」开始：播到第几帧按下哪个键 → 跳到哪个状态。'
+                    : '动作块里没有帧级连招。连招也可能走上面那张连招链（delayacttable）表；'
+                        '这里加的是动作播放中的按键切换。',
+                style: const TextStyle(fontSize: 12, color: Colors.black54),
+              ),
+            ],
+            for (final state in states) frameStateGroup(state),
+            if (frameEditing) ...[
+              const SizedBox(height: 2),
+              TextButton.icon(
+                onPressed: busy ? null : framePickStateAndAdd,
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text(
+                  '给某个状态添加帧级连招',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ),
+            ],
+            if (!frameEditing && hasEdit)
+              TextButton(
+                onPressed: busy ? null : clearFrameSwitches,
+                child: const Text(
+                  '清除本武器的帧级连招定制（动作块回到原样）',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget frameStateGroup(String state) {
+    final list = frameListFor(state);
+    final touched = frameTouched(state);
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                chainStateLabel(state),
+                style: TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.blueGrey.shade800,
+                ),
+              ),
+              if (touched) ...[
+                const SizedBox(width: 6),
+                const Text(
+                  '已改动',
+                  style: TextStyle(fontSize: 11, color: Colors.teal),
+                ),
+              ],
+            ],
+          ),
+          if (list.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(left: 10, top: 2),
+              child: Text(
+                '（保存后这个状态不再有帧级连招）',
+                style: TextStyle(fontSize: 11, color: Colors.deepOrange),
+              ),
+            ),
+          for (var index = 0; index < list.length; index++)
+            Row(
+              children: [
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    frameSwitchLine(list[index]),
+                    style: TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                      color: Colors.blueGrey.shade900,
+                    ),
+                  ),
+                ),
+                if (frameEditing)
+                  GestureDetector(
+                    onTap: busy ? null : () => frameRemove(state, index),
+                    child: const Padding(
+                      padding: EdgeInsets.only(left: 6, right: 4),
+                      child: Icon(
+                        Icons.close,
+                        size: 14,
+                        color: Colors.deepOrange,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          if (frameEditing)
+            Padding(
+              padding: const EdgeInsets.only(left: 4),
+              child: TextButton.icon(
+                onPressed: busy ? null : () => frameAdd(state),
+                icon: const Icon(Icons.add, size: 15),
+                label: const Text('添加到此状态', style: TextStyle(fontSize: 12)),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// 给还没有帧级连招的状态添加：先选状态。
+  Future<void> framePickStateAndAdd() async {
+    final all = [for (final s in (data?['states'] as List? ?? [])) '$s'];
+    if (all.isEmpty) return;
+    final picked = await showDialog<String>(
+      context: context,
+      builder: (_) => _SimplePickDialog(
+        title: '为哪个状态添加帧级连招',
+        hint: '搜索状态号',
+        options: [
+          for (final s in all) {'value': s, 'label': chainStateLabel(s)},
+        ],
+      ),
+    );
+    if (picked == null || !mounted) return;
+    await frameAdd(picked);
+  }
+
+  /// 一条帧级连招的可读描述。
+  String frameSwitchLine(Map<String, dynamic> item) {
+    final attrs = <String, String>{
+      for (final a in (item['attrs'] as List? ?? []))
+        '${(a as Map)['key']}': '${a['value']}',
+    };
+    final key = attrs['keycode'] ?? '';
+    final label = key.isEmpty ? '（自动）' : '按${frameKeyLabelOf(key)}';
+    final start = attrs['switchstartframe'] ?? '?';
+    final end = attrs['switchendframe'] ?? '?';
+    final input = (attrs['inputstartframe'] ?? '').isEmpty
+        ? ''
+        : '，输入窗口 ${attrs['inputstartframe']}-${attrs['inputendframe']}';
+    return '$label → ${attrs['nextstate'] ?? '?'}（第 $start-$end 帧$input）';
+  }
+
   Widget comboChainGroup(
     String from,
     List<Map<String, String>> edges,
@@ -1686,6 +2096,139 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
     return '${value.toStringAsFixed(0)} B';
   }
 
+  /// 导出合并包：只把「当前武器」（或全部自建武器）自己的配置条目和素材打成
+  /// 一个 zip，导入时逐条合并进目标客户端，不整包覆盖。
+  Future<void> exportMergePackage() async {
+    final all = await showDialog<bool>(
+      context: context,
+      builder: (_) => _MergeExportDialog(
+        weaponName: '${weapon!['name']}',
+        createdCount: created.length,
+      ),
+    );
+    if (all == null || !mounted) return;
+    setState(() {
+      busy = true;
+      failed = false;
+      exportResult = {};
+      lastExportMerge = true;
+      message = '正在提取「${weapon!['name']}」的配置条目并打包…';
+    });
+    try {
+      final result = Map<String, dynamic>.from(
+        await widget.api({
+          'operation': 'weapon_merge_export',
+          'weapon': weapon!['id'],
+          'all': all,
+          'rules': rules,
+          'revision': data!['revision'],
+        }) as Map,
+      );
+      if (!mounted) return;
+      setState(() {
+        exportResult = result;
+        busy = false;
+        message = '已导出合并包 ${result['name']}（${sizeText(result['size'])}，'
+            '${(result['files'] as List? ?? []).length} 个素材文件）。'
+            '把它发到目标机器，在 GM 里点「导入武器包」选择该 zip 即可合并，'
+            '目标客户端的其他配置不会被改动。';
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          busy = false;
+          failed = true;
+          message = '导出合并包失败：$e';
+        });
+      }
+    }
+  }
+
+  /// 导入武器包：选一个合并包 zip，只合并包里武器的配置条目，其余条目不动。
+  Future<void> importMergePackage() async {
+    final source = await showDialog<String>(
+      context: context,
+      builder: (_) => _MergeImportDialog(
+        loadPackages: () async => Map<String, dynamic>.from(
+          await widget.api({'operation': 'weapon_merge_packages'}) as Map,
+        ),
+      ),
+    );
+    if (source == null || !mounted) return;
+    // 先预览：以所选客户端的 config.spf2 为参照，列出包里哪些是新增、哪些是
+    // 已存在会被覆盖的武器，用户确认后才真正写盘。
+    setState(() {
+      busy = true;
+      failed = false;
+      mergeImportResult = {};
+      message = '正在分析合并包…';
+    });
+    Map<String, dynamic> preview;
+    try {
+      preview = Map<String, dynamic>.from(
+        await widget.api({
+          'operation': 'weapon_merge_preview',
+          'source_path': source,
+        }) as Map,
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          busy = false;
+          failed = true;
+          message = '读取合并包失败：$e';
+        });
+      }
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      busy = false;
+      message = '';
+    });
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => _MergePreviewDialog(preview: preview),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() {
+      busy = true;
+      failed = false;
+      message = '正在合并武器包…';
+    });
+    try {
+      final result = Map<String, dynamic>.from(
+        await widget.api({
+          'operation': 'weapon_merge_import',
+          'source_path': source,
+        }) as Map,
+      );
+      if (!mounted) return;
+      setState(() {
+        mergeImportResult = result;
+        busy = false;
+        final added = (result['new'] as List? ?? []).length;
+        final changed = (result['modified'] as List? ?? []).length;
+        final parts = <String>[];
+        if (added > 0) parts.add('新增 $added 把');
+        if (changed > 0) parts.add('覆盖已有 $changed 把');
+        message = '导入完成：${parts.isEmpty ? '没有变化' : parts.join('、')}。'
+            '共处理 ${(result['entries'] as List? ?? []).length} 个配置条目、'
+            '解压 ${result['assets']} 个素材。'
+            '目标客户端其他配置未被改动；改动前的备份见下方卡片。';
+      });
+      await load();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          busy = false;
+          failed = true;
+          message = '导入失败：$e';
+        });
+      }
+    }
+  }
+
   /// 发版包导出结果卡片：路径、分组统计、配置改动、文件清单。
   Widget exportCard() {
     final files = [
@@ -1722,7 +2265,7 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    '发版包 · ${exportResult['name']}',
+                    '${lastExportMerge ? '合并包' : '发版包'} · ${exportResult['name']}',
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -1831,6 +2374,122 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                 ],
               ],
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 合并导入结果卡片：包里哪些武器是新增、哪些覆盖了已有武器、逐条处理结果、备份路径。
+  Widget mergeImportCard() {
+    final entries = [
+      for (final e in (mergeImportResult['entries'] as List? ?? []))
+        Map<String, dynamic>.from(e as Map),
+    ];
+    final newWeapons = [
+      for (final w in (mergeImportResult['new'] as List? ?? []))
+        Map<String, dynamic>.from(w as Map),
+    ];
+    final modified = [
+      for (final w in (mergeImportResult['modified'] as List? ?? []))
+        Map<String, dynamic>.from(w as Map),
+    ];
+    final reference = '${mergeImportResult['reference'] ?? ''}';
+    const actionText = <String, String>{
+      'replaced': '替换',
+      'inserted': '插入',
+      'unchanged': '未动',
+      'removed': '移除',
+      'merged': '合并',
+    };
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      color: Colors.teal.shade50,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.call_merge, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    (newWeapons.isEmpty && modified.isEmpty)
+                        ? '合并导入 · 包里没有武器'
+                        : '合并导入 · 新增 ${newWeapons.length} 把'
+                            '${modified.isEmpty ? '' : '、覆盖已有 ${modified.length} 把'}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                Text(
+                  '${entries.length} 个条目 · ${mergeImportResult['assets']} 个素材',
+                  style: const TextStyle(fontSize: 12, color: Colors.black54),
+                ),
+              ],
+            ),
+            if (newWeapons.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              const Text(
+                '新增武器：',
+                style: TextStyle(fontSize: 12, color: Colors.green),
+              ),
+              const SizedBox(height: 2),
+              for (final w in newWeapons)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8, bottom: 1),
+                  child: Text(
+                    '  · ${w['name']}（${w['id']}）',
+                    style: const TextStyle(fontSize: 11, color: Colors.green),
+                  ),
+                ),
+            ],
+            if (modified.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              const Text(
+                '覆盖的已有武器（这些编号在目标客户端已存在，按合并包覆盖）：',
+                style: TextStyle(fontSize: 12, color: Colors.deepOrange),
+              ),
+              const SizedBox(height: 2),
+              for (final w in modified)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8, bottom: 1),
+                  child: Text(
+                    '  · ${w['name']}（${w['id']}）',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Colors.deepOrange,
+                    ),
+                  ),
+                ),
+            ],
+            const SizedBox(height: 6),
+            SelectableText(
+              '改动前备份：${mergeImportResult['backup']}',
+              style: const TextStyle(fontSize: 11, color: Colors.black54),
+            ),
+            if (reference.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                '参照配置：$reference',
+                style: const TextStyle(fontSize: 11, color: Colors.black54),
+              ),
+            ],
+            if (entries.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              const Text('处理结果：', style: TextStyle(fontSize: 12)),
+              const SizedBox(height: 2),
+              for (final e in entries)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8, bottom: 1),
+                  child: Text(
+                    '  · ${e['entry']} — ${actionText['${e['action']}'] ?? e['action']}'
+                    '${e['detail'] == null ? '' : '（${e['detail']}）'}',
+                    style: const TextStyle(fontSize: 11, color: Colors.black54),
+                  ),
+                ),
+            ],
           ],
         ),
       ),
@@ -2992,6 +3651,29 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                 ),
               ],
             ),
+            if (undeployedIDs.isNotEmpty)
+              Row(
+                children: [
+                  const SizedBox(width: 22),
+                  Icon(
+                    Icons.info_outline,
+                    size: 14,
+                    color: Colors.orange.shade800,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      '编辑集里有 ${undeployedIDs.length} 把武器本客户端还没有'
+                      '（列表里标「未部署」）；它们只是编辑集里的记录，'
+                      '点「应用到游戏」或导入合并包之后才会真正写进这个客户端。',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.orange.shade900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
           ],
         ),
       ),
@@ -3227,7 +3909,7 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                         ),
                         Padding(
                           padding: const EdgeInsets.all(8),
-                          child: Text('共 ${weapons.length} 件武器'),
+                          child: Text(deploySummary(allWeapons)),
                         ),
                         Expanded(
                           child: ListView.builder(
@@ -3249,6 +3931,11 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                                       const Padding(
                                         padding: EdgeInsets.only(left: 6),
                                         child: _SelfMadeBadge(),
+                                      ),
+                                    if (!isDeployed(value['id']))
+                                      const Padding(
+                                        padding: EdgeInsets.only(left: 4),
+                                        child: _NotDeployedBadge(),
                                       ),
                                   ],
                                 ),
@@ -3328,6 +4015,26 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                                                       ),
                                                     ],
                                                   ),
+                                                if (!isDeployed(weapon!['id']))
+                                                  Row(
+                                                    children: [
+                                                      const _NotDeployedBadge(),
+                                                      const SizedBox(width: 8),
+                                                      Expanded(
+                                                        child: Text(
+                                                          '本客户端的 config.spf2 里还没有这把武器，'
+                                                          '它只是 GM 编辑集里的记录；'
+                                                          '点「应用到游戏」才会写进这个客户端。',
+                                                          style: TextStyle(
+                                                            fontSize: 11,
+                                                            color: Colors
+                                                                .orange
+                                                                .shade900,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
                                                 const SizedBox(height: 6),
                                                 const Text(
                                                   '武器简介',
@@ -3376,6 +4083,7 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                                                 CrossAxisAlignment.stretch,
                                             children: [
                                               comboChainCard(),
+                                              frameSwitchCard(),
                                               comboRuleCard(),
                                             ],
                                           ),
@@ -3592,6 +4300,16 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                                       ),
                                       label: const Text('导出发版包'),
                                     ),
+                                    OutlinedButton.icon(
+                                      onPressed: busy ? null : exportMergePackage,
+                                      icon: const Icon(Icons.call_merge),
+                                      label: const Text('导出合并包'),
+                                    ),
+                                    OutlinedButton.icon(
+                                      onPressed: busy ? null : importMergePackage,
+                                      icon: const Icon(Icons.file_upload_outlined),
+                                      label: const Text('导入武器包'),
+                                    ),
                                     if (dirty)
                                       const Text(
                                         '有未保存修改',
@@ -3601,6 +4319,10 @@ class _WeaponConfigPageState extends State<WeaponConfigPage> {
                                       ),
                                   ],
                                 ),
+                                if (mergeImportResult.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  mergeImportCard(),
+                                ],
                                 if (exportResult.isNotEmpty) ...[
                                   const SizedBox(height: 8),
                                   exportCard(),
@@ -3741,6 +4463,366 @@ class _ExportDialogState extends State<_ExportDialog> {
   }
 }
 
+/// 底层按键码 → 可读标签。与后端 frameKeyLabel 同一套编号（7=X 8=C 9=Z
+/// 5=跳 20=前 21=后），逗号是连按序列，前导负号是松开。
+String frameKeyName(String code) {
+  var value = code.trim();
+  var release = false;
+  if (value.startsWith('-')) {
+    release = true;
+    value = value.substring(1);
+  }
+  const names = {
+    '7': 'X',
+    '8': 'C',
+    '9': 'Z',
+    '5': '跳',
+    '20': '前',
+    '21': '后',
+  };
+  final name = names[value] ?? '键$value';
+  return release ? '松开$name' : name;
+}
+
+String frameKeyLabelOf(String keycode) {
+  final trimmed = keycode.trim();
+  if (trimmed.isEmpty) return '（自动）';
+  return trimmed.split(',').map(frameKeyName).join(' ');
+}
+
+/// 帧级连招的编辑对话框：一个状态一条切换，字段与动作块里的
+/// `<CustomStateSwitch>` 属性一一对应。
+class _FrameSwitchDialog extends StatefulWidget {
+  const _FrameSwitchDialog({
+    required this.state,
+    required this.states,
+    required this.keys,
+  });
+
+  final String state;
+  final List<String> states;
+  final List<Map<String, String>> keys;
+
+  @override
+  State<_FrameSwitchDialog> createState() => _FrameSwitchDialogState();
+}
+
+class _FrameSwitchDialogState extends State<_FrameSwitchDialog> {
+  final form = GlobalKey<FormState>();
+  late String state;
+  late String next;
+  late String key;
+  final custom = TextEditingController();
+  final interval = TextEditingController(text: '10');
+  final inputStart = TextEditingController();
+  final inputEnd = TextEditingController();
+  final switchStart = TextEditingController(text: '10');
+  final switchEnd = TextEditingController(text: '20');
+  bool customKey = false;
+
+  @override
+  void initState() {
+    super.initState();
+    state = widget.state;
+    next = widget.states.contains(widget.state)
+        ? widget.state
+        : (widget.states.isNotEmpty ? widget.states.first : '');
+    key = widget.keys.isNotEmpty ? '${widget.keys.first['v']}' : '';
+  }
+
+  @override
+  void dispose() {
+    custom.dispose();
+    interval.dispose();
+    inputStart.dispose();
+    inputEnd.dispose();
+    switchStart.dispose();
+    switchEnd.dispose();
+    super.dispose();
+  }
+
+  String? frameField(String? value, String label, {bool required = true}) {
+    final text = (value ?? '').trim();
+    if (text.isEmpty) return required ? '请填 $label' : null;
+    final number = int.tryParse(text);
+    if (number == null || number < 0 || number > 9999) {
+      return '$label 需要 0..9999 的整数';
+    }
+    return null;
+  }
+
+  /// 空字符串 = 这条切换不看按键（合法）；null = 写法非法。
+  String? keyCodeValue() {
+    final text = (customKey ? custom.text : key).trim();
+    if (text.isEmpty) return '';
+    for (final part in text.split(',')) {
+      final body = part.startsWith('-') ? part.substring(1) : part;
+      if (body.isEmpty || int.tryParse(body) == null) return null;
+    }
+    return text;
+  }
+
+  void submit() {
+    if (!(form.currentState?.validate() ?? false)) return;
+    final codes = <String, String>{};
+    final resolved = keyCodeValue();
+    if (resolved != null && resolved.isNotEmpty) codes['keycode'] = resolved;
+    final startIn = inputStart.text.trim();
+    final endIn = inputEnd.text.trim();
+    if (startIn.isNotEmpty && endIn.isNotEmpty) {
+      codes['inputstartframe'] = startIn;
+      codes['inputendframe'] = endIn;
+    }
+    final gap = interval.text.trim();
+    if (gap.isNotEmpty) codes['keyintervalframe'] = gap;
+    codes['switchstartframe'] = switchStart.text.trim();
+    codes['switchendframe'] = switchEnd.text.trim();
+    codes['nextstate'] = next;
+    const order = [
+      'inputstartframe',
+      'inputendframe',
+      'keycode',
+      'keyintervalframe',
+      'switchstartframe',
+      'switchendframe',
+      'nextstate',
+    ];
+    Navigator.pop(context, <String, dynamic>{
+      'attrs': [
+        for (final name in order)
+          if (codes.containsKey(name)) {'key': name, 'value': codes[name]},
+      ],
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('添加帧级连招'),
+      content: SizedBox(
+        width: 560,
+        child: Form(
+          key: form,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '动作播放到「生效窗口」期间按下按键，就会跳到「目标状态」。'
+                  '同一条动作块被别的武器共用时，保存时会自动克隆出这把武器'
+                  '独占的块，原武器不受影响。',
+                  style: TextStyle(fontSize: 12),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: widget.states.contains(state) ? state : null,
+                  decoration: const InputDecoration(labelText: '所在状态'),
+                  items: [
+                    for (final s in widget.states)
+                      DropdownMenuItem(value: s, child: Text(s)),
+                  ],
+                  onChanged: (value) => setState(() => state = value ?? state),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  initialValue: customKey ? '__custom__' : key,
+                  decoration: const InputDecoration(labelText: '按键'),
+                  items: [
+                    for (final k in widget.keys)
+                      DropdownMenuItem(
+                        value: '${k['v']}',
+                        child: Text('${k['l']}（${k['v']}）'),
+                      ),
+                    const DropdownMenuItem(
+                      value: '__custom__',
+                      child: Text('自定义 / 连按序列…'),
+                    ),
+                  ],
+                  onChanged: (value) => setState(() {
+                    customKey = value == '__custom__';
+                    if (!customKey && value != null) key = value;
+                  }),
+                ),
+                if (customKey) ...[
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: custom,
+                    decoration: const InputDecoration(
+                      labelText: '按键码',
+                      hintText: '例如 7,8 表示连按 X 再按 C；-7 表示松开 X',
+                    ),
+                    validator: (value) =>
+                        keyCodeValue() == null ? '按键码只能是数字，逗号分隔' : null,
+                  ),
+                ] else
+                  TextFormField(
+                    initialValue: key,
+                    decoration: const InputDecoration(
+                      labelText: '按键码（可改）',
+                      hintText: '例如 8 = C',
+                    ),
+                    onChanged: (value) => key = value.trim(),
+                    validator: (value) =>
+                        keyCodeValue() == null ? '按键码只能是数字，逗号分隔' : null,
+                  ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  initialValue: widget.states.contains(next) ? next : null,
+                  decoration: const InputDecoration(labelText: '目标状态'),
+                  items: [
+                    for (final s in widget.states)
+                      DropdownMenuItem(value: s, child: Text(s)),
+                  ],
+                  validator: (value) => value == null ? '请选择目标状态' : null,
+                  onChanged: (value) => setState(() => next = value ?? next),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: switchStart,
+                        decoration: const InputDecoration(
+                          labelText: '生效窗口起（帧）',
+                        ),
+                        validator: (v) => frameField(v, '生效窗口起'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextFormField(
+                        controller: switchEnd,
+                        decoration: const InputDecoration(
+                          labelText: '生效窗口止（帧）',
+                        ),
+                        validator: (v) => frameField(v, '生效窗口止'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: inputStart,
+                        decoration: const InputDecoration(
+                          labelText: '输入窗口起（可空）',
+                        ),
+                        validator: (v) =>
+                            frameField(v, '输入窗口起', required: false),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextFormField(
+                        controller: inputEnd,
+                        decoration: const InputDecoration(
+                          labelText: '输入窗口止（可空）',
+                        ),
+                        validator: (v) =>
+                            frameField(v, '输入窗口止', required: false),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 130,
+                      child: TextFormField(
+                        controller: interval,
+                        decoration: const InputDecoration(
+                          labelText: '连按间隔（可空）',
+                        ),
+                        validator: (v) =>
+                            frameField(v, '连按间隔', required: false),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        FilledButton(onPressed: submit, child: const Text('添加')),
+      ],
+    );
+  }
+}
+
+/// 通用单选对话框：下拉太长时的搜索式挑选。
+class _SimplePickDialog extends StatefulWidget {
+  const _SimplePickDialog({
+    required this.title,
+    required this.hint,
+    required this.options,
+  });
+
+  final String title;
+  final String hint;
+  final List<Map<String, String>> options;
+
+  @override
+  State<_SimplePickDialog> createState() => _SimplePickDialogState();
+}
+
+class _SimplePickDialogState extends State<_SimplePickDialog> {
+  String query = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final matches = [
+      for (final option in widget.options)
+        if ('${option['value']} ${option['label']}'.contains(query.trim()))
+          option,
+    ];
+    return AlertDialog(
+      title: Text(widget.title),
+      content: SizedBox(
+        width: 420,
+        height: 380,
+        child: Column(
+          children: [
+            TextField(
+              decoration: InputDecoration(
+                labelText: widget.hint,
+                prefixIcon: const Icon(Icons.search),
+              ),
+              onChanged: (value) => setState(() => query = value),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: ListView.builder(
+                itemCount: matches.length,
+                itemBuilder: (context, index) => ListTile(
+                  dense: true,
+                  title: Text(
+                    '${matches[index]['label']}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  onTap: () =>
+                      Navigator.pop(context, '${matches[index]['value']}'),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+      ],
+    );
+  }
+}
+
 /// Small tag shown next to weapons that only exist in the editor state.
 class _SelfMadeBadge extends StatelessWidget {
   const _SelfMadeBadge();
@@ -3755,6 +4837,25 @@ class _SelfMadeBadge extends StatelessWidget {
     child: Text(
       '自建',
       style: TextStyle(fontSize: 11, color: Colors.teal.shade900),
+    ),
+  );
+}
+
+/// Tag for weapons the editing set provides but the selected client's own
+/// config.spf2 has no row for: visible in the list, not actually installed.
+class _NotDeployedBadge extends StatelessWidget {
+  const _NotDeployedBadge();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+    decoration: BoxDecoration(
+      color: Colors.orange.shade100,
+      borderRadius: BorderRadius.circular(4),
+    ),
+    child: Text(
+      '未部署',
+      style: TextStyle(fontSize: 11, color: Colors.orange.shade900),
     ),
   );
 }
@@ -4567,16 +5668,20 @@ class _RemapTemplateDialogState extends State<_RemapTemplateDialog> {
                               final stateKey = '${s['state']}';
                               final ids = (s['property_ids'] as List? ?? [])
                                   .join('、');
+                              final fx = (s['effects'] as List? ?? [])
+                                  .join('、');
                               return ListTile(
                                 dense: true,
                                 selected: chosenState == stateKey,
                                 title: Text('${s['label'] ?? stateKey}'),
                                 subtitle: Text(
                                   '状态 $stateKey · 动作 ${s['action']}'
-                                  '${ids.isEmpty ? '' : '\n命中属性 $ids'}',
+                                  '${ids.isEmpty ? '' : '\n命中属性 $ids'}'
+                                  '${fx.isEmpty ? '' : '\n特效 $fx'}',
                                   style: const TextStyle(fontSize: 11),
                                 ),
-                                isThreeLine: ids.isNotEmpty,
+                                isThreeLine:
+                                    ids.isNotEmpty || fx.isNotEmpty,
                                 onTap: () =>
                                     setState(() => chosenState = stateKey),
                               );
@@ -4721,6 +5826,322 @@ class _IconUploadDialogState extends State<_IconUploadDialog> {
         FilledButton(
           onPressed: () => Navigator.pop(context, path.text.trim()),
           child: const Text('上传'),
+        ),
+      ],
+    );
+  }
+}
+
+/// 合并包导出范围选择：只导当前武器 / 全部自建武器。
+class _MergeExportDialog extends StatelessWidget {
+  const _MergeExportDialog({
+    required this.weaponName,
+    required this.createdCount,
+  });
+  final String weaponName;
+  final int createdCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('导出合并包'),
+      content: SizedBox(
+        width: 480,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '合并包只装这把武器自己的配置条目（item.txt / itemact.txt 各一行、'
+              '连招转移、特效登记、连招限制、动作块、命中属性）和它引用的素材，'
+              '不含整份 config.spf2。导入时只合并这些条目，目标客户端其余配置'
+              '一个字节都不动。导入前会先列出新增和会被覆盖的武器，确认后才写入。',
+            ),
+            const SizedBox(height: 12),
+            if (createdCount > 1)
+              const Text(
+                '选择导出范围：',
+                style: TextStyle(fontSize: 12),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: Text('只导「$weaponName」'),
+        ),
+        if (createdCount > 1)
+          FilledButton.tonal(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('全部自建（$createdCount 把）'),
+          ),
+      ],
+    );
+  }
+}
+
+/// 合并包导入预览：以所选客户端的 Data/config.spf2 为参照，列出包里哪些武器是
+/// 新增、哪些编号已存在会被覆盖。用户点「确定导入」后才真正写盘。
+class _MergePreviewDialog extends StatelessWidget {
+  const _MergePreviewDialog({required this.preview});
+  final Map<String, dynamic> preview;
+
+  @override
+  Widget build(BuildContext context) {
+    final reference = '${preview['reference'] ?? ''}';
+    final newWeapons = [
+      for (final w in (preview['new'] as List? ?? []))
+        Map<String, dynamic>.from(w as Map),
+    ];
+    final modified = [
+      for (final w in (preview['modified'] as List? ?? []))
+        Map<String, dynamic>.from(w as Map),
+    ];
+    final total = (preview['weapons'] as List? ?? []).length;
+    String label(Map<String, dynamic> w) => '${w['name']}（${w['id']}）';
+    return AlertDialog(
+      title: const Text('确认导入合并包'),
+      content: SizedBox(
+        width: 560,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '下面是这个合并包导入到当前客户端后的变化。确认无误后点「确定导入」，'
+                '导入前会自动备份 config.spf2，目标客户端的其他配置不会被改动。',
+              ),
+              const SizedBox(height: 10),
+              Text(
+                '参照配置：$reference',
+                style: const TextStyle(fontSize: 11, color: Colors.black54),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '包里共 $total 把武器。',
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+              if (newWeapons.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text(
+                  '新增武器 ${newWeapons.length} 把：',
+                  style: const TextStyle(fontSize: 12, color: Colors.green),
+                ),
+                const SizedBox(height: 2),
+                for (final w in newWeapons)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8, bottom: 1),
+                    child: Text(
+                      '  · ${label(w)}',
+                      style: const TextStyle(fontSize: 12, color: Colors.green),
+                    ),
+                  ),
+              ],
+              if (modified.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text(
+                  '已存在、导入后会覆盖的武器 ${modified.length} 把：',
+                  style: const TextStyle(fontSize: 12, color: Colors.deepOrange),
+                ),
+                const SizedBox(height: 2),
+                for (final w in modified)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8, bottom: 1),
+                    child: Text(
+                      '  · ${label(w)}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.deepOrange,
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 4),
+                const Text(
+                  '这些编号在当前客户端已存在，合并包会按自己的配置覆盖它们的'
+                  '武器行、动作行、连招、特效与动作块。',
+                  style: TextStyle(fontSize: 11, color: Colors.deepOrange),
+                ),
+              ],
+              if (newWeapons.isEmpty && modified.isEmpty) ...[
+                const SizedBox(height: 10),
+                const Text(
+                  '包里没有可导入的武器。',
+                  style: TextStyle(fontSize: 12, color: Colors.deepOrange),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: (newWeapons.isEmpty && modified.isEmpty)
+              ? null
+              : () => Navigator.pop(context, true),
+          child: const Text('确定导入'),
+        ),
+      ],
+    );
+  }
+}
+
+/// 合并包导入：列出最近导出的合并包供点选，也允许手填 zip 路径。
+class _MergeImportDialog extends StatefulWidget {
+  const _MergeImportDialog({required this.loadPackages});
+
+  final Future<Map<String, dynamic>> Function() loadPackages;
+
+  @override
+  State<_MergeImportDialog> createState() => _MergeImportDialogState();
+}
+
+class _MergeImportDialogState extends State<_MergeImportDialog> {
+  final path = TextEditingController();
+  List<Map<String, dynamic>> packages = [];
+  String directory = '';
+  String note = '';
+  bool loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    // 监听而不是 onChanged：粘贴、程序填值也要让「预览变更」跟着亮起来。
+    path.addListener(() => setState(() {}));
+    loadPackages();
+  }
+
+  @override
+  void dispose() {
+    path.dispose();
+    super.dispose();
+  }
+
+  Future<void> loadPackages() async {
+    try {
+      final result = await widget.loadPackages();
+      if (!mounted) return;
+      setState(() {
+        directory = '${result['directory'] ?? ''}';
+        packages = [
+          for (final p in (result['packages'] as List? ?? []))
+            Map<String, dynamic>.from(p as Map),
+        ];
+        loading = false;
+        note = packages.isEmpty ? '这个目录里还没有合并包；先在武器页点「导出合并包」。' : '';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        loading = false;
+        note = '读取合并包列表失败：$e';
+      });
+    }
+  }
+
+  static String sizeText(dynamic bytes) {
+    final value = (bytes is num) ? bytes.toDouble() : 0.0;
+    if (value >= 1024 * 1024) return '${(value / 1024 / 1024).toStringAsFixed(2)} MB';
+    if (value >= 1024) return '${(value / 1024).toStringAsFixed(1)} KB';
+    return '${value.toStringAsFixed(0)} B';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('导入武器包'),
+      content: SizedBox(
+        width: 620,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '导入会先以当前客户端的 Data/config.spf2 为参照，列出包里哪些武器是'
+              '新增、哪些编号已存在会被覆盖，确认后再合并。只合并包里武器自己的配置'
+              '条目，目标客户端的其他配置不会被改动；写入前会自动备份。',
+            ),
+            const SizedBox(height: 10),
+            if (loading) const LinearProgressIndicator(),
+            if (packages.isNotEmpty) ...[
+              const Text('最近导出的合并包（点一下即选中）：', style: TextStyle(fontSize: 12)),
+              const SizedBox(height: 4),
+              SizedBox(
+                height: 168,
+                child: ListView.builder(
+                  itemCount: packages.length,
+                  itemBuilder: (context, index) {
+                    final item = packages[index];
+                    final value = '${item['path']}';
+                    final selected = path.text.trim() == value;
+                    return ListTile(
+                      dense: true,
+                      selected: selected,
+                      leading: Icon(
+                        selected
+                            ? Icons.radio_button_checked
+                            : Icons.radio_button_unchecked,
+                        size: 18,
+                      ),
+                      title: Text(
+                        '${item['name']}',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      subtitle: Text(
+                        '${item['modified']} · ${sizeText(item['size'])}',
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                      onTap: () => setState(() => path.text = value),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+            TextField(
+              controller: path,
+              decoration: const InputDecoration(
+                labelText: '合并包路径',
+                hintText: r'例如 D:\OpenKFO\server\dist\weapon-packages\weapon-merge-253300-*.zip',
+                prefixIcon: Icon(Icons.file_upload_outlined),
+              ),
+            ),
+            if (note.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                note,
+                style: const TextStyle(fontSize: 11, color: Colors.deepOrange),
+              ),
+            ],
+            if (directory.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                '合并包目录：$directory',
+                style: const TextStyle(fontSize: 11, color: Colors.black54),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: path.text.trim().isEmpty
+              ? null
+              : () => Navigator.pop(context, path.text.trim()),
+          child: const Text('预览变更'),
         ),
       ],
     );

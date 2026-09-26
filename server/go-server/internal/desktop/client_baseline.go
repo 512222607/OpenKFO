@@ -200,6 +200,14 @@ func prepareClient(entry *clientBaseline, folder string, state *weaponState, pla
 	if err != nil {
 		return nil, fmt.Errorf("状态重映射：%w", err)
 	}
+	if base, err = applyFrameSwitches(base, state, items); err != nil {
+		return nil, fmt.Errorf("帧级连招：%w", err)
+	}
+	if len(state.Created) > 0 {
+		if base, err = syncWeaponEffects(base, state.Created); err != nil {
+			return nil, fmt.Errorf("同步特效登记：%w", err)
+		}
+	}
 	data, err := render(base, items, plans)
 	if err != nil {
 		return nil, err
@@ -295,6 +303,9 @@ func checkAllowedWrites(source, verified *archive, state *weaponState, info *ins
 				allowed["animation/"+remap.Action[:4]+".xml"] = true
 			}
 		}
+	}
+	for name := range frameSwitchFiles(source, state) {
+		allowed[name] = true
 	}
 	if info != nil {
 		for _, weapon := range info.weapons {

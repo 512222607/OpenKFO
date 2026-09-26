@@ -227,10 +227,21 @@ func TestWeaponBlockAssetsFollowsItemact(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// 基线里可能已经采集到真实的 253300 行（武器落盘后重新采过基线），
+	// 而 weaponActions 只认第一行。先清掉已有的 253300 行，保证读到的是
+	// 下面追加的假行——测试不依赖基线里有没有这把武器。
+	kept := []string{}
+	for _, line := range strings.Split(itemact, "\r\n") {
+		cells := strings.Split(line, "\t")
+		if len(cells) > 0 && strings.TrimSpace(cells[0]) == "253300" {
+			continue
+		}
+		kept = append(kept, line)
+	}
 	// 追加一行：即便原文件结尾没有换行，先补一个也不会产生空行（splitRows 会跳过）。
 	row := "\r\n253300\t2001133031\t2001133041\t0\t0\t0\t0\t0\t0\t0\t0\r\n"
 	replaced, err := source.replace(map[string][]byte{
-		"itemact.txt": []byte(itemact + row),
+		"itemact.txt": []byte(strings.Join(kept, "\r\n") + row),
 		// animationPattern 认的是成对的 <AnmDesc>…</AnmDesc>，自闭合写法匹配不到。
 		"animation/2001.xml": []byte(`<?xml version="1.0" encoding="gb2312"?>
 <AnmList>

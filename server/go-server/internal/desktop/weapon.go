@@ -324,8 +324,11 @@ type Stage struct {
 	Action      string   `json:"action"`
 	PropertyIDs []string `json:"property_ids"`
 	Hits        []Hit    `json:"hits"`
-	Supported   bool     `json:"supported"`
-	Reason      string   `json:"reason"`
+	// Effects lists the effect ids the action block references, so the remap
+	// template picker can preview what the client will load for this move.
+	Effects   []string `json:"effects,omitempty"`
+	Supported bool     `json:"supported"`
+	Reason    string   `json:"reason"`
 }
 type Weapon struct {
 	ID          int              `json:"id"`
@@ -683,7 +686,7 @@ func inspect(a *archive, items []Item) (*inspection, error) {
 				}
 			}
 
-			weapon.Stages = append(weapon.Stages, Stage{number, state, label, action, refIDs, hits, reason == "", reason})
+			weapon.Stages = append(weapon.Stages, Stage{number, state, label, action, refIDs, hits, effectPreviews(candidates), reason == "", reason})
 		}
 		// A donor-less weapon starts with every state zeroed, so it has no
 		// stages yet; it must still appear in the catalogue so the author can
@@ -1168,6 +1171,29 @@ func usedWeaponIDs(a *archive, created map[string]Blueprint) []int {
 	return ids
 }
 
+// undeployedWeaponIDs lists the weapons the catalogue shows but the client's own
+// config.spf2 has no row for. The catalogue is rendered from the client plus the
+// global editing set, and that set is shared by every client, so without this a
+// self-made weapon would look installed on every client the GM points at.
+func undeployedWeaponIDs(current []byte, weapons []Weapon) []int {
+	native, err := parseArchive(current)
+	if err != nil {
+		return nil
+	}
+	text, err := native.text("item.txt")
+	if err != nil {
+		return nil
+	}
+	rows := itemRowIndex(text)
+	missing := []int{}
+	for _, w := range weapons {
+		if _, ok := rows[strconv.Itoa(w.ID)]; !ok {
+			missing = append(missing, w.ID)
+		}
+	}
+	return missing
+}
+
 // applyBlueprints returns a configuration whose item.txt and itemact.txt carry
 // one extra row per blueprint. Both files already exist in the archive, so the
 // SGDP writer can replace them without growing the entry table.
@@ -1361,6 +1387,12 @@ type weaponState struct {
 	// Cleared zeroes a state column of a self-made weapon: the state vanishes
 	// from its action row, and any remap for it is ignored.
 	Remaps          map[string]map[int]*StageRemap `json:"remaps,omitempty"`
+	// FrameSwitches authors the frame-level combo channel: which
+	// <CustomStateSwitch> nodes each state's action block declares. A state
+	// present here is authoritative (an empty list means "no switches at all");
+	// a state absent keeps whatever the block already ships. Shared blocks are
+	// cloned before the rewrite, so the donor weapon is never touched.
+	FrameSwitches map[string]map[int]frameSwitchStageEdit `json:"frame_switches,omitempty"`
 	Cleared         map[string]map[int]bool        `json:"cleared,omitempty"`
 	ExtraProperties map[string]ExtraProperty       `json:"extra_properties,omitempty"`
 	// Chains holds an author-authored combo state machine per weapon. When a
@@ -1464,6 +1496,18 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 	if state.ComboRules == nil {
 		state.ComboRules = map[string]ComboRuleSet{}
 	}
+	// 合并式导入不碰编辑集、也不依赖基线：直接读目标客户端的 config.spf2，
+	// 逐条合并包里武器自己的配置。放在基线校验之前，免得客户端配置被改过
+	// （比如线上更新器）就挡在门外——那正是合并导入要处理的场景。
+	if request.Operation == "weapon_merge_preview" {
+		return weaponMergePreview(request, client)
+	}
+	if request.Operation == "weapon_merge_packages" {
+		return weaponMergePackages(folder)
+	}
+	if request.Operation == "weapon_merge_import" {
+		return weaponMergeImport(request, client, folder)
+	}
 	// The edit set is rendered onto whichever client the GM currently points at,
 	// each client directory keeping its own baseline: the user can switch
 	// clients, and a client can be refreshed by its own updater, so a single
@@ -1519,6 +1563,24 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 			remapError = remapErr.Error()
 		}
 	}
+	// Frame-level switches are the second combo channel and must be visible in
+	// the editor exactly as they will be rendered, so apply them here too.
+	if len(state.FrameSwitches) > 0 {
+		if framed, frameErr := applyFrameSwitches(base, &state, items); frameErr == nil {
+			base = framed
+		} else {
+			remapError = frameErr.Error()
+		}
+	}
+	// The acteffect registration follows the remapped itemact row, so publish
+	// and package see the same effect set the client will load on equip.
+	if len(state.Created) > 0 {
+		if synced, syncErr := syncWeaponEffects(base, state.Created); syncErr == nil {
+			base = synced
+		} else {
+			return nil, syncErr
+		}
+	}
 	info, err := inspect(base, items)
 	if err != nil {
 		return nil, err
@@ -1541,7 +1603,13 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 		if err != nil {
 			return nil, err
 		}
-		result := map[string]any{"weapons": info.weapons, "effects": effects(info), "fields": propertyFields, "buffs": buffRows, "drafts": state.Drafts, "applied": state.Applied, "created": state.Created, "combos": state.Combos, "chains": state.Chains, "combo_rules": state.ComboRules, "remaps": state.Remaps, "extra_properties": state.ExtraProperties, "cleared": state.Cleared, "states": itemactStates(base), "client": describeClient(entry, folder), "clients": describeBaselines(&state, folder), "models": weaponModels(client), "types": weaponTypes, "used_ids": usedWeaponIDs(source, state.Created), "blueprint_min": blueprintMinID, "blueprint_max": blueprintMaxID, "revision": revision, "folder": folder}
+		// A self-made weapon lives in the global editing set, so it is rendered
+		// into the catalogue of whichever client is selected even when that
+		// client's own config.spf2 has no such row. Compare against the client
+		// file itself (not the baseline) and report the ids it does not ship, so
+		// the list can mark them instead of claiming they are installed here.
+		undeployed := undeployedWeaponIDs(current, info.weapons)
+		result := map[string]any{"weapons": info.weapons, "effects": effects(info), "fields": propertyFields, "buffs": buffRows, "drafts": state.Drafts, "applied": state.Applied, "created": state.Created, "combos": state.Combos, "chains": state.Chains, "combo_rules": state.ComboRules, "remaps": state.Remaps, "extra_properties": state.ExtraProperties, "cleared": state.Cleared, "states": itemactStates(base), "client": describeClient(entry, folder), "clients": describeBaselines(&state, folder), "models": weaponModels(client), "types": weaponTypes, "used_ids": usedWeaponIDs(source, state.Created), "undeployed": undeployed, "blueprint_min": blueprintMinID, "blueprint_max": blueprintMaxID, "revision": revision, "folder": folder}
 		if remapError != "" {
 			result["remap_error"] = remapError
 		}
@@ -1562,6 +1630,7 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 			delete(state.Cleared, key)
 			delete(state.Chains, key)
 			delete(state.ComboRules, key)
+			delete(state.FrameSwitches, key)
 			message = "已移除自建武器；重新应用或发布后才会从配置包消失"
 		} else {
 			if request.Blueprint == nil {
@@ -1694,6 +1763,54 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 	}
 	// weapon_combo_chain_set replaces a weapon's combo state machine with the
 	// author-provided transitions.
+	if request.Operation == "weapon_frame_switch_set" {
+		if request.Weapon == 0 {
+			return nil, fmt.Errorf("请选择武器")
+		}
+		key := strconv.Itoa(request.Weapon)
+		actionText, err := base.text("itemact.txt")
+		if err != nil {
+			return nil, err
+		}
+		if actionRowIndex(actionText)[key] == nil {
+			return nil, fmt.Errorf("武器 %s 不在本客户端的动作表中", key)
+		}
+		if err := validateFrameSwitches(base, key, request.FrameSwitches); err != nil {
+			return nil, err
+		}
+		count := 0
+		for _, list := range request.FrameSwitches {
+			count += len(list)
+		}
+		// 整把武器一次性替换：map 里没有的状态 = 不改（沿用块里原有的切换）。
+		if len(request.FrameSwitches) == 0 {
+			delete(state.FrameSwitches, key)
+		} else {
+			if state.FrameSwitches == nil {
+				state.FrameSwitches = map[string]map[int]frameSwitchStageEdit{}
+			}
+			state.FrameSwitches[key] = request.FrameSwitches
+		}
+		encoded, err := json.MarshalIndent(state, "", "  ")
+		if err != nil {
+			return nil, err
+		}
+		if err := atomicWrite(statePath, encoded); err != nil {
+			return nil, err
+		}
+		message := fmt.Sprintf("已保存帧级连招（%d 条）；应用到游戏后写入配置包", count)
+		if len(request.FrameSwitches) == 0 {
+			message = "已清除该武器的帧级连招编辑，恢复动作块原样"
+		} else if count == 0 {
+			message = "已保存：这些状态改为没有任何帧级连招"
+		}
+		return map[string]any{
+			"frame_switches": state.FrameSwitches[key],
+			"saved":          count,
+			"revision":       digest(append(append([]byte(nil), current...), encoded...)),
+			"message":        message,
+		}, nil
+	}
 	if request.Operation == "weapon_combo_chain_set" {
 		key := strconv.Itoa(request.Weapon)
 		if request.Weapon == 0 {
@@ -1765,11 +1882,15 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 		// ones this client understands, so ship the client's own table along
 		// with the chain instead of a hardcoded list.
 		return map[string]any{
-			"weapon":    request.Weapon,
-			"chain":     comboChain(base, info, strconv.Itoa(request.Weapon)),
-			"dead_ends": comboDeadEnds(base, info, strconv.Itoa(request.Weapon)),
-			"keys":      keyInputs(base),
-			"revision":  revision,
+			"weapon":         request.Weapon,
+			"chain":          comboChain(base, info, strconv.Itoa(request.Weapon)),
+			"dead_ends":      comboDeadEnds(base, info, strconv.Itoa(request.Weapon)),
+			"frame_switches": comboFrameSwitches(base, info, strconv.Itoa(request.Weapon)),
+			// 已保存的帧级连招编辑（按状态），编辑器据此区分"改过的"和"原样"。
+			"frame_switches_saved": state.FrameSwitches[strconv.Itoa(request.Weapon)],
+			"frame_keys":           frameKeyOptions(),
+			"keys":                 keyInputs(base),
+			"revision":             revision,
 		}, nil
 	}
 	// weapon_combo_rule returns the comborule.xml limits of one weapon: the
@@ -2028,6 +2149,12 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 				delete(state.Remaps, key)
 			}
 		}
+		if state.FrameSwitches[key] != nil {
+			delete(state.FrameSwitches[key], request.Stage)
+			if len(state.FrameSwitches[key]) == 0 {
+				delete(state.FrameSwitches, key)
+			}
+		}
 		if state.Cleared[key] == nil {
 			state.Cleared[key] = map[int]bool{}
 		}
@@ -2120,7 +2247,7 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 	}
 	// 导出发版包：配置和素材一起给，解压即覆盖客户端根目录。weapon_publish
 	// 只传 Data/config.spf2，自制武器一旦带自己的模型/动作就会缺文件。
-	if request.Operation == "weapon_package" {
+	if request.Operation == "weapon_package" || request.Operation == "weapon_merge_export" {
 		plans := make(map[string][]Rule)
 		for id, saved := range state.Applied {
 			plans[id] = saved
@@ -2136,6 +2263,9 @@ func weaponHandle(request Request, client string, items []Item, folder string) (
 		// 拿它覆盖会把这把武器已保存的方案抹掉（包里就少了一套效果）。
 		if len(rules) > 0 {
 			plans[key] = rules
+		}
+		if request.Operation == "weapon_merge_export" {
+			return weaponMergeExport(request, client, folder, base, items, &state, info, plans)
 		}
 		return weaponPackage(request, client, folder, source, base, items, &state, info, plans)
 	}

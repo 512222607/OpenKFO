@@ -94,9 +94,9 @@ func keyInputLabels(a *archive) map[string]string {
 // comboRow is one parsed transition; keeping the fields instead of the raw text
 // lets a cloned row be re-emitted with a consistent attribute shape.
 type comboRow struct {
-	OldState string
-	NewState string
-	KeyInput string
+	OldState  string
+	NewState  string
+	KeyInput  string
 	StartPart string
 }
 
@@ -441,6 +441,111 @@ func comboChain(a *archive, info *inspection, weaponID string) []map[string]stri
 	return result
 }
 
+// frameSwitch is one frame-level key switch inside an action block: while the
+// action plays, pressing keycode inside the switch window advances to
+// nextstate. This is the *second* combo channel (CustomStateSwitch), separate
+// from delayacttable.xml. Attrs carries the raw attribute list so the editor can
+// round-trip attributes it does not model when adding or deleting switches.
+type frameSwitch struct {
+	State    string            `json:"state"`     // source itemact column
+	Next     string            `json:"next"`      // nextstate
+	KeyCode  string            `json:"keycode"`   // raw底层按键码 (e.g. "7", "7,8", "-7")
+	KeyLabel string            `json:"key_label"` // human label (e.g. "X", "X C", "松开X")
+	Window   string            `json:"window"`    // switch frame window, e.g. "20-25"
+	Attrs    []FrameSwitchAttr `json:"attrs"`
+}
+
+// comboFrameSwitches lists the CustomStateSwitch nodes every action block of
+// one weapon declares, keyed by the itemact state that plays that block.
+func comboFrameSwitches(a *archive, info *inspection, weaponID string) []frameSwitch {
+	result := []frameSwitch{}
+	for _, weapon := range info.weapons {
+		if strconv.Itoa(weapon.ID) != weaponID {
+			continue
+		}
+		for _, stage := range weapon.Stages {
+			if stage.Action == "" || stage.Action == "0" {
+				continue
+			}
+			blocks := info.blocks[actionKey(stage.Action)]
+			if len(blocks) == 0 {
+				continue
+			}
+			for _, blk := range blocks {
+				blk.node.walk(func(node *xmlNode) {
+					if node.tag != "CustomStateSwitch" {
+						return
+					}
+					keycode := node.get("keycode")
+					attrs := make([]FrameSwitchAttr, 0, len(node.attrs))
+					for _, attr := range node.attrs {
+						attrs = append(attrs, FrameSwitchAttr{Key: attr.Name.Local, Value: attr.Value})
+					}
+					result = append(result, frameSwitch{
+						State:    stage.State,
+						Next:     node.get("nextstate"),
+						KeyCode:  keycode,
+						KeyLabel: frameKeyLabel(keycode),
+						Window:   frameSwitchWindow(node),
+						Attrs:    attrs,
+					})
+				})
+			}
+		}
+		break
+	}
+	return result
+}
+
+// frameKeyLabel renders a CustomStateSwitch keycode as a readable sequence.
+// The底层码 is not the same numbering as delayacttable's KeyInput: here
+// 7=X 8=C 9=Z 5=跳 20=前 21=后, a comma joins a rapid sequence, and a leading
+// minus means release.
+func frameKeyLabel(keycode string) string {
+	if strings.TrimSpace(keycode) == "" {
+		return "—"
+	}
+	parts := strings.Split(keycode, ",")
+	labels := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		release := strings.HasPrefix(part, "-")
+		code := strings.TrimPrefix(part, "-")
+		name := code
+		switch code {
+		case "7":
+			name = "X"
+		case "8":
+			name = "C"
+		case "9":
+			name = "Z"
+		case "5":
+			name = "跳"
+		case "20":
+			name = "前"
+		case "21":
+			name = "后"
+		default:
+			name = "键" + code
+		}
+		if release {
+			name = "松开" + name
+		}
+		labels = append(labels, name)
+	}
+	return strings.Join(labels, " ")
+}
+
+// frameSwitchWindow returns the frame range in which the key switch fires.
+func frameSwitchWindow(node *xmlNode) string {
+	start := node.get("switchstartframe")
+	end := node.get("switchendframe")
+	if start == "" || end == "" {
+		return ""
+	}
+	return start + "-" + end
+}
+
 // ComboTransition is one author-authored edge of a weapon's combo state
 // machine: from OldState, pressing KeyInput (see keyInputNames) advances to
 // NewState.
@@ -468,16 +573,25 @@ func setComboRows(text, weapon string, rows []comboRow) (string, error) {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "<Item") {
 			if match := comboRowPattern.FindStringSubmatch(trimmed); match != nil && match[1] == weapon {
+				// 顺手删掉紧贴在这条转移上方的编辑器标记，保证重复调用
+				// 字节稳定（合并导入会重复执行同一把武器的改写）。
+				if len(out) > 0 && strings.TrimSpace(out[len(out)-1]) == "<!--编辑器定制的连招-->" {
+					out = out[:len(out)-1]
+				}
 				continue
 			}
 		}
 		out = append(out, line)
 	}
+	text = strings.Join(out, "\n")
+	if len(rows) == 0 {
+		// 没有转移：删掉已有行就够了，别在表里留一个空的编辑器标记。
+		return text, nil
+	}
 	rebuilt := make([]string, 0, len(rows))
 	for _, row := range rows {
 		rebuilt = append(rebuilt, "\t"+row.render(weapon))
 	}
-	text = strings.Join(out, "\n")
 	closing := comboListEndPattern.FindAllStringIndex(text, -1)
 	if len(closing) != 1 {
 		return "", fmt.Errorf("连招表结构错误")

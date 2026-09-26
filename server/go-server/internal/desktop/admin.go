@@ -64,6 +64,7 @@ type Request struct {
 	TemplateWeapon   int                              `json:"template_weapon"`
 	TemplateStage    int                              `json:"template_stage"`
 	Transitions      []ComboTransition                `json:"transitions"`
+	FrameSwitches    map[int][]FrameSwitch            `json:"frame_switches,omitempty"`
 	ComboRule        *ComboRuleSet                    `json:"combo_rule,omitempty"`
 	Target           string                           `json:"target"`
 	Path             string                           `json:"path"`
